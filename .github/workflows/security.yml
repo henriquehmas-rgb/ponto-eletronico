@@ -57,8 +57,10 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
+      # setuptools nao vem mais por padrao no venv do runner; sem ele o
+      # pysemgrep quebra em import (opentelemetry -> pkg_resources).
       - name: Instala semgrep
-        run: pip install semgrep==1.97.0
+        run: pip install setuptools semgrep==1.97.0
 
       # Regras usadas:
       #   p/default          base curada do Semgrep
@@ -151,12 +153,25 @@ jobs:
             exit 0
           fi
 
+          # pip-audit nao tem flag para apontar direto para um pyproject.toml
+          # (nao existe "-p"): o jeito suportado e instalar o projeto num venv
+          # descartavel e auditar o ambiente resultante.
           falhou=0
           for alvo in "${alvos[@]}"; do
             echo "::group::pip-audit $alvo"
             case "$alvo" in
-              *requirements.txt) pip-audit --strict -r "$alvo" || falhou=1 ;;
-              *pyproject.toml)   pip-audit --strict -p "$(dirname "$alvo")" || falhou=1 ;;
+              *requirements.txt)
+                pip-audit --strict -r "$alvo" || falhou=1
+                ;;
+              *pyproject.toml)
+                venv_dir="$(mktemp -d)"
+                python -m venv "$venv_dir"
+                "$venv_dir/bin/pip" install --quiet --upgrade pip
+                "$venv_dir/bin/pip" install --quiet "$(dirname "$alvo")" || falhou=1
+                "$venv_dir/bin/pip" install --quiet pip-audit==2.7.3
+                "$venv_dir/bin/pip-audit" --strict || falhou=1
+                rm -rf "$venv_dir"
+                ;;
             esac
             echo "::endgroup::"
           done

@@ -84,6 +84,12 @@ ENV NODE_ENV=production \
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/.npmrc ./
 COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs ./
+# vitest.setup.ts precisa estar aqui: tsconfig.json inclui **/*.ts, entao o
+# type-check do `next build` compila src/testes/*.teste.tsx junto, e o
+# matcher toHaveTextContent so existe porque este arquivo importa
+# '@testing-library/jest-dom/vitest'. Sem ele o build falha so no Docker
+# (localmente o arquivo esta no disco e ninguem percebe).
+COPY apps/web/vitest.config.ts apps/web/vitest.setup.ts ./
 COPY apps/web/public ./public
 COPY apps/web/src ./src
 RUN pnpm build
