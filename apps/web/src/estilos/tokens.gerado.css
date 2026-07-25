@@ -9,10 +9,10 @@
  * valor, mude o token no contrato — e isso exige RFC aprovada
  * (protocolo em FASES-E-AGENTES.md secao 1.3).
  *
- * Versao dos tokens : 1.0.0 (2026-07-25)
+ * Versao dos tokens : 1.1.0 (2026-07-26)
  * Primitivos        : 84
  * Semanticos/tema   : 73 (identicos em claro e escuro)
- * Vars do Tailwind  : 285
+ * Vars do Tailwind  : 286
  *
  * Troca de tema: o atributo data-tema no elemento <html> manda. O bloco
  * @media prefers-color-scheme so vale quando data-tema esta ausente — caso
@@ -109,8 +109,9 @@
   --primitivo-cor-grafico-escuro-serie8: #BB459B;
 
   /* --- tipografia --- */
-  --tipografia-familia-sans: Inter, "Inter var", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --tipografia-familia-mono: "JetBrains Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --tipografia-familia-sans: "IBM Plex Sans", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --tipografia-familia-mono: "IBM Plex Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --tipografia-familia-display: "Schibsted Grotesk", system-ui, sans-serif;
   --tipografia-tamanho-3xs: 10px;
   --tipografia-tamanho-2xs: 11px;
   --tipografia-tamanho-xs: 12px;
@@ -585,7 +586,7 @@
   }
 
   .estilo-titulo-pagina {
-    font-family: var(--tipografia-familia-sans);
+    font-family: var(--tipografia-familia-display);
     font-size: var(--tipografia-tamanho-3xl);
     font-weight: var(--tipografia-peso-forte);
     line-height: var(--tipografia-altura-linha-3xl);
@@ -593,7 +594,7 @@
   }
 
   .estilo-numero-destaque {
-    font-family: var(--tipografia-familia-sans);
+    font-family: var(--tipografia-familia-display);
     font-size: var(--tipografia-tamanho-4xl);
     font-weight: var(--tipografia-peso-semiforte);
     line-height: var(--tipografia-altura-linha-4xl);
@@ -857,6 +858,7 @@
   /* familias tipograficas */
   --font-sans: var(--tipografia-familia-sans);
   --font-mono: var(--tipografia-familia-mono);
+  --font-display: var(--tipografia-familia-display);
 
   /* tamanhos de texto */
   --text-3xs: var(--tipografia-tamanho-3xs);

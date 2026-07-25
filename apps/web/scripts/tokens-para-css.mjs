@@ -343,6 +343,7 @@ function gerar(tokens) {
   push("familias tipograficas", [
     "--font-sans: var(--tipografia-familia-sans);",
     "--font-mono: var(--tipografia-familia-mono);",
+    "--font-display: var(--tipografia-familia-display);",
   ]);
 
   push("tamanhos de texto", [

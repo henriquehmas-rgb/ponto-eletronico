@@ -1,7 +1,8 @@
 # =============================================================================
-# Ponto Eletronico (REP-P multiempresa) - CONTRATO DA API v1
+# SEEG Ponto (REP-P multiempresa) - CONTRATO DA API v1
 # Arquivo: packages/contracts/openapi.yaml
 # Fase 0 - Fundacao e Contratos - Agente A1b
+# Nome oficial "SEEG Ponto" confirmado pela identidade visual (RFC-003).
 #
 # Este arquivo e a FONTE DA VERDADE da API. Toda fase posterior consome este
 # contrato; nenhuma fase o altera sem RFC aprovada (ver packages/contracts/README.md).
@@ -23,12 +24,13 @@
 
 openapi: 3.1.0
 info:
-  title: Ponto Eletronico - API v1
+  title: SEEG Ponto - API v1
   version: 1.0.0
   summary: API REST do sistema de ponto eletronico REP-P multiempresa da SEEG.
   description: |
-    API REST do **Ponto Eletronico**, sistema REP-P multiempresa em conformidade com a
-    Portaria MTP 671/2021.
+    API REST do **SEEG Ponto**, sistema REP-P multiempresa em conformidade com a
+    Portaria MTP 671/2021. A mesma marcacao que comprova a jornada cumprida para a
+    empresa comprova a hora extra devida ao trabalhador — prova justa, nao vigilancia.
 
     ## Antes de integrar, cinco fatos que mudam o desenho do seu cliente
 

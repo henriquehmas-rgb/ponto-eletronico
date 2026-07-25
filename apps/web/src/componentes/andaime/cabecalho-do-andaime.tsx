@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LogotipoSeegPonto } from "@/componentes/marca/logotipo";
 import { AlternadorDeTema } from "@/componentes/tema/alternador-de-tema";
 import { AMBIENTE } from "@/lib/api";
 
@@ -17,7 +18,7 @@ export function CabecalhoDoAndaime() {
   return (
     <header className="sticky top-0 z-[var(--camada-cabecalho)] border-b border-borda-sutil bg-fundo-superficie/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-5xl items-center gap-4 px-6 py-3">
-        <span className="estilo-titulo-cartao text-texto-primario">Ponto Eletronico</span>
+        <LogotipoSeegPonto className="text-lg" />
 
         <span className="estilo-legenda rounded-pleno bg-fundo-sutil px-2 py-0.5 uppercase text-texto-terciario">
           {AMBIENTE}

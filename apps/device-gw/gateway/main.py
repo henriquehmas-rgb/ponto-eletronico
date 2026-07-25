@@ -109,7 +109,7 @@ def criar_aplicacao(config: Configuracao | None = None) -> FastAPI:
     configurar_log(config)
 
     app = FastAPI(
-        title="Ponto Eletronico - Gateway Control iD",
+        title="SEEG Ponto - Gateway Control iD",
         version=config.versao,
         summary="Gateway dos terminais coletores Control iD (Push, Monitor e catch-up).",
         description=DESCRICAO,

@@ -41,7 +41,7 @@ from facial.rotas import registrar_rotas
 logger = obter_logger("main")
 
 DESCRICAO = """
-Servico facial self-hosted do **Ponto Eletronico**.
+Servico facial self-hosted do **SEEG Ponto**.
 
 Wrapper HTTP do motor `analise-facial-edge` (InsightFace / ArcFace ONNX),
 reaproveitado conforme a decisao **D4** de `PROJETO.md`.
@@ -126,7 +126,7 @@ def criar_aplicacao(config: Configuracao | None = None) -> FastAPI:
     configurar_log(config)
 
     app = FastAPI(
-        title="Ponto Eletronico - Servico Facial",
+        title="SEEG Ponto - Servico Facial",
         version=config.versao,
         summary="Wrapper do motor facial self-hosted (InsightFace / ArcFace ONNX).",
         description=DESCRICAO,

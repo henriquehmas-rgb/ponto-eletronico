@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<script src="./doc-page.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#EDEDEB}
+body{-webkit-font-smoothing:antialiased}
+a{color:#4C5FCA;text-decoration:none}
+a:hover{color:#33408D;text-decoration:underline}
+</style>
+</helmet>
+<doc-page size="a4">
+
+<section class="page" id="pg-capa" style="display:flex;flex-direction:column;justify-content:space-between;padding:7cqw;background:linear-gradient(155deg,#171A29,#1B2044 55%,#20264C);color:#FFFFFF;box-sizing:border-box;position:relative;overflow:hidden;font-family:'IBM Plex Sans',sans-serif">
+  <div style="position:absolute;inset:0;background:radial-gradient(70cqw 70cqw at 88% -18cqw,rgba(122,140,219,.24),transparent 60%)"></div>
+  <div style="position:relative;display:flex;justify-content:space-between;align-items:center">
+    <span style="font:600 1.3cqw 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#A7B2E9">IDENTIDADE DE MARCA</span>
+    <span style="font:600 1.3cqw 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#A7B2E9">V1 · JULHO 2026</span>
+  </div>
+  <div style="position:relative;display:flex;flex-direction:column;gap:2.6cqw">
+    <svg viewBox="0 0 120 120" fill="none" style="width:13cqw;height:13cqw;color:#FFFFFF" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    <div>
+      <div style="font:700 10.2cqw/0.95 'Schibsted Grotesk',sans-serif;letter-spacing:-0.03em">SEEG PONTO</div>
+      <div style="font:500 2.6cqw 'Schibsted Grotesk',sans-serif;color:#C9D0F2;margin-top:1.3cqw">Manual de Marca</div>
+    </div>
+  </div>
+  <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(255,255,255,.18);padding-top:2.2cqw">
+    <span style="font:500 1.5cqw 'Schibsted Grotesk',sans-serif;color:#EDEFF7;max-width:62cqw">Prova justa da jornada — precisa, clara, justa. Não é vigilância.</span>
+    <span style="font:500 1.2cqw 'IBM Plex Mono',monospace;color:#767C99">01 / 13</span>
+  </div>
+</section>
+
+<section class="page" id="pg-sumario" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">SUMÁRIO</span>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6cqw;padding-top:3.4cqw">
+    <div>
+      <div style="font:700 2.6cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-bottom:2cqw">Sumário</div>
+      <div style="display:flex;flex-direction:column">
+        <a href="#pg-nome" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Nome</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">03</span></a>
+        <a href="#pg-logo-1" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Logotipo — construção</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">04</span></a>
+        <a href="#pg-logo-2" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Logotipo — uso e proteção</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">05</span></a>
+        <a href="#pg-cor-1" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Cor — escala e categóricas</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">06</span></a>
+        <a href="#pg-cor-2" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Cor — semânticas e contraste</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">07</span></a>
+        <a href="#pg-tipografia" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Tipografia</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">08</span></a>
+        <a href="#pg-icones" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Ícones do domínio</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">09</span></a>
+        <a href="#pg-appicon" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Ícones de app e favicon</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">10</span></a>
+        <a href="#pg-app1" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Aplicação — confirmação de registro</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">11</span></a>
+        <a href="#pg-app2" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Aplicação — documento legal</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">12</span></a>
+        <a href="#pg-contato" style="display:flex;justify-content:space-between;padding:0.9cqw 0;border-top:0.6px solid #E2E4EE;border-bottom:0.6px solid #E2E4EE;font:500 1.4cqw 'IBM Plex Sans',sans-serif;color:#171A29"><span>Contato e versão</span><span style="color:#8A8FA8;font-family:'IBM Plex Mono',monospace">13</span></a>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2.2cqw">
+      <div style="font:700 2.6cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Sobre a marca</div>
+      <p style="margin:0;font:400 1.5cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76">Um sistema de ponto carrega, por padrão, a leitura de "o patrão te vigiando". A SEEG Ponto existe para o oposto: o mesmo registro que comprova a jornada cumprida para a empresa comprova a hora extra devida ao trabalhador. Prova justa, não vigilância.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.4cqw;margin-top:1cqw">
+        <div style="border-top:2px solid #4C5FCA;padding-top:1cqw"><div style="font:700 1.3cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">PRECISO</div><div style="font:400 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76;margin-top:0.6cqw">Instrumento de medida, números tabulares.</div></div>
+        <div style="border-top:2px solid #4C5FCA;padding-top:1cqw"><div style="font:700 1.3cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">CLARO</div><div style="font:400 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76;margin-top:0.6cqw">Forma e palavra além da cor, sempre.</div></div>
+        <div style="border-top:2px solid #4C5FCA;padding-top:1cqw"><div style="font:700 1.3cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">JUSTO</div><div style="font:400 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76;margin-top:0.6cqw">A mesma prova serve aos dois lados.</div></div>
+      </div>
+      <div style="margin-top:auto;background:#F1F3FC;border-radius:1cqw;padding:1.4cqw 1.6cqw;font:500 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#33408D">Evitamos no tom e na forma: vigilante, burocrático, frio.</div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>02 / 13</span></div>
+</section>
+
+<section class="page" id="pg-nome" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">03 — NOME</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Nome</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.4cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Cinco caminhos foram explorados contra três critérios: ditável por telefone na primeira tentativa, curto o bastante para logotipo e favicon, e sem nenhuma conotação de vigilância.</p>
+  </div>
+  <div style="margin-top:2.4cqw;display:flex;flex-direction:column">
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding-bottom:0.8cqw;border-bottom:1px solid #171A29;font:700 1.05cqw 'IBM Plex Mono',monospace;letter-spacing:.08em;color:#8A8FA8">
+      <span>NOME</span><span>CONCEITO</span><span>LEITURA</span>
+    </div>
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding:1.1cqw 0;border-bottom:0.6px solid #E2E4EE;align-items:start">
+      <span style="font:700 1.6cqw 'Schibsted Grotesk',sans-serif">aponta</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">De apontamento de horas — o verbo do próprio ofício.</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Verbo vivo e fácil, mas nasce do jargão de horas — literalidade parcial.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding:1.1cqw 0;border-bottom:0.6px solid #E2E4EE;align-items:start">
+      <span style="font:700 1.6cqw 'Schibsted Grotesk',sans-serif">kairo</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Do grego kairós — o tempo oportuno, oposto do tempo que só passa.</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Sonoro e tech, mas pede soletração e não se explica no chão de fábrica.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding:1.1cqw 0;border-bottom:0.6px solid #E2E4EE;align-items:start">
+      <span style="font:700 1.6cqw 'Schibsted Grotesk',sans-serif">cadência</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Ritmo de trabalho sustentável — a jornada como compasso.</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Humano e musical, mas colide com Cadence (software) e leva acento/cedilha.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding:1.1cqw 0;border-bottom:0.6px solid #E2E4EE;align-items:start">
+      <span style="font:700 1.6cqw 'Schibsted Grotesk',sans-serif">lastro</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">O que dá valor de prova a um registro — "ter lastro" é ter respaldo.</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Forte no argumento jurídico, mas frio — erra o lado humano do produto.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:11cqw 1fr 1.6fr;gap:1.5cqw;padding:1.1cqw 0;border-bottom:0.6px solid #E2E4EE;align-items:start">
+      <span style="font:700 1.6cqw 'Schibsted Grotesk',sans-serif">prumo</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Fio de prumo — o instrumento que encontra a vertical exata.</span><span style="font:400 1.25cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Instrumento de medida digno, mas metáfora menos óbvia no primeiro contato.</span>
+    </div>
+  </div>
+  <div style="margin-top:2.4cqw;background:#F1F3FC;border-radius:1.2cqw;padding:2cqw 2.2cqw;display:flex;gap:2cqw;align-items:center">
+    <span style="flex:none;font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA;background:#FFFFFF;border-radius:99px;padding:0.6cqw 1.2cqw">NOME DEFINIDO</span>
+    <p style="margin:0;font:500 1.35cqw/1.55 'IBM Plex Sans',sans-serif;color:#33408D"><strong>SEEG Ponto</strong> — nome definido pela empresa: SEEG é a marca já estabelecida, e Ponto nomeia a categoria sem margem para dúvida, para o RH e para o auditor. Como o nome em si é literal, o restante do sistema — símbolo, tom de voz, cor — carrega sozinho o argumento de prova justa, não vigilância.</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>03 / 13</span></div>
+</section>
+
+<section class="page" id="pg-logo-1" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">04 — LOGOTIPO</span>
+  </div>
+  <div style="padding-top:3cqw;display:grid;grid-template-columns:1fr 1fr;gap:6cqw;align-items:start">
+    <div>
+      <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Construção do símbolo</div>
+      <p style="margin:1cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76">Um traço de confirmação pousa sobre a linha do dia. Não é relógio, não é olho: é o gesto de quem confere um registro — preciso, no ponto certo.</p>
+      <div style="margin-top:2cqw;display:flex;flex-direction:column;gap:0.8cqw;font:500 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76">
+        <div style="display:flex;gap:0.9cqw;align-items:flex-start"><span style="flex:none;width:1.6cqw;height:1.6cqw;border-radius:50%;background:#4C5FCA"></span><span>O traço diagonal — a conferência, o "sim, está certo".</span></div>
+        <div style="display:flex;gap:0.9cqw;align-items:flex-start"><span style="flex:none;width:1.6cqw;height:1.6cqw;border-radius:50%;background:#8A8FA8"></span><span>A linha horizontal — a jornada, o dia que se mede.</span></div>
+      </div>
+    </div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1.4cqw;padding:3cqw;display:flex;align-items:center;justify-content:center;background:#FAFAFC">
+      <svg viewBox="0 0 120 120" fill="none" style="width:16cqw;height:16cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </div>
+  <div style="margin-top:3.4cqw;font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">VERSÕES</div>
+  <div style="margin-top:1.2cqw;display:grid;grid-template-columns:repeat(4,1fr);gap:1.4cqw">
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;background:#FFFFFF;padding:1.6cqw;display:flex;flex-direction:column;gap:1.2cqw;align-items:flex-start">
+      <svg viewBox="0 0 320 56" width="100%" height="auto" fill="none"><g transform="translate(2,3) scale(1.56)" color="#4C5FCA"><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" transform="scale(0.3)"></path></g><g transform="translate(2,6) scale(0.42)" color="#4C5FCA"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></g><text x="58" y="36" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="26" letter-spacing="-0.8" fill="#171A29">SEEG PONTO</text></svg>
+      <span style="font:500 1cqw 'IBM Plex Mono',monospace;color:#8A8FA8">PRINCIPAL</span>
+    </div>
+    <div style="border:0.7px solid #171A29;border-radius:1cqw;background:#0C0E1A;padding:1.6cqw;display:flex;flex-direction:column;gap:1.2cqw;align-items:flex-start">
+      <svg viewBox="0 0 320 56" width="100%" height="auto" fill="none"><g transform="translate(2,6) scale(0.42)" color="#7D8CDB"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></g><text x="58" y="36" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="26" letter-spacing="-0.8" fill="#EDEFF7">SEEG PONTO</text></svg>
+      <span style="font:500 1cqw 'IBM Plex Mono',monospace;color:#767C99">FUNDO ESCURO</span>
+    </div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;background:#FFFFFF;padding:1.6cqw;display:flex;align-items:center;justify-content:center">
+      <svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw;color:#000000" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+    <div style="border:0.7px solid #171A29;border-radius:1cqw;background:#000000;padding:1.6cqw;display:flex;align-items:center;justify-content:center">
+      <svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw;color:#FFFFFF" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>04 / 13</span></div>
+</section>
+
+<section class="page" id="pg-logo-2" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">05 — LOGOTIPO</span>
+  </div>
+  <div style="padding-top:3cqw;display:grid;grid-template-columns:1.1fr 1fr;gap:6cqw">
+    <div>
+      <div style="font:700 2.6cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Área de proteção e tamanho mínimo</div>
+      <div style="margin-top:1.6cqw;border:1.4px dashed #C8CBDB;border-radius:1cqw;padding:5cqw;display:flex;align-items:center;justify-content:center">
+        <svg viewBox="0 0 120 120" fill="none" style="width:9cqw;height:9cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+      <p style="margin:1.2cqw 0 0;font:400 1.25cqw/1.55 'IBM Plex Sans',sans-serif;color:#565B76">A área de proteção nunca é menor que a altura do próprio traço, em todos os lados. Nenhum outro elemento — texto, borda, outro logotipo — entra nesse espaço.</p>
+      <div style="margin-top:2cqw;display:flex;align-items:flex-end;gap:2.4cqw">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:0.6cqw"><svg viewBox="0 0 120 120" fill="none" style="width:6cqw;height:6cqw;color:#4C5FCA"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:500 1cqw 'IBM Plex Mono',monospace;color:#8A8FA8">32 px</span></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:0.6cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.6cqw;height:2.6cqw;color:#4C5FCA"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:500 1cqw 'IBM Plex Mono',monospace;color:#8A8FA8">16 px mín.</span></div>
+        <span style="font:400 1.15cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76;max-width:24cqw">Testado e legível a partir de 16 px — o tamanho do favicon.</span>
+      </div>
+    </div>
+    <div>
+      <div style="font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8;margin-bottom:1.2cqw">USO INCORRETO</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.4cqw">
+        <div style="display:flex;flex-direction:column;gap:0.8cqw"><div style="position:relative;height:9cqw;border-radius:1cqw;background:#FFFFFF;border:0.7px solid #E2E4EE;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw"><defs><linearGradient id="badGrad1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF5C00"></stop><stop offset="1" stop-color="#E100FF"></stop></linearGradient></defs><path d="M24 97.5 H96" stroke="url(#badGrad1)" stroke-width="3" stroke-linecap="round" opacity="0.6"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="url(#badGrad1)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="position:absolute;top:0.5cqw;right:0.5cqw;width:2cqw;height:2cqw;border-radius:50%;background:#A32239;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:700 1.3cqw 'IBM Plex Sans',sans-serif">✕</span></div><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;text-align:center">Recolorir fora da paleta</span></div>
+        <div style="display:flex;flex-direction:column;gap:0.8cqw"><div style="position:relative;height:9cqw;border-radius:1cqw;background:#FFFFFF;border:0.7px solid #E2E4EE;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw;color:#4C5FCA;transform:scaleX(1.9)"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="position:absolute;top:0.5cqw;right:0.5cqw;width:2cqw;height:2cqw;border-radius:50%;background:#A32239;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:700 1.3cqw 'IBM Plex Sans',sans-serif">✕</span></div><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;text-align:center">Distorcer proporções</span></div>
+        <div style="display:flex;flex-direction:column;gap:0.8cqw"><div style="position:relative;height:9cqw;border-radius:1cqw;background:#FFFFFF;border:0.7px solid #E2E4EE;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw;color:#4C5FCA;filter:drop-shadow(3px 5px 0px #33408D) drop-shadow(6px 10px 6px rgba(0,0,0,.5))"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.4"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="position:absolute;top:0.5cqw;right:0.5cqw;width:2cqw;height:2cqw;border-radius:50%;background:#A32239;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:700 1.3cqw 'IBM Plex Sans',sans-serif">✕</span></div><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;text-align:center">Adicionar efeitos/relevo</span></div>
+        <div style="display:flex;flex-direction:column;gap:0.8cqw"><div style="position:relative;height:9cqw;border-radius:1cqw;background:repeating-linear-gradient(45deg,#E3E7F9,#E3E7F9 4px,#C9D0F2 4px,#C9D0F2 8px);border:0.7px solid #E2E4EE;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:5cqw;height:5cqw;color:#A7B2E9"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="position:absolute;top:0.5cqw;right:0.5cqw;width:2cqw;height:2cqw;border-radius:50%;background:#A32239;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:700 1.3cqw 'IBM Plex Sans',sans-serif">✕</span></div><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;text-align:center">Usar sobre fundo poluído</span></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>05 / 13</span></div>
+</section>
+
+<section class="page" id="pg-cor-1" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">06 — COR</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Cor</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Índigo #4C5FCA — distinto do azul corporativo genérico, sóbrio sem ser frio. Cor nunca é o único canal de informação: estado sempre tem forma e rótulo.</p>
+  </div>
+  <div style="margin-top:2.6cqw;font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">MARCA · ÍNDIGO — 11 TONS</div>
+  <div style="display:grid;grid-template-columns:repeat(11,1fr);gap:0.5cqw;margin-top:1cqw">
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#F1F3FC;border:0.6px solid #E2E4EE"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">50</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#E3E7F9"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">100</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#C9D0F2"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">200</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#A7B2E9"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">300</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#7D8CDB"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">400</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#5F71D3"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">500</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#4C5FCA;outline:1.5px solid #171A29;outline-offset:1.5px"></div><div style="font:700 0.85cqw 'IBM Plex Mono',monospace;color:#171A29;margin-top:0.4cqw">600 ●</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#3D4DAF"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">700</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#33408D"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">800</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#2B3670"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">900</div></div>
+    <div><div style="height:6.4cqw;border-radius:0.5cqw;background:#191F45"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#A6ABC4;margin-top:0.4cqw">950</div></div>
+  </div>
+  <div style="margin-top:2.6cqw;font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">CATEGÓRICAS — 8 SÉRIES PARA GRÁFICOS</div>
+  <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:0.6cqw;margin-top:1cqw">
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#5F71D3"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C1</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#2BA3C4"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C2</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#14A38B"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C3</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#D99A0B"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C4</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#E0703A"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C5</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#DD5468"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C6</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#C75FA1"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C7</div></div>
+    <div><div style="height:5cqw;border-radius:0.5cqw;background:#9A6BD4"></div><div style="font:500 0.85cqw 'IBM Plex Mono',monospace;color:#565B76;margin-top:0.4cqw">C8</div></div>
+  </div>
+  <p style="margin-top:2cqw;font:400 1.2cqw/1.55 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Uso em ordem fixa, sempre com rótulo direto na série — nunca só cor. Para "outros", cinza neutro #9A9EB5.</p>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>06 / 13</span></div>
+</section>
+
+<section class="page" id="pg-cor-2" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">07 — COR</span>
+  </div>
+  <div style="font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8;margin-top:2.6cqw">SEMÂNTICAS — ESTADO SEMPRE COM FORMA + RÓTULO</div>
+  <div style="display:grid;grid-template-columns:9cqw repeat(4,1fr);gap:0.6cqw;margin-top:1cqw;align-items:center">
+    <span style="font:600 1.15cqw 'IBM Plex Sans',sans-serif">Sucesso</span>
+    <div><div style="height:3.6cqw;border-radius:0.4cqw;background:#EBF7F0;border:0.6px solid #E2E4EE"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#7CD3A4"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#1D7A4B"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#0B3A22"></div></div>
+    <span style="font:600 1.15cqw 'IBM Plex Sans',sans-serif">Atenção</span>
+    <div><div style="height:3.6cqw;border-radius:0.4cqw;background:#FDF6E7;border:0.6px solid #E2E4EE"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#F0C05E"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#B07C00"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#4F3400"></div></div>
+    <span style="font:600 1.15cqw 'IBM Plex Sans',sans-serif">Erro</span>
+    <div><div style="height:3.6cqw;border-radius:0.4cqw;background:#FCEEF0;border:0.6px solid #E2E4EE"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#EE9AA6"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#C9354B"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#5C0E1D"></div></div>
+    <span style="font:600 1.15cqw 'IBM Plex Sans',sans-serif">Informação</span>
+    <div><div style="height:3.6cqw;border-radius:0.4cqw;background:#E9F6FA;border:0.6px solid #E2E4EE"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#7CCFE3"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#0F7E9E"></div></div><div><div style="height:3.6cqw;border-radius:0.4cqw;background:#063241"></div></div>
+  </div>
+  <div style="font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8;margin-top:2.8cqw">CONTRASTE — CALCULADO EM TEMPO DE EXECUÇÃO (WCAG 2.2)</div>
+  <div style="margin-top:1cqw">
+    <div style="display:grid;grid-template-columns:9cqw 1fr 9cqw 8cqw 11cqw;gap:1cqw;padding-bottom:0.7cqw;border-bottom:1px solid #171A29;font:700 1cqw 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#8A8FA8">
+      <span>TEMA</span><span>USO</span><span>AMOSTRA</span><span>RAZÃO</span><span>NÍVEL</span>
+    </div>
+    <sc-for list="{{ pares }}" as="p" hint-placeholder-count="10">
+      <div style="display:grid;grid-template-columns:9cqw 1fr 9cqw 8cqw 11cqw;gap:1cqw;align-items:center;padding:0.75cqw 0;border-bottom:0.5px solid #E2E4EE">
+        <span style="font:600 1.05cqw 'IBM Plex Mono',monospace;color:#565B76">{{ p.tema }}</span>
+        <span style="font:500 1.2cqw 'IBM Plex Sans',sans-serif;color:#171A29">{{ p.uso }}</span>
+        <span style="background:{{ p.bg }};color:{{ p.fg }};border:0.6px solid #E2E4EE;border-radius:0.4cqw;font:600 1.1cqw 'IBM Plex Mono',monospace;text-align:center;padding:0.5cqw 0">Aa</span>
+        <strong style="font:700 1.15cqw 'IBM Plex Mono',monospace;color:#171A29">{{ p.ratio }}</strong>
+        <span style="font:600 1cqw 'IBM Plex Mono',monospace;color:#565B76">{{ p.nivel }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>07 / 13</span></div>
+</section>
+
+<section class="page" id="pg-tipografia" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">08 — TIPOGRAFIA</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Tipografia</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Três vozes, uma régua. Licenças SIL OFL 1.1 — uso comercial e embed em SaaS liberados.</p>
+  </div>
+  <div style="margin-top:2.4cqw;border:0.7px solid #E2E4EE;border-radius:1.2cqw;padding:2cqw 2.4cqw">
+    <div style="font:700 1.3cqw 'Schibsted Grotesk',sans-serif">Schibsted Grotesk — display</div>
+    <div style="font:700 3.6cqw/1.15 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:1cqw">O ponto certo na linha do dia.</div>
+    <div style="font:400 1.6cqw 'Schibsted Grotesk',sans-serif;color:#565B76;margin-top:0.8cqw">Aa <span style="font-weight:500">Aa</span> <span style="font-weight:600">Aa</span> <span style="font-weight:700">Aa</span> <span style="font-weight:800">Aa</span> · ãáâçéêíõóôú</div>
+  </div>
+  <div style="margin-top:1.4cqw;border:0.7px solid #E2E4EE;border-radius:1.2cqw;padding:2cqw 2.4cqw">
+    <div style="font:600 1.3cqw 'IBM Plex Sans',sans-serif">IBM Plex Sans — texto e UI</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#171A29">O registro protege os dois lados: comprova a jornada cumprida e garante a hora extra devida. Sem internet, o ponto vale; fechado o período, ninguém edita.</p>
+  </div>
+  <div style="margin-top:1.4cqw;border:0.7px solid #E2E4EE;border-radius:1.2cqw;padding:2cqw 2.4cqw;flex:1">
+    <div style="font:600 1.3cqw 'IBM Plex Mono',monospace">IBM Plex Mono — horas, NSR, documento legal</div>
+    <div style="font:400 1.2cqw/1.5 'IBM Plex Sans',sans-serif;color:#565B76;margin-top:0.5cqw"><strong style="color:#171A29">Tabular por construção</strong> — cada dígito tem a mesma largura, colunas não dançam entre linhas.</div>
+    <div style="font:700 6cqw/1 'IBM Plex Mono',monospace;letter-spacing:-0.02em;margin-top:1.6cqw">08:02<span style="color:#8A8FA8">:47</span></div>
+    <div style="display:grid;grid-template-columns:6cqw repeat(4,1fr) 9cqw 8cqw;gap:0.3cqw 1.4cqw;margin-top:1.6cqw;font:500 1.4cqw 'IBM Plex Mono',monospace">
+      <span></span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">ENTRADA</span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">SAÍDA</span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">ENTRADA</span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">SAÍDA</span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">REALIZADO</span><span style="font:600 0.9cqw 'IBM Plex Sans',sans-serif;letter-spacing:.08em;color:#8A8FA8">SALDO</span>
+      <span style="color:#8A8FA8;font-size:1.1cqw">seg</span><span>07:58</span><span>12:01</span><span>13:02</span><span>17:21</span><span>08:22</span><span style="color:#14603A">+00:02</span>
+      <span style="color:#8A8FA8;font-size:1.1cqw">ter</span><span>08:00</span><span>12:00</span><span>13:00</span><span>17:20</span><span>08:20</span><span style="color:#565B76">00:00</span>
+      <span style="color:#8A8FA8;font-size:1.1cqw">qua</span><span>08:11</span><span>12:03</span><span>13:04</span><span>17:20</span><span>08:08</span><span style="color:#A32239">−00:12</span>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>08 / 13</span></div>
+</section>
+
+<section class="page" id="pg-icones" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">09 — ÍCONES</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Ícones do domínio</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Grade 24 px, traço 2, cantos redondos. Sem olho, sem mira, sem relógio de ponteiro — instrumentos, não vigilância.</p>
+  </div>
+  <div style="margin-top:2.6cqw;display:grid;grid-template-columns:repeat(4,1fr);gap:1.2cqw">
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><path d="M8 4H6.5A2.5 2.5 0 0 0 4 6.5V8"></path><path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5V8"></path><path d="M20 16v1.5a2.5 2.5 0 0 1-2.5 2.5H16"></path><path d="M4 16v1.5A2.5 2.5 0 0 0 6.5 20H8"></path><circle cx="9.4" cy="10.2" r="1" fill="currentColor" stroke="none"></circle><circle cx="14.6" cy="10.2" r="1" fill="currentColor" stroke="none"></circle><path d="M9.3 14.2c.7.8 1.6 1.2 2.7 1.2s2-.4 2.7-1.2"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Reconhecimento facial</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><circle cx="12" cy="12" r="3.3"></circle><path d="M19.8 10.4A8 8 0 0 0 6.9 6.2"></path><path d="M6.6 3.4l.2 3 3-.3"></path><path d="M4.2 13.6a8 8 0 0 0 12.9 4.2"></path><path d="M17.4 20.6l-.2-3-3 .3"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Prova de vida</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><rect x="4" y="4" width="16" height="16" rx="4.5" stroke-dasharray="3.1 3.1"></rect><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"></circle></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Cerca virtual + GPS</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><circle cx="12" cy="12" r="8.2" stroke-dasharray="3.35 3.1"></circle><path d="M12 15.6V8.8"></path><path d="M9 11.4 12 8.5l3 2.9"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Offline — pendente</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><rect x="3.5" y="5" width="17" height="14" rx="2.5"></rect><path d="M7 10h4"></path><path d="M7 14h3"></path><path d="M14.5 12h4.5"></path><path d="M16.75 9.75v4.5"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Banco de horas — crédito</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><rect x="3.5" y="5" width="17" height="14" rx="2.5"></rect><path d="M7 10h4"></path><path d="M7 14h3"></path><path d="M14.5 12h4.5"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Banco de horas — débito</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><rect x="4" y="4" width="7" height="7" rx="1.8"></rect><rect x="13" y="4" width="7" height="7" rx="1.8" fill="currentColor" stroke="none"></rect><rect x="4" y="13" width="7" height="7" rx="1.8" fill="currentColor" stroke="none"></rect><rect x="13" y="13" width="7" height="7" rx="1.8"></rect></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Escala e turno (12×36)</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path><path d="M17 5h4"></path><path d="M19 3v4"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Adicional noturno</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#8A5B00"><path d="M3.5 12h5.5"></path><path d="M15 12h5.5"></path><path d="M9.8 15.2 14.2 8.8"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Marcação inconsistente</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><rect x="5" y="10.5" width="14" height="9" rx="2.5"></rect><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"></path><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"></circle></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Período travado</span></div>
+    <div style="border:0.7px solid #E2E4EE;border-radius:1cqw;padding:1.6cqw 1.3cqw;display:flex;flex-direction:column;gap:1cqw;background:#FAFAFC"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:2.4cqw;height:2.4cqw;color:#171A29"><path d="M4 19.5h16"></path><path d="M5.5 15.5c1.8-4.6 3.6-6.9 4.7-6.1 1.2.8-1.9 4.6-.7 5.4 1 .7 2.6-1 3.7-2.1"></path><path d="M14.8 14.6l1.6 1.6 3-3.3"></path></svg><span style="font:500 1.05cqw 'IBM Plex Sans',sans-serif;color:#565B76;line-height:1.3">Assinatura eletrônica</span></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>09 / 13</span></div>
+</section>
+
+<section class="page" id="pg-appicon" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">10 — ÍCONES DE APP</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Ícones de app e favicon</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">O símbolo isolado, sempre em fundo sólido de marca — nunca a palavra "SEEG PONTO" inteira num ícone de app.</p>
+  </div>
+  <div style="margin-top:2.6cqw;display:grid;grid-template-columns:1fr 1fr 1fr;gap:2.2cqw">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:1.4cqw">
+      <div style="display:flex;align-items:flex-end;gap:1.6cqw">
+        <div style="width:11cqw;height:11cqw;border-radius:22%;background:#4C5FCA;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:6cqw;height:6cqw;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="width:4cqw;height:4cqw;border-radius:22%;background:#4C5FCA;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:2.2cqw;height:2.2cqw;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <span style="font:600 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#565B76;text-align:center">iOS · 1024 px e 120 px<br>cantos automáticos do sistema</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:1.4cqw">
+      <div style="position:relative;width:11cqw;height:11cqw;border-radius:1.2cqw;background:#4C5FCA;display:flex;align-items:center;justify-content:center">
+        <div style="position:absolute;inset:0;border-radius:1.2cqw;border:1.4px dashed rgba(255,255,255,.55);margin:1.6cqw"></div>
+        <svg viewBox="0 0 120 120" fill="none" style="width:5.4cqw;height:5.4cqw;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+      <span style="font:600 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#565B76;text-align:center">Android adaptável · 512 px<br>símbolo dentro da zona seg. (66/108)</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:1.4cqw">
+      <div style="display:flex;align-items:center;gap:1.6cqw">
+        <div style="width:5.6cqw;height:5.6cqw;border-radius:28%;background:#4C5FCA;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:3.2cqw;height:3.2cqw;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+        <div style="width:2.6cqw;height:2.6cqw;border-radius:28%;background:#4C5FCA;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 120 120" fill="none" style="width:1.5cqw;height:1.5cqw;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      </div>
+      <div style="display:inline-flex;align-items:center;gap:0.6cqw;background:#EFF0F6;border:0.6px solid #E2E4EE;border-radius:0.5cqw 0.5cqw 0 0;padding:0.6cqw 1cqw;margin-top:0.6cqw"><svg viewBox="0 0 120 120" fill="none" style="width:1.3cqw;height:1.3cqw;color:#4C5FCA"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font-size:1.05cqw;color:#565B76">SEEG Ponto</span></div>
+      <span style="font:600 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.06em;color:#565B76;text-align:center">Favicon · 32 px e 16 px</span>
+    </div>
+  </div>
+  <div style="margin-top:2.6cqw;font:700 1.1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">TAMANHOS DE EXPORTAÇÃO</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6cqw 3cqw;margin-top:1cqw;font:400 1.2cqw/1.9 'IBM Plex Sans',sans-serif;color:#565B76">
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>Favicon web</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">16 · 32 px</span></div>
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>Web app / PWA</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">192 · 512 px</span></div>
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>iOS tela inicial</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">120 · 180 px</span></div>
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>iOS App Store</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">1024 px</span></div>
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>Android adaptável</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">108×108 dp</span></div>
+    <div style="display:flex;justify-content:space-between;border-bottom:0.5px solid #E2E4EE"><span>Google Play</span><span style="font-family:'IBM Plex Mono',monospace;color:#171A29">512 px</span></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>10 / 13</span></div>
+</section>
+
+<section class="page" id="pg-app1" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">11 — APLICAÇÃO</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">O momento da confirmação</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">10 segundos, no sol, de luva. Legível a um metro; nunca depende só de som ou só de cor.</p>
+  </div>
+  <div style="margin-top:2.8cqw;display:grid;grid-template-columns:1fr 1fr;gap:3cqw">
+    <div style="border-radius:2.2cqw;border:0.9px solid #E2E4EE;padding:2.6cqw;display:flex;flex-direction:column;align-items:center;background:#FAFAFC">
+      <div style="width:9cqw;height:9cqw;border-radius:50%;background:#EBF7F0;display:flex;align-items:center;justify-content:center"><svg width="60%" height="60%" viewBox="0 0 96 96" fill="none"><path d="M26 50 42 66 70 34" stroke="#14603A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+      <div style="font:700 1.7cqw 'Schibsted Grotesk',sans-serif;color:#14603A;margin-top:1.4cqw">Entrada registrada</div>
+      <div style="font:700 4.6cqw/1 'IBM Plex Mono',monospace;letter-spacing:-0.02em;margin-top:0.8cqw">08:02</div>
+      <div style="margin-top:1.2cqw;border:0.6px solid #E2E4EE;background:#FFFFFF;border-radius:0.6cqw;padding:0.6cqw 1cqw;font:500 1cqw 'IBM Plex Mono',monospace">NSR 004.519 · comprovante no aparelho</div>
+    </div>
+    <div style="border-radius:2.2cqw;border:0.9px solid #E2E4EE;padding:2.6cqw;display:flex;flex-direction:column;align-items:center;background:#FAFAFC">
+      <div style="width:9cqw;height:9cqw;border-radius:50%;background:#FDF6E7;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" fill="none" stroke="#8A5B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:50%;height:50%"><circle cx="12" cy="12" r="8.2" stroke-dasharray="3.35 3.1"></circle><path d="M12 15.6V8.8"></path><path d="M9 11.4 12 8.5l3 2.9"></path></svg></div>
+      <div style="font:700 1.7cqw 'Schibsted Grotesk',sans-serif;color:#8A5B00;margin-top:1.4cqw">Registrado no aparelho</div>
+      <div style="font:700 4.6cqw/1 'IBM Plex Mono',monospace;letter-spacing:-0.02em;margin-top:0.8cqw">08:02</div>
+      <div style="margin-top:1.2cqw;border:0.6px solid #E2E4EE;background:#FFFFFF;border-radius:0.6cqw;padding:0.6cqw 1cqw;font:500 1cqw 'IBM Plex Mono',monospace">NSR local 000.087 · pendente de envio</div>
+    </div>
+  </div>
+  <div style="margin-top:2.4cqw;display:grid;grid-template-columns:repeat(3,1fr);gap:1.6cqw;font:400 1.2cqw/1.55 'IBM Plex Sans',sans-serif;color:#565B76">
+    <div><strong style="color:#171A29">Legível a um metro:</strong> hora tabular grande, símbolo de estado com 128 px, título em display.</div>
+    <div><strong style="color:#171A29">Sem depender de som:</strong> forma, cor, palavra e vibração — quatro canais para o mesmo estado.</div>
+    <div><strong style="color:#171A29">Toques:</strong> alvo mínimo de 44 px; nada acionável abaixo disso.</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>11 / 13</span></div>
+</section>
+
+<section class="page" id="pg-app2" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#FFFFFF;color:#171A29;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid #E2E4EE">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#4C5FCA" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8A8FA8">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#4C5FCA">12 — APLICAÇÃO</span>
+  </div>
+  <div style="padding-top:3cqw">
+    <div style="font:700 3.2cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Documento legal — espelho de ponto</div>
+    <p style="margin:0.8cqw 0 0;font:400 1.35cqw/1.6 'IBM Plex Sans',sans-serif;color:#565B76;max-width:82cqw">Preto sobre branco, 1 bit. Assim a marca chega ao auditor e ao juiz.</p>
+  </div>
+  <div style="margin-top:2.2cqw;border:0.7px solid #C8CBDB;border-radius:0.6cqw;padding:2cqw 2.2cqw;background:#FFFFFF">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:0.8cqw"><svg viewBox="0 0 120 120" fill="none" style="width:1.8cqw;height:1.8cqw;color:#000000"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:700 1.3cqw 'Schibsted Grotesk',sans-serif">SEEG PONTO</span></div>
+      <span style="font:500 0.85cqw 'IBM Plex Mono',monospace;letter-spacing:.08em">REP-P · PORTARIA MTP Nº 671/2021</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.6px solid #000000;padding-bottom:0.9cqw;margin-top:1.4cqw"><span style="font:700 1.15cqw 'IBM Plex Sans',sans-serif;letter-spacing:.06em">ESPELHO DE PONTO ELETRÔNICO</span><span style="font:500 1cqw 'IBM Plex Mono',monospace">Período: 01/07/2026 – 31/07/2026</span></div>
+    <div style="min-width:0">
+      <div style="display:grid;grid-template-columns:8cqw 4.4cqw repeat(4,1fr) 9cqw 9.4cqw 7.6cqw;gap:0 0.9cqw;border-top:1.6px solid #000000;border-bottom:0.9px solid #000000;padding:0.7cqw 0;font:700 0.8cqw 'IBM Plex Sans',sans-serif;letter-spacing:.06em;margin-top:1cqw"><span>DATA</span><span>DIA</span><span>1ª ENT</span><span>1ª SAÍ</span><span>2ª ENT</span><span>2ª SAÍ</span><span>PREVISTO</span><span>REALIZADO</span><span>SALDO</span></div>
+      <div style="display:grid;grid-template-columns:8cqw 4.4cqw repeat(4,1fr) 9cqw 9.4cqw 7.6cqw;gap:0 0.9cqw;border-bottom:0.5px solid rgba(0,0,0,.3);padding:0.6cqw 0;font:500 1.05cqw 'IBM Plex Mono',monospace"><span>01/07</span><span>qua</span><span>08:01</span><span>12:03</span><span>13:00</span><span>17:22</span><span>08:20</span><span>08:24</span><span>+00:04</span></div>
+      <div style="display:grid;grid-template-columns:8cqw 4.4cqw repeat(4,1fr) 9cqw 9.4cqw 7.6cqw;gap:0 0.9cqw;border-bottom:0.5px solid rgba(0,0,0,.3);padding:0.6cqw 0;font:500 1.05cqw 'IBM Plex Mono',monospace"><span>02/07</span><span>qui</span><span>07:58</span><span>12:00</span><span>13:04</span><span>17:20</span><span>08:20</span><span>08:18</span><span>−00:02</span></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;border-top:0.9px solid #000000;margin-top:1cqw;padding-top:0.8cqw;font:400 0.85cqw 'IBM Plex Mono',monospace"><span>Assinado digitalmente — certificado ICP-Brasil A1</span><span>Autenticidade: seegponto.app/verificar</span></div>
+  </div>
+  <div style="margin-top:2.2cqw;border-radius:1.2cqw;background:#F1F3FC;padding:2cqw 2.2cqw;display:flex;gap:2.2cqw;align-items:center">
+    <div style="flex:none;width:11cqw;height:7cqw;border-radius:0.6cqw;background:#171A29;display:flex;flex-direction:column;padding:0.9cqw;box-sizing:border-box">
+      <div style="display:flex;align-items:center;gap:0.5cqw"><svg viewBox="0 0 120 120" fill="none" style="width:1.1cqw;height:1.1cqw;color:#FFFFFF"><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 0.8cqw 'Schibsted Grotesk',sans-serif;color:#FFFFFF">SEEG PONTO</span></div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center"><span style="font:600 1.3cqw 'Schibsted Grotesk',sans-serif;color:#FFFFFF">Título da sessão</span></div>
+    </div>
+    <p style="margin:0;font:500 1.3cqw/1.55 'IBM Plex Sans',sans-serif;color:#33408D">Ver também: <strong>Template de Apresentação</strong> (arquivo separado) — capa e camadas de slide prontas no padrão SEEG Ponto, para uso comercial e institucional.</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;padding-top:1.6cqw;margin-top:auto;border-top:0.7px solid #E2E4EE;font:500 1.05cqw 'IBM Plex Mono',monospace;color:#8A8FA8"><span>Manual de Marca · v1 · julho 2026</span><span>12 / 13</span></div>
+</section>
+
+<section class="page" id="pg-contato" style="display:flex;flex-direction:column;padding:6.5cqw 7cqw;background:#171A29;color:#FFFFFF;box-sizing:border-box;font-family:'IBM Plex Sans',sans-serif;position:relative;overflow:hidden">
+  <div style="position:absolute;inset:0;background:radial-gradient(60cqw 60cqw at 10% 110%,rgba(122,140,219,.2),transparent 60%)"></div>
+  <div style="position:relative;display:flex;justify-content:space-between;align-items:center;padding-bottom:1.8cqw;border-bottom:0.7px solid rgba(255,255,255,.16)">
+    <div style="display:flex;align-items:center;gap:0.9cqw"><svg viewBox="0 0 120 120" fill="none" style="width:2.1cqw;height:2.1cqw;color:#A7B2E9" aria-hidden="true"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="7" stroke-linecap="round" opacity="0.6"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#767C99">SEEG PONTO · MANUAL DE MARCA</span></div>
+    <span style="font:600 1.15cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#A7B2E9">13 — CONTATO</span>
+  </div>
+  <div style="position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;gap:2.4cqw">
+    <div style="font:700 3.6cqw 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;max-width:70cqw">Prova justa, não vigilância — em cada tela, em cada página.</div>
+    <p style="margin:0;font:400 1.4cqw/1.65 'IBM Plex Sans',sans-serif;color:#A6ABC4;max-width:66cqw">Este manual é vivo: evolui junto com o produto. Dúvidas sobre uso da marca, novas peças ou exceções passam pelo time de marca antes de ir ao ar.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2cqw;margin-top:1cqw;max-width:70cqw">
+      <div style="border-top:1.5px solid rgba(255,255,255,.24);padding-top:1cqw"><div style="font:600 1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#767C99">CONTATO DE MARCA</div><div style="font:500 1.3cqw 'IBM Plex Sans',sans-serif;color:#EDEFF7;margin-top:0.5cqw">marca@seegponto.com.br</div></div>
+      <div style="border-top:1.5px solid rgba(255,255,255,.24);padding-top:1cqw"><div style="font:600 1cqw 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#767C99">SITE</div><div style="font:500 1.3cqw 'IBM Plex Sans',sans-serif;color:#EDEFF7;margin-top:0.5cqw">seegponto.com.br</div></div>
+    </div>
+  </div>
+  <div style="position:relative;display:flex;justify-content:space-between;padding-top:1.6cqw;border-top:0.7px solid rgba(255,255,255,.16);font:500 1.05cqw 'IBM Plex Mono',monospace;color:#767C99"><span>Manual de Marca · v1 · julho 2026</span><span>13 / 13</span></div>
+</section>
+
+</doc-page>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    document.title = 'SEEG PONTO — Manual de Marca';
+  }
+  lum(hex) {
+    const h = hex.replace('#', '');
+    const v = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+  ratio(a, b) {
+    const l1 = this.lum(a), l2 = this.lum(b);
+    const hi = Math.max(l1, l2), lo = Math.min(l1, l2);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  par(tema, uso, fg, bg) {
+    const r = this.ratio(fg, bg);
+    const rr = r.toFixed(2).replace('.', ',') + ':1';
+    const nivel = r >= 7 ? 'AAA' : r >= 4.5 ? 'AA' : r >= 3 ? 'AA grande' : 'reprova';
+    return { tema, uso, fg, bg, ratio: rr, nivel };
+  }
+  renderVals() {
+    return {
+      pares: [
+        this.par('Claro', 'Texto primário / fundo', '#171A29', '#F7F8FB'),
+        this.par('Claro', 'Texto secundário / fundo', '#565B76', '#F7F8FB'),
+        this.par('Claro', 'Marca / fundo', '#4C5FCA', '#F7F8FB'),
+        this.par('Claro', 'Rótulo em botão primário', '#FFFFFF', '#4C5FCA'),
+        this.par('Claro', 'Sucesso — texto em aviso', '#14603A', '#EBF7F0'),
+        this.par('Escuro', 'Texto primário / fundo', '#EDEFF7', '#0C0E1A'),
+        this.par('Escuro', 'Texto secundário / superfície', '#A6ABC4', '#14172A'),
+        this.par('Escuro', 'Marca / fundo', '#A7B2E9', '#0C0E1A'),
+        this.par('Escuro', 'Rótulo em botão primário', '#FFFFFF', '#4C5FCA'),
+        this.par('Escuro', 'Sucesso — texto em aviso', '#7CD3A4', '#10291C')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

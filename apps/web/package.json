@@ -2,7 +2,7 @@
   "name": "@ponto/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Aplicacao web do Ponto Eletronico (REP-P multiempresa) — Next.js 15, App Router.",
+  "description": "Aplicacao web do SEEG Ponto (REP-P multiempresa) — Next.js 15, App Router.",
   "type": "module",
   "engines": {
     "node": ">=24",

@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#F7F8FB;--surface:#FFFFFF;--surface2:#EFF0F6;--text:#171A29;--text2:#565B76;--text3:#8A8FA8;--border:#E2E4EE;--border2:#C8CBDB;--acento:#4C5FCA;--acento-hover:#3D4DAF;--acento-suave:#F1F3FC;--ok:#14603A;--ok-bg:#EBF7F0;--warn:#8A5B00;--warn-bg:#FDF6E7;--erro:#A32239;--erro-bg:#FCEEF0;--info:#0A5A70;--info-bg:#E9F6FA;--glass:rgba(255,255,255,.66);--glass-strong:rgba(255,255,255,.82);--glass-border:rgba(30,34,66,.10);--shadow-sm:0 1px 2px rgba(30,34,66,.05),0 3px 8px rgba(30,34,66,.06);--shadow-md:0 2px 8px rgba(30,34,66,.05),0 18px 36px -14px rgba(30,34,66,.20);--shadow-lg:0 12px 28px rgba(30,34,66,.10),0 40px 72px -20px rgba(30,34,66,.26);--glow:radial-gradient(1100px 620px at 8% -12%,rgba(76,95,202,.13),transparent 62%)}
+[data-theme="escuro"]{--bg:#0C0E1A;--surface:#14172A;--surface2:#1B1F36;--text:#EDEFF7;--text2:#A6ABC4;--text3:#767C99;--border:#262A3C;--border2:#3E4257;--acento:#A7B2E9;--acento-hover:#C9D0F2;--acento-suave:#191F45;--ok:#7CD3A4;--ok-bg:#10291C;--warn:#F0C05E;--warn-bg:#2C2110;--erro:#EE9AA6;--erro-bg:#2E1216;--info:#7CCFE3;--info-bg:#0E2229;--glass:rgba(22,26,48,.58);--glass-strong:rgba(28,32,58,.78);--glass-border:rgba(255,255,255,.09);--shadow-sm:0 1px 2px rgba(0,0,0,.4),0 3px 10px rgba(0,0,0,.4);--shadow-md:0 4px 14px rgba(0,0,0,.42),0 22px 44px -16px rgba(0,0,0,.55);--shadow-lg:0 16px 34px rgba(0,0,0,.48),0 48px 88px -20px rgba(90,105,220,.30);--glow:radial-gradient(1100px 620px at 8% -12%,rgba(122,140,219,.20),transparent 62%)}
+html,body{margin:0;padding:0;background:#F7F8FB}
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:var(--acento);text-decoration:none}
+a:hover{color:var(--acento-hover);text-decoration:underline}
+::selection{background:#4C5FCA;color:#FFFFFF}
+</style>
+</helmet>
+<div id="bb" data-theme="{{ tema }}" style="min-height:100vh;background:var(--glow),var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;transition:background .2s ease,color .2s ease">
+<div style="max-width:1240px;margin:0 auto;padding:56px 40px 80px">
+
+  <header data-screen-label="Capa" style="display:flex;justify-content:space-between;align-items:flex-start;gap:32px;flex-wrap:wrap">
+    <div style="max-width:640px">
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.18em;color:var(--text3);text-transform:uppercase">Identidade visual · Brand board · v1 — julho 2026</div>
+      <div style="display:flex;align-items:center;gap:22px;margin-top:26px">
+        <div style="width:92px;height:92px;flex:none;border-radius:20px;background:var(--glass-strong);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--glass-border);box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.45),transparent 45%)"></div>
+          <svg width="64" height="64" viewBox="0 0 120 120" fill="none" aria-label="Símbolo SEEG Ponto em relevo 3D" style="position:relative">
+            <defs>
+              <linearGradient id="apFace" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#93A0E8"></stop>
+                <stop offset="1" stop-color="#4C5FCA"></stop>
+              </linearGradient>
+              <filter id="apShadow" x="-60%" y="-60%" width="220%" height="220%">
+                <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#171A29" flood-opacity="0.32"></feDropShadow>
+              </filter>
+            </defs>
+            <ellipse cx="60" cy="100" rx="32" ry="6" fill="#171A29" opacity="0.16"></ellipse>
+            <path d="M24 97.5 H96" stroke="#4C5FCA" stroke-width="3" stroke-linecap="round" opacity="0.45"></path>
+            <g filter="url(#apShadow)">
+              <path d="M32.3 69.8 51 90.4 90.8 28.5" fill="none" stroke="#2B3670" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,6)"></path>
+              <path d="M32.3 69.8 51 90.4 90.8 28.5" fill="none" stroke="#3D4DAF" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,3)"></path>
+              <path d="M32.3 69.8 51 90.4 90.8 28.5" fill="none" stroke="url(#apFace)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M32.3 69.8 51 90.4 90.8 28.5" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.55" transform="translate(-1.5,-1.5)"></path>
+            </g>
+          </svg>
+        </div>
+        <div style="font:700 76px/0.9 'Schibsted Grotesk',sans-serif;letter-spacing:-0.03em">SEEG PONTO</div>
+      </div>
+      <div style="margin-top:22px;font:500 21px/1.35 'Schibsted Grotesk',sans-serif;color:var(--text)">{{ tagline }}</div>
+      <p style="margin:14px 0 0;font-size:14.5px;line-height:1.6;color:var(--text2);max-width:560px">Plataforma de registro de jornada com validade legal (REP-P, Portaria MTP 671/2021). Um sistema de ponto nasce lido como vigilância; esta identidade inverte a leitura: <strong style="color:var(--text)">o mesmo registro que comprova a jornada para a empresa comprova a hora extra do trabalhador.</strong></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
+        <span style="font:500 11.5px 'IBM Plex Mono',monospace;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--text2)">Terminal facial</span>
+        <span style="font:500 11.5px 'IBM Plex Mono',monospace;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--text2)">App offline</span>
+        <span style="font:500 11.5px 'IBM Plex Mono',monospace;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--text2)">Navegador</span>
+        <span style="font:500 11.5px 'IBM Plex Mono',monospace;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--text2)">Totem</span>
+        <span style="font:500 11.5px 'IBM Plex Mono',monospace;border:1px solid var(--border);border-radius:99px;padding:6px 12px;color:var(--text2)">API</span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:16px">
+      <button onClick="{{ alternarTema }}" style="min-height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--glass-border);background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);color:var(--text);font:600 14px 'IBM Plex Sans',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:10px" style-hover="border-color:var(--acento)">
+        <span aria-hidden="true" style="display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--text);background:linear-gradient(90deg,var(--text) 50%,transparent 50%)"></span>
+        {{ rotuloTema }}
+      </button>
+      <div style="font:500 12px 'IBM Plex Mono',monospace;color:var(--text3);text-align:right;line-height:1.7">Dois temas de primeira classe.<br>Contrastes medidos nesta página,<br>em tempo de execução.</div>
+    </div>
+  </header>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;margin-top:48px;border-top:1px solid var(--border);padding-top:24px">
+    <div>
+      <div style="font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--acento)">PRECISO</div>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.55;color:var(--text2)">Instrumento de medida com fé pública. Números tabulares, terminologia exata, nada aproximado.</p>
+    </div>
+    <div>
+      <div style="font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--acento)">CLARO</div>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.55;color:var(--text2)">Uma pergunta, uma resposta: registrou ou não registrou. Todo estado tem forma e palavra, nunca só cor.</p>
+    </div>
+    <div>
+      <div style="font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--acento)">JUSTO</div>
+      <p style="margin:8px 0 0;font-size:13.5px;line-height:1.55;color:var(--text2)">A mesma prova serve aos dois lados. Vocabulário de medida — nunca de vigilância. Evitamos: vigilante, burocrático, frio.</p>
+    </div>
+  </div>
+
+  <section data-screen-label="01 Nome" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">01</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Nome</h2>
+      <span style="font-size:13.5px;color:var(--text2)">Cinco caminhos, testados contra os critérios: ditável por telefone, curto, não literal, sem cheiro de vigilância.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:14px;margin-top:24px">
+      <div style="border:1.5px solid var(--acento);border-radius:12px;padding:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:10px">
+        <span style="align-self:flex-start;font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--acento);background:var(--acento-suave);border-radius:99px;padding:5px 10px">★ RECOMENDADO</span>
+        <div style="font:700 27px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">aponta</div>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--text2)">Nome definido: SEEG é a marca já estabelecida da empresa; Ponto nomeia a categoria sem margem para dúvida — para o RH, para o auditor, para quem bate o registro todo dia.</p>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--text2)"><strong style="color:var(--ok)">+</strong> herda o reconhecimento e a confiança já depositados em SEEG<br><strong style="color:var(--ok)">+</strong> "Ponto" é claro para todo público, sem explicar categoria<br><strong style="color:var(--ok)">+</strong> curto de falar, sem soletração ao telefone<br><strong style="color:var(--erro)">−</strong> usa "ponto": todo o peso de romper com a leitura de vigilância recai sobre símbolo, tom e cor — o nome não ajuda nisso<br><strong style="color:var(--erro)">−</strong> cresce para banco de horas/escala só com apoio de subtítulo</div>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;padding:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:10px">
+        <span style="font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3)">PROPOSTA 2</span>
+        <div style="font:700 27px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">kairo</div>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--text2)">Do grego kairós: o tempo oportuno, oposto do tempo que só passa.</p>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--text2)"><strong style="color:var(--ok)">+</strong> sonoro, memorável, tech<br><strong style="color:var(--erro)">−</strong> pede soletração ("com K, não é Cairo")<br><strong style="color:var(--erro)">−</strong> conceito erudito: não se explica sozinho no chão de fábrica<br><strong style="color:var(--erro)">−</strong> vizinhança "Kairos" saturada em software</div>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;padding:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:10px">
+        <span style="font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3)">PROPOSTA 3</span>
+        <div style="font:700 27px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">cadência</div>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--text2)">Ritmo de trabalho sustentável; a jornada como compasso, não corrida.</p>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--text2)"><strong style="color:var(--ok)">+</strong> humano, musical, palavra corrente<br><strong style="color:var(--erro)">−</strong> acento + cedilha em domínio e busca<br><strong style="color:var(--erro)">−</strong> colide com Cadence (software global)<br><strong style="color:var(--erro)">−</strong> diz "ritmo", não diz "prova"</div>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;padding:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:10px">
+        <span style="font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3)">PROPOSTA 4</span>
+        <div style="font:700 27px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">lastro</div>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--text2)">O que dá valor de prova a um registro; "ter lastro" é ter respaldo.</p>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--text2)"><strong style="color:var(--ok)">+</strong> forte no argumento jurídico<br><strong style="color:var(--ok)">+</strong> curto, ditável<br><strong style="color:var(--erro)">−</strong> frio, bancário — erra o "humano"<br><strong style="color:var(--erro)">−</strong> lastro também é peso morto</div>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;padding:18px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);display:flex;flex-direction:column;gap:10px">
+        <span style="font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3)">PROPOSTA 5</span>
+        <div style="font:700 27px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">prumo</div>
+        <p style="margin:0;font-size:12.5px;line-height:1.5;color:var(--text2)">Fio de prumo: o instrumento que encontra a vertical exata. "No prumo" = em ordem, correto.</p>
+        <div style="font-size:12.5px;line-height:1.6;color:var(--text2)"><strong style="color:var(--ok)">+</strong> instrumento de medida, não vigilância<br><strong style="color:var(--ok)">+</strong> palavra de obra: digna, concreta<br><strong style="color:var(--erro)">−</strong> homônimo em logística (classe distinta)<br><strong style="color:var(--erro)">−</strong> metáfora menos óbvia no primeiro contato</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:20px 22px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center;flex-wrap:wrap">
+      <p style="margin:0;font-size:14px;line-height:1.6;color:var(--text)"><strong>Por que SEEG Ponto:</strong> nome definido pela empresa — aproveita a marca SEEG já reconhecida e nomeia a categoria com uma clareza que nenhum neologismo supera. Como o nome em si é literal, o resto do sistema (símbolo, tom de voz, cor) carrega sozinho o argumento central: prova justa, não vigilância.</p>
+      <span style="font:500 11px 'IBM Plex Mono',monospace;color:var(--text3);max-width:220px;line-height:1.6">Todas as opções exigem busca de anterioridade no INPI (classes 9, 35 e 42) antes do registro.</span>
+    </div>
+  </section>
+
+  <section data-screen-label="02 Logotipo" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">02</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Logotipo</h2>
+      <span style="font-size:13.5px;color:var(--text2)">O símbolo é um traço de confirmação, ancorado na linha do dia — não um relógio, não um olho: o gesto de quem confere, pousando exatamente no ponto certo.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:24px">
+      <div style="border:1px solid var(--border);border-radius:12px;background:#FFFFFF;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:flex-start;box-shadow:var(--shadow-md)">
+        <svg width="320" height="56" viewBox="0 0 320 56" fill="none" aria-label="Logotipo principal">
+          <g transform="translate(2,3) scale(1.56)" color="#4C5FCA"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></g>
+          <text x="62" y="41" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="34" letter-spacing="-1" fill="#171A29">SEEG PONTO</text>
+        </svg>
+        <span style="font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#565B76">VERSÃO PRINCIPAL · FUNDO CLARO</span>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;background:#0C0E1A;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:flex-start;box-shadow:var(--shadow-md)">
+        <svg width="320" height="56" viewBox="0 0 320 56" fill="none" aria-label="Logotipo principal em fundo escuro">
+          <g transform="translate(2,3) scale(1.56)" color="#7D8CDB"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></g>
+          <text x="62" y="41" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="34" letter-spacing="-1" fill="#EDEFF7">SEEG PONTO</text>
+        </svg>
+        <span style="font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#A6ABC4">VERSÃO PRINCIPAL · FUNDO ESCURO</span>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;background:#FFFFFF;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:flex-start;box-shadow:var(--shadow-md)">
+        <div style="display:flex;align-items:center;gap:28px">
+          <svg width="220" height="40" viewBox="0 0 220 40" fill="none" aria-label="Versão reduzida">
+            <g transform="translate(1,2) scale(1.1)" color="#000000"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></g>
+            <text x="44" y="29" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="24" letter-spacing="-0.6" fill="#000000">SEEG PONTO</text>
+          </svg>
+          <svg width="44" height="44" viewBox="0 0 32 32" fill="none" aria-label="Símbolo isolado" style="color:#000000">
+            <path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <span style="font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#565B76">REDUZIDA + SÍMBOLO · MONOCROMÁTICO</span>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;background:#000000;padding:28px 24px;display:flex;flex-direction:column;gap:18px;align-items:flex-start;box-shadow:var(--shadow-md)">
+        <div style="display:flex;align-items:center;gap:28px">
+          <svg width="220" height="40" viewBox="0 0 220 40" fill="none" aria-label="Versão em negativo">
+            <g transform="translate(1,2) scale(1.1)" color="#FFFFFF"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></g>
+            <text x="44" y="29" font-family="'Schibsted Grotesk',sans-serif" font-weight="700" font-size="24" letter-spacing="-0.6" fill="#FFFFFF">SEEG PONTO</text>
+          </svg>
+          <svg width="44" height="44" viewBox="0 0 32 32" fill="none" aria-label="Símbolo em negativo" style="color:#FFFFFF">
+            <path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <span style="font:500 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#A6ABC4">NEGATIVO · 1 COR</span>
+      </div>
+    </div>
+    <div style="margin-top:14px;border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:24px;display:flex;align-items:flex-end;gap:36px;flex-wrap:wrap">
+      <div style="display:flex;align-items:flex-end;gap:28px">
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+          <svg width="128" height="128" viewBox="0 0 32 32" fill="none" style="color:var(--acento)"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>
+          <span style="font:500 11px 'IBM Plex Mono',monospace;color:var(--text3)">128 px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="color:var(--acento)"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>
+          <span style="font:500 11px 'IBM Plex Mono',monospace;color:var(--text3)">32 px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+          <svg width="16" height="16" viewBox="0 0 32 32" fill="none" style="color:var(--acento)"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>
+          <span style="font:500 11px 'IBM Plex Mono',monospace;color:var(--text3)">16 px</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:inline-flex;align-items:center;gap:9px;background:var(--surface2);border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;padding:9px 14px;min-width:200px">
+          <svg width="16" height="16" viewBox="0 0 32 32" fill="none" style="flex:none;color:var(--acento)"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>
+          <span style="font-size:12.5px;color:var(--text2)">SEEG PONTO — registro de jornada</span>
+          <span style="margin-left:auto;color:var(--text3);font-size:12px">×</span>
+        </div>
+        <span style="font:500 11px 'IBM Plex Mono',monospace;color:var(--text3)">Prova de resistência: o mesmo arquivo SVG, sem redesenho, como favicon a 16 px.</span>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="03 Cor" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">03</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Cor</h2>
+      <span style="font-size:13.5px;color:var(--text2)">Índigo #4C5FCA mantido da paleta existente — distinto do azul corporativo, sóbrio sem ser frio. Cor nunca é o único canal de informação.</span>
+    </div>
+    <div style="margin-top:24px">
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3);text-transform:uppercase">Marca · Índigo — 11 tons</div>
+      <div style="display:grid;grid-template-columns:repeat(11,1fr);gap:6px;margin-top:12px;min-width:0">
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#F1F3FC;border:1px solid var(--border)"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">50<br>#F1F3FC</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#E3E7F9"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">100<br>#E3E7F9</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#C9D0F2"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">200<br>#C9D0F2</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#A7B2E9"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">300<br>#A7B2E9</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#7D8CDB"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">400<br>#7D8CDB</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#5F71D3"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">500<br>#5F71D3</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#4C5FCA;outline:2px solid var(--acento);outline-offset:2px"></div><div style="font:600 10.5px 'IBM Plex Mono',monospace;color:var(--text);margin-top:6px">600 ●<br>#4C5FCA</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#3D4DAF"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">700<br>#3D4DAF</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#33408D"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">800<br>#33408D</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#2B3670"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">900<br>#2B3670</div></div>
+        <div style="min-width:0"><div style="height:56px;border-radius:8px;background:#191F45"></div><div style="font:500 10.5px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:6px">950<br>#191F45</div></div>
+      </div>
+    </div>
+    <div style="margin-top:28px;display:grid;gap:14px">
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3);text-transform:uppercase">Semânticas — estado sempre com forma + rótulo, cor apenas reforça</div>
+      <div style="display:grid;grid-template-columns:96px repeat(7,1fr);gap:6px;align-items:center">
+        <span style="font:600 12px 'IBM Plex Sans',sans-serif;color:var(--text)">Sucesso</span>
+        <div><div style="height:36px;border-radius:6px;background:#EBF7F0;border:1px solid var(--border)"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#EBF7F0</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#D3EEDF"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#D3EEDF</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#7CD3A4"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#7CD3A4</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#27935B"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#27935B</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#1D7A4B"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#1D7A4B</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#14603A"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#14603A</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#0B3A22"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#0B3A22</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:96px repeat(7,1fr);gap:6px;align-items:center">
+        <span style="font:600 12px 'IBM Plex Sans',sans-serif;color:var(--text)">Atenção</span>
+        <div><div style="height:36px;border-radius:6px;background:#FDF6E7;border:1px solid var(--border)"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#FDF6E7</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#FAEAC6"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#FAEAC6</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#F0C05E"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#F0C05E</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#D99A0B"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#D99A0B</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#B07C00"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#B07C00</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#8A5B00"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#8A5B00</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#4F3400"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#4F3400</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:96px repeat(7,1fr);gap:6px;align-items:center">
+        <span style="font:600 12px 'IBM Plex Sans',sans-serif;color:var(--text)">Erro</span>
+        <div><div style="height:36px;border-radius:6px;background:#FCEEF0;border:1px solid var(--border)"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#FCEEF0</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#F9D8DD"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#F9D8DD</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#EE9AA6"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#EE9AA6</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#DD5468"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#DD5468</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#C9354B"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#C9354B</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#A32239"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#A32239</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#5C0E1D"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#5C0E1D</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:96px repeat(7,1fr);gap:6px;align-items:center">
+        <span style="font:600 12px 'IBM Plex Sans',sans-serif;color:var(--text)">Informação</span>
+        <div><div style="height:36px;border-radius:6px;background:#E9F6FA;border:1px solid var(--border)"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#E9F6FA</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#CFEDF5"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#CFEDF5</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#7CCFE3"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#7CCFE3</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#2BA3C4"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#2BA3C4</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#0F7E9E"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#0F7E9E</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#0A5A70"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#0A5A70</div></div>
+        <div><div style="height:36px;border-radius:6px;background:#063241"></div><div style="font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text3);margin-top:4px">#063241</div></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.6">Texto semântico usa tons 600–700 no tema claro e tom 300 no escuro; fundos suaves usam o tom 50 no claro e fundos próprios no escuro — todos medidos na tabela abaixo.</div>
+    </div>
+    <div style="margin-top:28px">
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:var(--text3);text-transform:uppercase">Categóricas — 8 séries para gráficos</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:6px;margin-top:12px">
+        <div><div style="height:40px;border-radius:6px;background:#5F71D3"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C1 #5F71D3</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#2BA3C4"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C2 #2BA3C4</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#14A38B"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C3 #14A38B</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#D99A0B"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C4 #D99A0B</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#E0703A"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C5 #E0703A</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#DD5468"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C6 #DD5468</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#C75FA1"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C7 #C75FA1</div></div>
+        <div><div style="height:40px;border-radius:6px;background:#9A6BD4"></div><div style="font:500 10px 'IBM Plex Mono',monospace;color:var(--text2);margin-top:5px">C8 #9A6BD4</div></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:10px">Uso em ordem fixa, sempre com rótulo direto na série — nunca só cor. Para "outros", cinza neutro #9A9EB5.</div>
+    </div>
+    <div style="margin-top:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px">
+      <div style="border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:20px">
+        <div style="font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:var(--text)">PARES PRINCIPAIS · TEMA CLARO</div>
+        <div style="font-size:12px;color:var(--text3);margin:6px 0 14px">Medidos agora, nesta página (WCAG 2.2, luminância relativa sRGB).</div>
+        <sc-for list="{{ paresClaro }}" as="p" hint-placeholder-count="11">
+          <div style="display:grid;grid-template-columns:1fr 76px 64px 96px;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--border)">
+            <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;color:var(--text)">{{ p.uso }}</div><div style="font:400 10.5px 'IBM Plex Mono',monospace;color:var(--text3)">{{ p.fg }} / {{ p.bg }}</div></div>
+            <span style="background:{{ p.bg }};color:{{ p.fg }};border:1px solid var(--border);border-radius:6px;font:600 12px 'IBM Plex Mono',monospace;text-align:center;padding:7px 0">Aa 12:07</span>
+            <strong style="font:700 13px 'IBM Plex Mono',monospace;color:var(--text);text-align:right">{{ p.ratio }}</strong>
+            <span style="font:600 10.5px 'IBM Plex Mono',monospace;color:var(--text2);text-align:right">{{ p.nivel }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:20px">
+        <div style="font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:var(--text)">PARES PRINCIPAIS · TEMA ESCURO</div>
+        <div style="font-size:12px;color:var(--text3);margin:6px 0 14px">Fundo #0C0E1A, superfície #14172A. Mesmo critério, mesma régua.</div>
+        <sc-for list="{{ paresEscuro }}" as="p" hint-placeholder-count="11">
+          <div style="display:grid;grid-template-columns:1fr 76px 64px 96px;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--border)">
+            <div style="min-width:0"><div style="font-size:12.5px;font-weight:600;color:var(--text)">{{ p.uso }}</div><div style="font:400 10.5px 'IBM Plex Mono',monospace;color:var(--text3)">{{ p.fg }} / {{ p.bg }}</div></div>
+            <span style="background:{{ p.bg }};color:{{ p.fg }};border:1px solid var(--border);border-radius:6px;font:600 12px 'IBM Plex Mono',monospace;text-align:center;padding:7px 0">Aa 12:07</span>
+            <strong style="font:700 13px 'IBM Plex Mono',monospace;color:var(--text);text-align:right">{{ p.ratio }}</strong>
+            <span style="font:600 10.5px 'IBM Plex Mono',monospace;color:var(--text2);text-align:right">{{ p.nivel }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="font-size:12.5px;color:var(--text2);margin-top:12px;line-height:1.6">Neutros derivados do índigo (tinta fria, nunca cinza puro): texto #171A29 / #565B76 no claro; #EDEFF7 / #A6ABC4 no escuro. A base de 124 pares aprovados da paleta existente permanece válida; os pares acima são os de maior exposição, re-medidos aqui.</div>
+  </section>
+
+  <section data-screen-label="04 Tipografia" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">04</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Tipografia</h2>
+      <span style="font-size:13.5px;color:var(--text2)">Três vozes, uma régua. Licenças SIL OFL 1.1 — uso comercial e embed em SaaS liberados.</span>
+    </div>
+    <div style="display:grid;gap:14px;margin-top:24px">
+      <div style="border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:24px;display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:center">
+        <div>
+          <div style="font:700 15px 'Schibsted Grotesk',sans-serif">Schibsted Grotesk</div>
+          <div style="font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.55">Display: logotipo, títulos, números-destaque. Pesos 500–800.</div>
+        </div>
+        <div style="min-width:0">
+          <div style="font:700 clamp(28px,3.4vw,42px)/1.15 'Schibsted Grotesk',sans-serif;letter-spacing:-0.025em;text-wrap:pretty">O ponto certo na linha do dia.</div>
+          <div style="font:400 20px 'Schibsted Grotesk',sans-serif;color:var(--text2);margin-top:8px">Aa <span style="font-weight:500">Aa</span> <span style="font-weight:600">Aa</span> <span style="font-weight:700">Aa</span> <span style="font-weight:800">Aa</span> · ãáâçéêíõóôú</div>
+        </div>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:24px;display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:center">
+        <div>
+          <div style="font:600 15px 'IBM Plex Sans',sans-serif">IBM Plex Sans</div>
+          <div style="font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.55">Texto e UI: rótulos, tabelas densas de RH, formulários. Ativa <span style="font-family:'IBM Plex Mono',monospace">tnum</span> junto a números.</div>
+        </div>
+        <p style="margin:0;font-size:15px;line-height:1.65;color:var(--text);max-width:560px">O registro protege os dois lados: comprova a jornada cumprida e garante a hora extra devida. Sem internet, o ponto vale; com ajuste, fica assinalado; fechado o período, ninguém edita — nem a empresa, nem nós.</p>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:12px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:var(--shadow-md);padding:24px;display:grid;grid-template-columns:220px 1fr;gap:24px">
+        <div>
+          <div style="font:600 15px 'IBM Plex Mono',monospace">IBM Plex Mono</div>
+          <div style="font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.55">Horas, NSR, hash, documento legal. <strong style="color:var(--text)">Tabular por construção</strong>: cada dígito tem a mesma largura — colunas não dançam.</div>
+        </div>
+        <div style="min-width:0;overflow-x:auto">
+          <div style="font:700 clamp(44px,6vw,72px)/1 'IBM Plex Mono',monospace;letter-spacing:-0.02em">08:02<span style="color:var(--text3)">:47</span></div>
+          <div style="display:grid;grid-template-columns:44px repeat(4,minmax(64px,86px)) minmax(80px,100px) minmax(72px,92px);gap:2px 14px;margin-top:18px;font:500 17px 'IBM Plex Mono',monospace">
+            <span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)"></span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">ENTRADA</span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">SAÍDA</span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">ENTRADA</span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">SAÍDA</span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">REALIZADO</span><span style="font:600 10px 'IBM Plex Sans',sans-serif;letter-spacing:.1em;color:var(--text3)">SALDO</span>
+            <span style="color:var(--text3);font-size:13px">seg</span><span>07:58</span><span>12:01</span><span>13:02</span><span>17:21</span><span>08:22</span><span style="color:var(--ok)">+00:02</span>
+            <span style="color:var(--text3);font-size:13px">ter</span><span>08:00</span><span>12:00</span><span>13:00</span><span>17:20</span><span>08:20</span><span style="color:var(--text2)">&nbsp;00:00</span>
+            <span style="color:var(--text3);font-size:13px">qua</span><span>08:11</span><span>12:03</span><span>13:04</span><span>17:20</span><span>08:08</span><span style="color:var(--erro)">−00:12</span>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:12px">Saldo sinalizado por + e − (forma), reforçado por cor. Dois-pontos alinham na vertical em qualquer linha.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="05 Ícones" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">05</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Ícones do domínio</h2>
+      <span style="font-size:13.5px;color:var(--text2)">Grade 24 px, traço 2, cantos redondos. Sem olho, sem mira, sem relógio de ponteiro — instrumentos, não vigilância.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;margin-top:24px">
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><path d="M8 4H6.5A2.5 2.5 0 0 0 4 6.5V8"></path><path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5V8"></path><path d="M20 16v1.5a2.5 2.5 0 0 1-2.5 2.5H16"></path><path d="M4 16v1.5A2.5 2.5 0 0 0 6.5 20H8"></path><circle cx="9.4" cy="10.2" r="1" fill="currentColor" stroke="none"></circle><circle cx="14.6" cy="10.2" r="1" fill="currentColor" stroke="none"></circle><path d="M9.3 14.2c.7.8 1.6 1.2 2.7 1.2s2-.4 2.7-1.2"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Reconhecimento facial</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><circle cx="12" cy="12" r="3.3"></circle><path d="M19.8 10.4A8 8 0 0 0 6.9 6.2"></path><path d="M6.6 3.4l.2 3 3-.3"></path><path d="M4.2 13.6a8 8 0 0 0 12.9 4.2"></path><path d="M17.4 20.6l-.2-3-3 .3"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Prova de vida</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><rect x="4" y="4" width="16" height="16" rx="4.5" stroke-dasharray="3.1 3.1"></rect><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"></circle></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Cerca virtual + GPS</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><circle cx="12" cy="12" r="8.2" stroke-dasharray="3.35 3.1"></circle><path d="M12 15.6V8.8"></path><path d="M9 11.4 12 8.5l3 2.9"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Offline — pendente de envio</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><rect x="3.5" y="5" width="17" height="14" rx="2.5"></rect><path d="M7 10h4"></path><path d="M7 14h3"></path><path d="M14.5 12h4.5"></path><path d="M16.75 9.75v4.5"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Banco de horas — crédito</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><rect x="3.5" y="5" width="17" height="14" rx="2.5"></rect><path d="M7 10h4"></path><path d="M7 14h3"></path><path d="M14.5 12h4.5"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Banco de horas — débito</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><rect x="4" y="4" width="7" height="7" rx="1.8"></rect><rect x="13" y="4" width="7" height="7" rx="1.8" fill="currentColor" stroke="none"></rect><rect x="4" y="13" width="7" height="7" rx="1.8" fill="currentColor" stroke="none"></rect><rect x="13" y="13" width="7" height="7" rx="1.8"></rect></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Escala e turno (12×36)</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path><path d="M17 5h4"></path><path d="M19 3v4"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Adicional noturno</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn)"><path d="M3.5 12h5.5"></path><path d="M15 12h5.5"></path><path d="M9.8 15.2 14.2 8.8"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Marcação inconsistente</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><rect x="5" y="10.5" width="14" height="9" rx="2.5"></rect><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"></path><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"></circle></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Período travado</span>
+      </div>
+      <div style="border:1px solid var(--glass-border);border-radius:10px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:var(--shadow-sm);padding:18px 14px;display:flex;flex-direction:column;gap:12px;align-items:flex-start">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text)"><path d="M4 19.5h16"></path><path d="M5.5 15.5c1.8-4.6 3.6-6.9 4.7-6.1 1.2.8-1.9 4.6-.7 5.4 1 .7 2.6-1 3.7-2.1"></path><path d="M14.8 14.6l1.6 1.6 3-3.3"></path></svg>
+        <span style="font-size:12px;color:var(--text2);line-height:1.4">Assinatura eletrônica</span>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="06 Confirmação de registro" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">06</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">O momento da confirmação</h2>
+      <span style="font-size:13.5px;color:var(--text2)">10 segundos, 2 a 4 vezes por dia, no sol, de luva. A resposta a "registrou?" tem que atravessar um metro de distância.</span>
+    </div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:26px;align-items:flex-start">
+      <div style="width:294px;border-radius:42px;border:10px solid #171A29;background:#FFFFFF;overflow:hidden;flex:none;box-shadow:0 2px 8px rgba(23,26,41,.16),0 30px 60px -20px rgba(23,26,41,.42),0 60px 110px -32px rgba(76,95,202,.22)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px 0;font:600 13px 'IBM Plex Mono',monospace;color:#171A29"><span>08:02</span><svg width="34" height="12" viewBox="0 0 34 12" fill="#171A29"><rect x="0" y="5" width="3" height="7" rx="1"></rect><rect x="5" y="3" width="3" height="9" rx="1"></rect><rect x="10" y="1" width="3" height="11" rx="1"></rect><rect x="17" y="2" width="14" height="9" rx="2.5" fill="none" stroke="#171A29" stroke-width="1.6"></rect><rect x="19" y="4" width="8" height="5" rx="1"></rect><rect x="32" y="4.5" width="2" height="4" rx="1"></rect></svg></div>
+        <div style="padding:18px 22px 24px;display:flex;flex-direction:column;align-items:center;gap:0">
+          <div style="align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#565B76"><span style="font-weight:600;color:#171A29">José C. Pereira</span><span>Obra Pinheiros</span></div>
+          <div style="width:128px;height:128px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#E9F8EF,#CDEEDC 55%,#A9E1C3);box-shadow:inset 0 3px 5px rgba(255,255,255,.85),inset 0 -10px 18px rgba(20,96,58,.22),0 10px 22px rgba(20,96,58,.20);display:flex;align-items:center;justify-content:center;margin-top:22px">
+            <svg width="66" height="66" viewBox="0 0 96 96" fill="none"><path d="M26 50 42 66 70 34" stroke="#14603A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <div style="font:700 23px 'Schibsted Grotesk',sans-serif;color:#14603A;margin-top:18px">Entrada registrada</div>
+          <div style="font:700 68px/1 'IBM Plex Mono',monospace;letter-spacing:-0.03em;color:#171A29;margin-top:8px">08:02</div>
+          <div style="font-size:13px;color:#565B76;margin-top:6px">segunda · 27 jul 2026</div>
+          <div style="margin-top:16px;border:1px solid #E2E4EE;background:#F7F8FB;border-radius:8px;padding:8px 12px;font:500 11.5px 'IBM Plex Mono',monospace;color:#171A29">NSR 004.519 · comprovante no aparelho</div>
+          <div style="align-self:stretch;display:flex;flex-direction:column;gap:8px;margin-top:20px">
+            <div style="min-height:48px;border-radius:10px;background:#4C5FCA;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:600 15px 'IBM Plex Sans',sans-serif">Ver comprovante</div>
+            <div style="min-height:48px;border-radius:10px;border:1.5px solid #C8CBDB;color:#171A29;display:flex;align-items:center;justify-content:center;font:600 15px 'IBM Plex Sans',sans-serif">Fechar</div>
+          </div>
+        </div>
+      </div>
+      <div style="width:294px;border-radius:42px;border:10px solid #171A29;background:#FFFFFF;overflow:hidden;flex:none;box-shadow:0 2px 8px rgba(23,26,41,.16),0 30px 60px -20px rgba(23,26,41,.42),0 60px 110px -32px rgba(76,95,202,.22)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px 0;font:600 13px 'IBM Plex Mono',monospace;color:#171A29"><span>08:02</span><svg width="34" height="12" viewBox="0 0 34 12" fill="#171A29"><rect x="0" y="5" width="3" height="7" rx="1"></rect><rect x="5" y="3" width="3" height="9" rx="1" fill="#C8CBDB"></rect><rect x="10" y="1" width="3" height="11" rx="1" fill="#C8CBDB"></rect><rect x="17" y="2" width="14" height="9" rx="2.5" fill="none" stroke="#171A29" stroke-width="1.6"></rect><rect x="19" y="4" width="8" height="5" rx="1"></rect><rect x="32" y="4.5" width="2" height="4" rx="1"></rect></svg></div>
+        <div style="padding:18px 22px 24px;display:flex;flex-direction:column;align-items:center;gap:0">
+          <div style="align-self:stretch;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#565B76"><span style="font-weight:600;color:#171A29">José C. Pereira</span><span>Sem internet</span></div>
+          <div style="width:128px;height:128px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#FCF3D9,#F8E6B3 55%,#F0D383);box-shadow:inset 0 3px 5px rgba(255,255,255,.85),inset 0 -10px 18px rgba(138,91,0,.22),0 10px 22px rgba(138,91,0,.20);display:flex;align-items:center;justify-content:center;margin-top:22px">
+            <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#8A5B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.2" stroke-dasharray="3.35 3.1"></circle><path d="M12 15.6V8.8"></path><path d="M9 11.4 12 8.5l3 2.9"></path></svg>
+          </div>
+          <div style="font:700 23px 'Schibsted Grotesk',sans-serif;color:#8A5B00;margin-top:18px">Registrado no aparelho</div>
+          <div style="font:700 68px/1 'IBM Plex Mono',monospace;letter-spacing:-0.03em;color:#171A29;margin-top:8px">08:02</div>
+          <div style="font-size:12.5px;color:#565B76;margin-top:8px;text-align:center;line-height:1.5;max-width:230px">Seu horário já está guardado e assinado. Será enviado quando a conexão voltar.</div>
+          <div style="margin-top:14px;border:1px solid #E2E4EE;background:#F7F8FB;border-radius:8px;padding:8px 12px;font:500 11.5px 'IBM Plex Mono',monospace;color:#171A29">NSR local 000.087 · pendente de envio</div>
+          <div style="align-self:stretch;display:flex;flex-direction:column;gap:8px;margin-top:20px">
+            <div style="min-height:48px;border-radius:10px;background:#4C5FCA;color:#FFFFFF;display:flex;align-items:center;justify-content:center;font:600 15px 'IBM Plex Sans',sans-serif">Entendi</div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px;font-size:13.5px;line-height:1.65;color:var(--text2)">
+        <p style="margin:0"><strong style="color:var(--text)">Legível a um metro:</strong> hora em 68 px tabulares, símbolo de estado com 128 px, título em display. Tela sempre clara neste momento — texto escuro sobre fundo claro vence o sol.</p>
+        <p style="margin:0"><strong style="color:var(--text)">Sem depender de som:</strong> o estado chega por quatro canais — forma (✓ ou seta pendente), cor, palavra e vibração dupla no registro. Quem não ouve, vê; quem não vê cor, lê a forma.</p>
+        <p style="margin:0"><strong style="color:var(--text)">Offline honesto:</strong> a tela âmbar não é erro — promete pouco e prova muito: o NSR local garante que o horário já pertence ao trabalhador.</p>
+        <p style="margin:0"><strong style="color:var(--text)">Toques:</strong> botões com 48 px de altura; nada acionável abaixo de 44 px.</p>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="07 Documento legal" style="margin-top:72px">
+    <div style="display:flex;gap:16px;align-items:baseline;border-top:1px solid var(--border);padding-top:22px;flex-wrap:wrap">
+      <span style="font:600 13px 'IBM Plex Mono',monospace;color:var(--acento);background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--glass-border);box-shadow:var(--shadow-sm);border-radius:8px;padding:4px 10px">07</span>
+      <h2 style="margin:0;font:700 26px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">Documento legal — espelho de ponto</h2>
+      <span style="font-size:13.5px;color:var(--text2)">Preto sobre branco, 1 bit. É assim que a marca chega ao auditor e ao juiz — se funciona aqui, funciona em qualquer lugar.</span>
+    </div>
+    <div style="margin-top:24px;background:#FFFFFF;color:#000000;border:1px solid var(--border2);border-radius:6px;padding:30px 34px;overflow-x:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:12px">
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none" style="color:#000000"><path d="M8.6 18.6 13.6 24.1 24.2 7.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M6.4 26 H25.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>
+          <span style="font:700 19px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em">SEEG PONTO</span>
+        </div>
+        <span style="font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.1em">REP-P · PORTARIA MTP Nº 671/2021 · INPI REG. PENDENTE</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;border-bottom:2px solid #000000;padding-bottom:12px;margin-top:18px">
+        <span style="font:700 15px 'IBM Plex Sans',sans-serif;letter-spacing:.08em">ESPELHO DE PONTO ELETRÔNICO</span>
+        <span style="font:500 12px 'IBM Plex Mono',monospace">Período: 01/07/2026 – 31/07/2026</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 32px;padding:14px 0;font:400 12px 'IBM Plex Mono',monospace;line-height:1.6">
+        <span><strong style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:.08em">EMPREGADOR&nbsp;&nbsp;</strong>Aurora Componentes Ltda. · CNPJ 12.345.678/0001-90</span>
+        <span><strong style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:.08em">COLABORADOR&nbsp;&nbsp;</strong>José Carlos Pereira · CPF 123.456.789-09 · Mat. 00482</span>
+        <span><strong style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:.08em">JORNADA&nbsp;&nbsp;</strong>seg–sex 08:00–12:00 / 13:00–17:20</span>
+        <span><strong style="font-family:'IBM Plex Sans',sans-serif;font-size:10px;letter-spacing:.08em">ADMISSÃO&nbsp;&nbsp;</strong>03/02/2021 · Escala 5×2</span>
+      </div>
+      <div style="min-width:760px">
+        <div style="display:grid;grid-template-columns:72px 40px repeat(4,1fr) 84px 92px 76px 76px;gap:0 12px;border-top:2px solid #000000;border-bottom:1px solid #000000;padding:8px 0;font:700 9.5px 'IBM Plex Sans',sans-serif;letter-spacing:.08em">
+          <span>DATA</span><span>DIA</span><span>1ª ENT</span><span>1ª SAÍ</span><span>2ª ENT</span><span>2ª SAÍ</span><span>PREVISTO</span><span>REALIZADO</span><span>SALDO</span><span>NSR</span>
+        </div>
+        <div style="display:grid;grid-template-columns:72px 40px repeat(4,1fr) 84px 92px 76px 76px;gap:0 12px;border-bottom:1px solid rgba(0,0,0,.35);padding:7px 0;font:500 12.5px 'IBM Plex Mono',monospace">
+          <span>01/07</span><span>qua</span><span>08:01</span><span>12:03</span><span>13:00</span><span>17:22</span><span>08:20</span><span>08:24</span><span>+00:04</span><span>004102</span>
+        </div>
+        <div style="display:grid;grid-template-columns:72px 40px repeat(4,1fr) 84px 92px 76px 76px;gap:0 12px;border-bottom:1px solid rgba(0,0,0,.35);padding:7px 0;font:500 12.5px 'IBM Plex Mono',monospace">
+          <span>02/07</span><span>qui</span><span>07:58</span><span>12:00</span><span>13:04</span><span>17:20</span><span>08:20</span><span>08:18</span><span>−00:02</span><span>004178</span>
+        </div>
+        <div style="display:grid;grid-template-columns:72px 40px repeat(4,1fr) 84px 92px 76px 76px;gap:0 12px;border-bottom:1px solid rgba(0,0,0,.35);padding:7px 0;font:500 12.5px 'IBM Plex Mono',monospace">
+          <span>03/07</span><span>sex</span><span>08:00</span><span>12:01</span><span>13:01</span><span>17:25 *</span><span>08:20</span><span>08:25</span><span>+00:05</span><span>004251</span>
+        </div>
+      </div>
+      <div style="font:400 10.5px 'IBM Plex Mono',monospace;margin-top:10px">* Ajuste aprovado em 05/07/2026 pela gestora Ana L. Freitas — assinalado por símbolo, legível em preto e branco.</div>
+      <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid #000000;margin-top:14px;padding-top:12px;font:400 10.5px 'IBM Plex Mono',monospace">
+        <span>Assinado digitalmente — certificado ICP-Brasil A1 · SHA-256 3F9A 61B2 … E4C2 17</span>
+        <span>Autenticidade: seegponto.app/verificar · página 1 de 4</span>
+      </div>
+    </div>
+  </section>
+
+  <footer style="margin-top:72px;border-top:1px solid var(--border);padding-top:20px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font:500 11.5px 'IBM Plex Mono',monospace;color:var(--text3)">
+    <span>SEEG PONTO · brand board v1 · julho 2026 · {{ tagline }}</span>
+    <span>Tipografia SIL OFL · Contrastes WCAG 2.2 medidos em tempo de execução · REP-P Portaria MTP 671/2021</span>
+  </footer>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;temaInicial&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;claro&quot;,&quot;escuro&quot;],&quot;default&quot;:&quot;claro&quot;,&quot;tsType&quot;:&quot;'claro'|'escuro'&quot;,&quot;section&quot;:&quot;Tema&quot;},&quot;tagline&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Prova justa da jornada.&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Marca&quot;}}">
+class Component extends DCLogic {
+  state = { tema: null };
+  componentDidMount() {
+    try {
+      const t = localStorage.getItem('seeg-ponto-bb-tema');
+      if (t === 'claro' || t === 'escuro') this.setState({ tema: t });
+    } catch (e) {}
+    document.title = 'SEEG PONTO — brand board';
+  }
+  lum(hex) {
+    const h = hex.replace('#', '');
+    const v = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255)
+      .map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+  ratio(a, b) {
+    const l1 = this.lum(a), l2 = this.lum(b);
+    const hi = Math.max(l1, l2), lo = Math.min(l1, l2);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+  par(uso, fg, bg, alvo) {
+    const r = this.ratio(fg, bg);
+    const rr = r.toFixed(2).replace('.', ',') + ':1';
+    let nivel;
+    if (alvo === 'ui') nivel = r >= 3 ? '✓ UI ≥ 3:1' : '✗ reprova';
+    else nivel = r >= 7 ? '✓ AAA' : r >= 4.5 ? '✓ AA' : r >= 3 ? '✓ AA texto grande' : '✗ reprova';
+    return { uso, fg, bg, ratio: rr, nivel };
+  }
+  renderVals() {
+    const tema = this.state.tema ?? this.props.temaInicial ?? 'claro';
+    return {
+      tema,
+      tagline: this.props.tagline ?? 'Prova justa da jornada.',
+      rotuloTema: tema === 'claro' ? 'Ver tema escuro' : 'Ver tema claro',
+      alternarTema: () => {
+        const nv = tema === 'claro' ? 'escuro' : 'claro';
+        try { localStorage.setItem('seeg-ponto-bb-tema', nv); } catch (e) {}
+        this.setState({ tema: nv });
+      },
+      paresClaro: [
+        this.par('Texto primário sobre fundo', '#171A29', '#F7F8FB'),
+        this.par('Texto primário sobre superfície', '#171A29', '#FFFFFF'),
+        this.par('Texto secundário sobre fundo', '#565B76', '#F7F8FB'),
+        this.par('Marca — links e ênfase', '#4C5FCA', '#F7F8FB'),
+        this.par('Botão primário — rótulo', '#FFFFFF', '#4C5FCA'),
+        this.par('Chip de marca', '#3D4DAF', '#F1F3FC'),
+        this.par('Sucesso — texto em aviso', '#14603A', '#EBF7F0'),
+        this.par('Atenção — texto em aviso', '#8A5B00', '#FDF6E7'),
+        this.par('Erro — texto em aviso', '#A32239', '#FCEEF0'),
+        this.par('Informação — texto em aviso', '#0A5A70', '#E9F6FA'),
+        this.par('Foco e bordas ativas', '#4C5FCA', '#F7F8FB', 'ui')
+      ],
+      paresEscuro: [
+        this.par('Texto primário sobre fundo', '#EDEFF7', '#0C0E1A'),
+        this.par('Texto primário sobre superfície', '#EDEFF7', '#14172A'),
+        this.par('Texto secundário sobre superfície', '#A6ABC4', '#14172A'),
+        this.par('Marca — links e ênfase', '#A7B2E9', '#0C0E1A'),
+        this.par('Botão primário — rótulo', '#FFFFFF', '#4C5FCA'),
+        this.par('Chip de marca', '#C9D0F2', '#191F45'),
+        this.par('Sucesso — texto em aviso', '#7CD3A4', '#10291C'),
+        this.par('Atenção — texto em aviso', '#F0C05E', '#2C2110'),
+        this.par('Erro — texto em aviso', '#EE9AA6', '#2E1216'),
+        this.par('Informação — texto em aviso', '#7CCFE3', '#0E2229'),
+        this.par('Foco e bordas ativas', '#7D8CDB', '#0C0E1A', 'ui')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

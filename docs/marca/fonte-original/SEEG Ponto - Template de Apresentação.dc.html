@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400..900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+html,body{margin:0;padding:0;background:#0C0E1A}
+a{color:#4C5FCA;text-decoration:none}
+a:hover{color:#3D4DAF;text-decoration:underline}
+</style>
+</helmet>
+<x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1920" height="1080" hint-size="100%,100%">
+
+<section data-label="Capa" data-speaker-notes="Abertura: apresentar SEEG Ponto e a tese central — prova justa, não vigilância." style="position:relative;background:linear-gradient(155deg,#171A29,#1B2044 55%,#20264C);color:#FFFFFF;font-family:'IBM Plex Sans',sans-serif;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:80px 100px">
+  <div style="position:absolute;inset:0;background:radial-gradient(1100px 1100px at 88% -18%,rgba(122,140,219,.24),transparent 60%)"></div>
+  <div style="position:relative;display:flex;justify-content:space-between;font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#A7B2E9">
+    <span>SEEG PONTO</span><span>TEMPLATE DE APRESENTAÇÃO</span>
+  </div>
+  <div style="position:relative;display:flex;flex-direction:column;gap:28px">
+    <svg viewBox="0 0 120 120" fill="none" style="width:100px;height:100px;color:#FFFFFF"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.5"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    <div style="font:700 96px/0.95 'Schibsted Grotesk',sans-serif;letter-spacing:-0.03em">Prova justa<br>da jornada.</div>
+    <div style="font:500 26px 'Schibsted Grotesk',sans-serif;color:#C9D0F2;max-width:820px">Apresentação comercial — registro de ponto com validade legal, pensado para o RH e para quem bate o registro todo dia.</div>
+  </div>
+  <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(255,255,255,.18);padding-top:26px;font:500 16px 'IBM Plex Mono',monospace;color:#767C99">
+    <span>Nome do apresentador · Cargo</span><span>Julho 2026</span>
+  </div>
+</section>
+
+<section data-label="Agenda" data-speaker-notes="Percorrer os tópicos rapidamente, sem se demorar." style="position:relative;background:#F7F8FB;color:#171A29;font-family:'IBM Plex Sans',sans-serif;overflow:hidden;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#4C5FCA">AGENDA</span>
+  <div style="font:700 56px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px">O que vamos ver hoje</div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:0;margin-top:20px;max-width:1100px">
+    <div style="display:flex;align-items:baseline;gap:32px;padding:26px 0;border-top:1px solid #E2E4EE"><span style="font:700 28px 'IBM Plex Mono',monospace;color:#C9D0F2;width:60px">01</span><span style="font:600 32px 'Schibsted Grotesk',sans-serif">O desafio: vigilância x prova justa</span></div>
+    <div style="display:flex;align-items:baseline;gap:32px;padding:26px 0;border-top:1px solid #E2E4EE"><span style="font:700 28px 'IBM Plex Mono',monospace;color:#C9D0F2;width:60px">02</span><span style="font:600 32px 'Schibsted Grotesk',sans-serif">Como funciona — 5 canais de registro</span></div>
+    <div style="display:flex;align-items:baseline;gap:32px;padding:26px 0;border-top:1px solid #E2E4EE"><span style="font:700 28px 'IBM Plex Mono',monospace;color:#C9D0F2;width:60px">03</span><span style="font:600 32px 'Schibsted Grotesk',sans-serif">Conformidade e segurança</span></div>
+    <div style="display:flex;align-items:baseline;gap:32px;padding:26px 0;border-top:1px solid #E2E4EE"><span style="font:700 28px 'IBM Plex Mono',monospace;color:#C9D0F2;width:60px">04</span><span style="font:600 32px 'Schibsted Grotesk',sans-serif">Resultados em número</span></div>
+    <div style="display:flex;align-items:baseline;gap:32px;padding:26px 0;border-top:1px solid #E2E4EE;border-bottom:1px solid #E2E4EE"><span style="font:700 28px 'IBM Plex Mono',monospace;color:#C9D0F2;width:60px">05</span><span style="font:600 32px 'Schibsted Grotesk',sans-serif">Como implementamos</span></div>
+  </div>
+</section>
+
+<section data-label="O desafio" data-speaker-notes="O coração do pitch: reposicionar o produto como prova justa, não vigilância." style="background:#FFFFFF;color:#171A29;font-family:'IBM Plex Sans',sans-serif;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#4C5FCA">O DESAFIO CENTRAL</span>
+  <div style="font:700 52px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px;max-width:1400px">Todo sistema de ponto nasce lido como vigilância. O nosso nasce diferente.</div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:40px">
+    <div style="border-radius:20px;border:1.5px solid #E2E4EE;padding:44px;display:flex;flex-direction:column;gap:20px">
+      <span style="font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#8A8FA8">LEITURA QUE EVITAMOS</span>
+      <div style="display:flex;flex-direction:column;gap:18px;font:500 24px 'Schibsted Grotesk',sans-serif;color:#8A8FA8">
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#A32239;font-weight:700">✕</span><span style="text-decoration:line-through;text-decoration-color:#C8CBDB">Câmera no rosto o dia inteiro</span></div>
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#A32239;font-weight:700">✕</span><span style="text-decoration:line-through;text-decoration-color:#C8CBDB">GPS no bolso, seguindo o trajeto</span></div>
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#A32239;font-weight:700">✕</span><span style="text-decoration:line-through;text-decoration-color:#C8CBDB">O relógio contando, o patrão vigiando</span></div>
+      </div>
+    </div>
+    <div style="border-radius:20px;background:#171A29;padding:44px;display:flex;flex-direction:column;gap:20px;color:#FFFFFF">
+      <span style="font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#A7B2E9">O QUE ENTREGAMOS</span>
+      <div style="display:flex;flex-direction:column;gap:18px;font:500 24px 'Schibsted Grotesk',sans-serif">
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#7CD3A4;font-weight:700">✓</span><span>Comprova a jornada cumprida para a empresa</span></div>
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#7CD3A4;font-weight:700">✓</span><span>Garante a hora extra devida ao trabalhador</span></div>
+        <div style="display:flex;align-items:center;gap:16px"><span style="color:#7CD3A4;font-weight:700">✓</span><span>Uma prova, os dois lados protegidos</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Como funciona" data-speaker-notes="Percorrer os 5 canais rapidamente, focando no que o cliente mais usa." style="background:#F7F8FB;color:#171A29;font-family:'IBM Plex Sans',sans-serif;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#4C5FCA">COMO FUNCIONA</span>
+  <div style="font:700 52px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px">Cinco canais, um mesmo registro</div>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:24px;margin-top:44px">
+    <div style="background:#FFFFFF;border:1px solid #E2E4EE;border-radius:18px;padding:32px 26px;display:flex;flex-direction:column;justify-content:center;gap:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#4C5FCA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><path d="M8 4H6.5A2.5 2.5 0 0 0 4 6.5V8"></path><path d="M16 4h1.5A2.5 2.5 0 0 1 20 6.5V8"></path><path d="M20 16v1.5a2.5 2.5 0 0 1-2.5 2.5H16"></path><path d="M4 16v1.5A2.5 2.5 0 0 0 6.5 20H8"></path><circle cx="9.4" cy="10.2" r="1" fill="#4C5FCA" stroke="none"></circle><circle cx="14.6" cy="10.2" r="1" fill="#4C5FCA" stroke="none"></circle><path d="M9.3 14.2c.7.8 1.6 1.2 2.7 1.2s2-.4 2.7-1.2"></path></svg><div style="font:600 22px 'Schibsted Grotesk',sans-serif">Terminal facial</div><div style="font:400 16px/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Parede, facial + cartão + QR</div></div>
+    <div style="background:#FFFFFF;border:1px solid #E2E4EE;border-radius:18px;padding:32px 26px;display:flex;flex-direction:column;justify-content:center;gap:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#4C5FCA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><rect x="4" y="4" width="16" height="16" rx="4.5" stroke-dasharray="3.1 3.1"></rect><circle cx="12" cy="12" r="2.2" fill="#4C5FCA" stroke="none"></circle></svg><div style="font:600 22px 'Schibsted Grotesk',sans-serif">App de celular</div><div style="font:400 16px/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Prova de vida + GPS, funciona offline</div></div>
+    <div style="background:#FFFFFF;border:1px solid #E2E4EE;border-radius:18px;padding:32px 26px;display:flex;flex-direction:column;justify-content:center;gap:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#4C5FCA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><circle cx="12" cy="12" r="3.3"></circle><path d="M19.8 10.4A8 8 0 0 0 6.9 6.2"></path><path d="M6.6 3.4l.2 3 3-.3"></path><path d="M4.2 13.6a8 8 0 0 0 12.9 4.2"></path><path d="M17.4 20.6l-.2-3-3 .3"></path></svg><div style="font:600 22px 'Schibsted Grotesk',sans-serif">Navegador</div><div style="font:400 16px/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Webcam, só de dentro da rede</div></div>
+    <div style="background:#FFFFFF;border:1px solid #E2E4EE;border-radius:18px;padding:32px 26px;display:flex;flex-direction:column;justify-content:center;gap:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#4C5FCA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><rect x="4" y="4" width="7" height="7" rx="1.8"></rect><rect x="13" y="4" width="7" height="7" rx="1.8" fill="#4C5FCA" stroke="none"></rect><rect x="4" y="13" width="7" height="7" rx="1.8" fill="#4C5FCA" stroke="none"></rect><rect x="13" y="13" width="7" height="7" rx="1.8"></rect></svg><div style="font:600 22px 'Schibsted Grotesk',sans-serif">Totem</div><div style="font:400 16px/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Chão de fábrica, matrícula + facial</div></div>
+    <div style="background:#FFFFFF;border:1px solid #E2E4EE;border-radius:18px;padding:32px 26px;display:flex;flex-direction:column;justify-content:center;gap:20px"><svg viewBox="0 0 24 24" fill="none" stroke="#4C5FCA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:40px;height:40px"><path d="M4 19.5h16"></path><path d="M5.5 15.5c1.8-4.6 3.6-6.9 4.7-6.1 1.2.8-1.9 4.6-.7 5.4 1 .7 2.6-1 3.7-2.1"></path><path d="M14.8 14.6l1.6 1.6 3-3.3"></path></svg><div style="font:600 22px 'Schibsted Grotesk',sans-serif">API</div><div style="font:400 16px/1.5 'IBM Plex Sans',sans-serif;color:#565B76">Catracas e sistemas de terceiros</div></div>
+  </div>
+</section>
+
+<section data-label="Conformidade" data-speaker-notes="Reforçar tranquilidade jurídica: validade legal, antifraude, segurança." style="background:#171A29;color:#FFFFFF;font-family:'IBM Plex Sans',sans-serif;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#A7B2E9">CONFORMIDADE E SEGURANÇA</span>
+  <div style="font:700 52px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px">Validade legal do primeiro ao último dígito</div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px 60px;margin-top:40px;align-content:center">
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">REP-P — Portaria MTP 671/2021</span></div>
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">Assinatura com certificado ICP-Brasil</span></div>
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">Antifraude com prova de vida</span></div>
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">Registro válido mesmo sem internet</span></div>
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16);border-bottom:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">Banco de horas com extrato tipo conta-corrente</span></div>
+    <div style="display:flex;align-items:center;gap:20px;padding:20px 0;border-top:1px solid rgba(255,255,255,.16);border-bottom:1px solid rgba(255,255,255,.16)"><span style="color:#7CD3A4;font:700 22px 'IBM Plex Mono',monospace">✓</span><span style="font:500 24px 'Schibsted Grotesk',sans-serif">24 relatórios gerenciais prontos</span></div>
+  </div>
+</section>
+
+<section data-label="Resultados" data-speaker-notes="Slide de números — trocar pelos números reais do cliente/piloto." style="background:#F7F8FB;color:#171A29;font-family:'IBM Plex Sans',sans-serif;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#4C5FCA">RESULTADOS EM NÚMERO</span>
+  <div style="font:700 52px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px">O registro leva segundos. A prova dura anos.</div>
+  <div style="flex:1;display:flex;align-items:center;gap:70px;margin-top:20px">
+    <div style="flex:none"><div style="font:700 220px/1 'IBM Plex Mono',monospace;letter-spacing:-0.03em;color:#4C5FCA">10<span style="font-size:0.4em;color:#8A8FA8">s</span></div><div style="font:500 22px 'Schibsted Grotesk',sans-serif;color:#565B76;margin-top:10px">tempo médio por registro, do abrir ao confirmar</div></div>
+    <div style="flex:1;display:grid;grid-template-columns:1fr;gap:26px;border-left:1.5px solid #E2E4EE;padding-left:60px">
+      <div><div style="font:700 48px 'IBM Plex Mono',monospace;color:#171A29">5</div><div style="font:400 18px 'IBM Plex Sans',sans-serif;color:#565B76">canais de registro, um único banco de horas</div></div>
+      <div><div style="font:700 48px 'IBM Plex Mono',monospace;color:#171A29">24</div><div style="font:400 18px 'IBM Plex Sans',sans-serif;color:#565B76">relatórios gerenciais prontos para auditoria</div></div>
+      <div><div style="font:700 48px 'IBM Plex Mono',monospace;color:#171A29">100%</div><div style="font:400 18px 'IBM Plex Sans',sans-serif;color:#565B76">em software — sem relógio dedicado</div></div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Implementação" data-speaker-notes="Explicar o rollout em etapas, ajustar prazos conforme o cliente." style="background:#FFFFFF;color:#171A29;font-family:'IBM Plex Sans',sans-serif;padding:90px 100px;display:flex;flex-direction:column">
+  <span style="font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#4C5FCA">COMO IMPLEMENTAMOS</span>
+  <div style="font:700 52px 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;margin-top:14px">Do piloto ao rollout completo</div>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:44px">
+    <div style="border-radius:20px;border:1.5px solid #E2E4EE;padding:40px;display:flex;flex-direction:column;gap:16px"><span style="font:700 15px 'IBM Plex Mono',monospace;color:#4C5FCA">01</span><div style="font:600 28px 'Schibsted Grotesk',sans-serif">Descoberta</div><div style="font:400 18px/1.6 'IBM Plex Sans',sans-serif;color:#565B76">Mapeamento de canais, escalas e jornadas atuais.</div></div>
+    <div style="border-radius:20px;background:#4C5FCA;padding:40px;display:flex;flex-direction:column;gap:16px;color:#FFFFFF"><span style="font:700 15px 'IBM Plex Mono',monospace;color:#E3E7F9">02</span><div style="font:600 28px 'Schibsted Grotesk',sans-serif">Piloto</div><div style="font:400 18px/1.6 'IBM Plex Sans',sans-serif;color:#E3E7F9">Uma unidade, todos os canais, acompanhamento próximo.</div></div>
+    <div style="border-radius:20px;border:1.5px solid #E2E4EE;padding:40px;display:flex;flex-direction:column;gap:16px"><span style="font:700 15px 'IBM Plex Mono',monospace;color:#4C5FCA">03</span><div style="font:600 28px 'Schibsted Grotesk',sans-serif">Expansão</div><div style="font:400 18px/1.6 'IBM Plex Sans',sans-serif;color:#565B76">Rollout para as demais unidades, com relatórios ativos.</div></div>
+  </div>
+</section>
+
+<section data-label="Fechamento" data-speaker-notes="Fechar reforçando a tese central e passar o contato." style="position:relative;background:linear-gradient(155deg,#171A29,#1B2044 55%,#20264C);color:#FFFFFF;font-family:'IBM Plex Sans',sans-serif;overflow:hidden;padding:90px 100px;display:flex;flex-direction:column;justify-content:space-between">
+  <div style="position:absolute;inset:0;background:radial-gradient(1000px 1000px at 10% 120%,rgba(122,140,219,.2),transparent 60%)"></div>
+  <div></div>
+  <div style="position:relative;display:flex;flex-direction:column;gap:24px">
+    <svg viewBox="0 0 120 120" fill="none" style="width:70px;height:70px;color:#A7B2E9"><path d="M24 97.5 H96" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" opacity="0.55"></path><path d="M32.3 69.8 51 90.4 90.8 28.5" stroke="currentColor" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    <div style="font:700 72px/1.05 'Schibsted Grotesk',sans-serif;letter-spacing:-0.02em;max-width:1200px">Prova justa da jornada — para a empresa e para quem trabalha.</div>
+  </div>
+  <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(255,255,255,.18);padding-top:26px;font:500 18px 'IBM Plex Mono',monospace;color:#A6ABC4">
+    <span>marca@seegponto.com.br · seegponto.com.br</span><span>SEEG PONTO</span>
+  </div>
+</section>
+
+</x-import>
+</x-dc>
+</body>
+</html>

@@ -3,9 +3,9 @@
   "$description": "Sistema de design tokens do Ponto Eletronico (REP-P multiempresa), no formato W3C Design Tokens (DTCG). FONTE DA VERDADE congelada na Fase 0: nenhuma fase posterior altera este arquivo sem RFC aprovada (protocolo em docs/rfc/README.md). ORGANIZACAO: 'primitivo' guarda os valores crus (rampas de cor 50..950, escala tipografica, grade de 8 pt); 'tema.claro' e 'tema.escuro' guardam os tokens SEMANTICOS, com caminhos identicos nos dois temas, cada um apontando por alias para um primitivo. O produto NUNCA consome primitivo diretamente na interface: consome sempre o token semantico do tema ativo. UNIDADES: tokens do tipo dimension usam o objeto {value, unit} do DTCG; converta para CSS concatenando (16 + 'px'). Cor em hexadecimal maiusculo de 6 digitos, ou 8 digitos quando ha alfa. CONTRASTE: todos os pares texto-sobre-fundo e elemento-de-interface deste arquivo foram MEDIDOS (nao estimados) pela formula da WCAG 2.2 a partir do hexadecimal final de 8 bits. A tabela completa com os ratios esta em $extensions['br.com.seeg.ponto'].contraste.pares.",
   "$extensions": {
     "br.com.seeg.ponto": {
-      "versao": "1.0.0",
-      "atualizadoEm": "2026-07-25",
-      "fase": "F0 - Fundacao e Contratos",
+      "versao": "1.1.0",
+      "atualizadoEm": "2026-07-26",
+      "fase": "F0 - Fundacao e Contratos (tipografia atualizada pela identidade visual oficial, RFC-003)",
       "agente": "A1c",
       "metodo": {
         "espacoDeCor": "As rampas foram geradas em OKLCH com luminosidade alvo fixa por passo (identica em todas as familias) e croma em curva de sino com pico no passo 500, depois convertidas para sRGB com reducao de croma ate caber no gamut. Consequencia pratica: o passo 600 de qualquer familia tem aproximadamente a mesma luminosidade percebida, entao trocar a cor de marca NAO quebra o contraste dos componentes.",
@@ -1827,8 +1827,7 @@
       "sans": {
         "$type": "fontFamily",
         "$value": [
-          "Inter",
-          "Inter var",
+          "IBM Plex Sans",
           "system-ui",
           "Segoe UI",
           "Roboto",
@@ -1836,19 +1835,24 @@
           "Arial",
           "sans-serif"
         ],
-        "$description": "Interface inteira. Inter tem numerais tabulares e alternativas de 1/l/I, o que importa num sistema cheio de matricula, CPF e horario."
+        "$description": "Interface inteira: corpo, rotulo, tabela densa de RH. Definida pela identidade visual oficial (RFC-003). Tem numerais tabulares (feature 'tnum') e e a voz de 'texto e UI' do Manual de Marca — nao confundir com a voz de display."
       },
       "mono": {
         "$type": "fontFamily",
         "$value": [
-          "JetBrains Mono",
+          "IBM Plex Mono",
           "SFMono-Regular",
           "Menlo",
           "Consolas",
           "Liberation Mono",
           "monospace"
         ],
-        "$description": "NSR, hash SHA-256, CRC-16, trecho de AFD, chave de idempotencia e qualquer identificador que o usuario precise conferir caractere a caractere."
+        "$description": "NSR, hash SHA-256, CRC-16, trecho de AFD, chave de idempotencia e qualquer identificador que o usuario precise conferir caractere a caractere. Definida pela identidade visual oficial (RFC-003): tabular por construcao, mesma familia usada no documento legal (espelho de ponto)."
+      },
+      "display": {
+        "$type": "fontFamily",
+        "$value": ["Schibsted Grotesk", "system-ui", "sans-serif"],
+        "$description": "Voz de destaque da identidade visual oficial (RFC-003): logotipo, titulo de pagina e numero-destaque. Uso deliberadamente escasso — reservada para o unico titulo 'um por tela' (tipografia.estilo.tituloPagina) e para numeros de indicador (tipografia.estilo.numeroDestaque). NAO usar em titulo de secao ou de cartao: produto de uso diario de 8h precisa de UI densa e estavel, nao de fonte trocando a cada nivel de titulo."
       }
     },
     "tamanho": {
@@ -2242,7 +2246,7 @@
       "tituloPagina": {
         "$type": "typography",
         "$value": {
-          "fontFamily": "{tipografia.familia.sans}",
+          "fontFamily": "{tipografia.familia.display}",
           "fontSize": "{tipografia.tamanho.3xl}",
           "fontWeight": "{tipografia.peso.forte}",
           "lineHeight": "{tipografia.alturaLinha.3xl}",
@@ -2253,7 +2257,7 @@
       "numeroDestaque": {
         "$type": "typography",
         "$value": {
-          "fontFamily": "{tipografia.familia.sans}",
+          "fontFamily": "{tipografia.familia.display}",
           "fontSize": "{tipografia.tamanho.4xl}",
           "fontWeight": "{tipografia.peso.semiforte}",
           "lineHeight": "{tipografia.alturaLinha.4xl}",

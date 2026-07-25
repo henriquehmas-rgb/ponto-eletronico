@@ -37,7 +37,7 @@ cd apps/mobile
 flutter create . \
   --project-name ponto \
   --org br.com.seeg \
-  --description "Ponto Eletronico - registro de ponto, espelho e banco de horas" \
+  --description "SEEG Ponto - registro de ponto, espelho e banco de horas" \
   --platforms=android,ios \
   --template=app
 ```

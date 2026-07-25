@@ -5,11 +5,35 @@
  * tipografia neste arquivo. Tudo que aparece aqui e var(--...) vindo de
  * tokens.gerado.css, que por sua vez sai de packages/contracts/design-tokens.json.
  * Se voce precisou de um valor que nao existe la, a resposta e RFC, nao CSS.
+ *
+ * UNICA EXCECAO (documentada, nao contorno silencioso): a ponte de fontes
+ * logo abaixo. tokens.gerado.css so conhece o NOME literal da familia (ex.:
+ * "IBM Plex Sans") porque design-tokens.json e um contrato agnostico de
+ * framework. Quem de fato auto-hospeda o arquivo da fonte e o `next/font`, em
+ * layout.tsx — e ele so revela o nome real (com hash) em tempo de build do
+ * Next, nunca na geracao do contrato. Sem esta ponte, --tipografia-familia-*
+ * resolveria para o nome puro do Google Fonts, que nao existe instalado na
+ * maquina do usuario, e o navegador cairia silenciosamente no ultimo
+ * fallback generico da pilha (system-ui/sans-serif/monospace) sem erro
+ * nenhum — a fonte auto-hospedada baixada ficaria carregada e sem uso.
+ *
+ * ATENCAO A CAMADA: esta ponte e, de proposito, um `:root` SEM `@layer`. As
+ * declaracoes de tokens.gerado.css tambem sao um `:root` sem camada — e regra
+ * sem camada sempre vence regra em camada, nao importa a ordem no arquivo. Se
+ * isto entrasse em `@layer base` (como o restante deste arquivo), o nome
+ * literal do contrato venceria silenciosamente e a fonte auto-hospedada nunca
+ * seria usada, sem erro nenhum no build.
  * =========================================================================== */
 
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./tokens.gerado.css";
+
+:root {
+  --tipografia-familia-sans: var(--font-ibm-plex-sans);
+  --tipografia-familia-mono: var(--font-ibm-plex-mono);
+  --tipografia-familia-display: var(--font-schibsted-grotesk);
+}
 
 /* O Tailwind v4 descobre as classes varrendo o codigo-fonte. Explicito para
    nao depender da heuristica de raiz de projeto. */

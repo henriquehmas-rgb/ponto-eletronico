@@ -1,6 +1,9 @@
-# Ponto Eletrônico — Projeto Técnico
+# SEEG Ponto — Projeto Técnico
 
-> **Codinome de trabalho:** `Kairo Ponto` (marca definitiva a definir — o código usa `ponto` como namespace neutro)
+> **Nome oficial:** `SEEG Ponto` — definido pela identidade visual em 26/07/2026
+> (ver [RFC-003](docs/rfc/RFC-003-identidade-visual-oficial.md) e
+> [docs/marca/identidade-visual.md](docs/marca/identidade-visual.md)). Substitui
+> o codinome de trabalho `Kairo Ponto` usado até a Fase 0.
 > **Empresa:** SEEG Serviços de Tecnologia da Informação (CNPJ 60.258.502/0001-49)
 > **Documento:** especificação de produto e arquitetura · v1.0 · 25/07/2026
 > **Execução:** ver [FASES-E-AGENTES.md](FASES-E-AGENTES.md)

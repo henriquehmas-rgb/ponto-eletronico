@@ -37,7 +37,7 @@ from app.routers import registrar_routers
 logger = obter_logger("main")
 
 DESCRICAO = """
-API REST do **Ponto Eletronico**, sistema REP-P multiempresa em conformidade com a
+API REST do **SEEG Ponto**, sistema REP-P multiempresa em conformidade com a
 Portaria MTP 671/2021.
 
 O contrato congelado vive em `packages/contracts/openapi.yaml` e e a fonte da verdade.
@@ -96,7 +96,7 @@ def criar_aplicacao(config: Configuracao | None = None) -> FastAPI:
     configurar_log(config)
 
     app = FastAPI(
-        title="Ponto Eletronico - API v1",
+        title="SEEG Ponto - API v1",
         version=config.versao,
         summary="API REST do sistema de ponto eletronico REP-P multiempresa da SEEG.",
         description=DESCRICAO,
