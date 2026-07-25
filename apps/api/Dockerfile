@@ -96,7 +96,17 @@ COPY apps/api/app /app/app
 COPY apps/api/migrations /app/migrations
 COPY apps/api/alembic.ini apps/api/pyproject.toml apps/api/README.md /app/
 
-RUN pip install --no-cache-dir --no-deps . \
+# O `pip install .` da camada "dependencias" rodou contra um pacote `app`
+# VAZIO (so para cachear a resolucao de dependencias) e deixou para tras
+# `*.egg-info` com o SOURCES.txt daquele momento. Sem remove-lo, este segundo
+# install REUTILIZA aquela lista de arquivos em vez de reescanear o `app`
+# real que acabou de ser copiado, e instala silenciosamente os modulos vazios
+# no site-packages — sem erro, sem aviso. Some/facial-svc/api so nao travam
+# por acidente (uvicorn roda com WorkingDir /app, e o cwd resolve antes do
+# site-packages); o worker trava porque `arq` nao tem essa rede de seguranca.
+# Sem `rm -rf *.egg-info`, o pacote instalado fica quebrado nos quatro.
+RUN rm -rf *.egg-info build \
+    && pip install --no-cache-dir --no-deps . \
     && groupadd --system --gid 1001 ponto \
     && useradd --system --uid 1001 --gid ponto --home /app --shell /usr/sbin/nologin ponto \
     && chown -R ponto:ponto /app

@@ -58,8 +58,14 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 
+# Descoberta automatica, nao lista estatica: uma lista manual fica
+# desatualizada no instante em que alguem adiciona um subpacote e esquece de
+# atualizar aqui — achado num deploy real em outro servico da casa (api),
+# onde subpacotes inteiros sumiram do build sem erro nenhum.
+[tool.setuptools.packages.find]
+include = ["facial*"]
+
 [tool.setuptools]
-packages = ["facial", "facial.rotas"]
 include-package-data = true
 zip-safe = false
 

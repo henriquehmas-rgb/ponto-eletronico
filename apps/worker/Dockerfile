@@ -111,7 +111,15 @@ ENV AMBIENTE=${AMBIENTE} \
 COPY apps/worker/worker /app/worker
 COPY apps/worker/pyproject.toml apps/worker/README.md /app/
 
-RUN pip install --no-cache-dir --no-deps . \
+# O `pip install .` da camada "dependencias" rodou contra um pacote `worker`
+# VAZIO (so para cachear a resolucao de dependencias) e deixou para tras
+# `*.egg-info` com o SOURCES.txt daquele momento. Sem remove-lo, este segundo
+# install REUTILIZA aquela lista de arquivos em vez de reescanear o `worker`
+# real que acabou de ser copiado, e instala silenciosamente os modulos vazios
+# no site-packages — foi assim que `NOMES_DAS_TAREFAS` sumiu e o worker
+# entrou em crash loop (ImportError na subida).
+RUN rm -rf *.egg-info build \
+    && pip install --no-cache-dir --no-deps . \
     && groupadd --system --gid 1001 ponto \
     && useradd --system --uid 1001 --gid ponto --home /app --shell /usr/sbin/nologin ponto \
     && chown -R ponto:ponto /app

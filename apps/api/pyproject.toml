@@ -77,8 +77,17 @@ Contrato = "https://github.com/henriquehmas-rgb/ponto-eletronico/tree/main/packa
 # ------------------------------------------------------------------
 # Empacotamento
 # ------------------------------------------------------------------
+# Descoberta automatica, nao lista estatica: `packages = ["app"]` sozinho
+# so registra o pacote raiz, sem `app.core`, `app.db`, `app.routers`,
+# `app.schemas` nem `app.scripts` — o build fica com o subpacote inteiro
+# faltando, sem erro nenhum (achado num deploy real: a API subia e passava
+# no healthcheck rodando so com main.py, sem nenhum router). `find` recalcula
+# a lista a cada build a partir do que existe em disco, entao um subpacote
+# novo nunca mais fica de fora silenciosamente.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [tool.setuptools]
-packages = ["app"]
 include-package-data = true
 zip-safe = false
 

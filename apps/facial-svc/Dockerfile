@@ -123,7 +123,14 @@ ENV AMBIENTE=${AMBIENTE} \
 COPY apps/facial-svc/facial /app/facial
 COPY apps/facial-svc/pyproject.toml apps/facial-svc/README.md /app/
 
-RUN pip install --no-cache-dir --no-deps . \
+# O `pip install .` da camada "dependencias" rodou contra um pacote `facial`
+# VAZIO (so para cachear a resolucao de dependencias) e deixou para tras
+# `*.egg-info` com o SOURCES.txt daquele momento. Sem remove-lo, este segundo
+# install REUTILIZA aquela lista de arquivos em vez de reescanear o `facial`
+# real que acabou de ser copiado, e instala silenciosamente os modulos vazios
+# no site-packages, sem erro nenhum.
+RUN rm -rf *.egg-info build \
+    && pip install --no-cache-dir --no-deps . \
     && mkdir -p /models \
     && groupadd --system --gid 1001 ponto \
     && useradd --system --uid 1001 --gid ponto --home /app --shell /usr/sbin/nologin ponto \
