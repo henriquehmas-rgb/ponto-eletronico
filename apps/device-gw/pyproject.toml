@@ -1,0 +1,130 @@
+####################################################################
+# ponto-device-gw - gateway dos terminais Control iD (iDFace/iDBlock)
+#
+# Servico HTTP separado da API principal de proposito: rajada de
+# terminal nao pode derrubar a API que o RH esta usando.
+#
+# O pacote se chama `gateway`, e nao `app`, porque `apps/api` ja e dono
+# do nome de modulo `app` e o CI roda `mypy apps packages` a partir da
+# raiz do monorepo — dois pacotes de mesmo nome fazem o mypy abortar a
+# coleta inteira. O `command` do override de desenvolvimento continua
+# sendo `uvicorn app.main:app`: o Dockerfile instala um alias na imagem.
+# Ver `gateway/__init__.py`.
+#
+# Fase 0 entrega ANDAIME: /health e /ready funcionam, todo o resto do
+# protocolo responde 501 com PONTO-INT-005. A implementacao e da F6.
+####################################################################
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ponto-device-gw"
+version = "0.1.0"
+description = "Gateway Control iD do Ponto Eletronico: modo Push, servico Monitor e catch-up de access_logs"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "SEEG Servicos de Tecnologia da Informacao" }]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.12",
+    "Natural Language :: Portuguese (Brazilian)",
+]
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    # Cliente HTTP das chamadas *.fcgi ao terminal e da entrega a API interna.
+    "httpx>=0.27",
+    # Fila de comandos do modo Push e marca d'agua do catch-up.
+    "redis>=5.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0.30,<3.0",
+    "asyncpg>=0.29",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.7.4",
+    "mypy==1.13.0",
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    # `events.yaml` e lido pelo teste que confere o recorte do catalogo de erros.
+    "pyyaml>=6.0",
+    "types-PyYAML>=6.0",
+]
+
+[tool.setuptools]
+packages = ["gateway", "gateway.rotas"]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.package-data]
+gateway = ["py.typed"]
+
+# ==================================================================
+# ruff
+# ==================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "TID", "RUF", "ASYNC", "S"]
+ignore = [
+    # FastAPI usa chamada de funcao em valor padrao (Depends, Query, Path, Body).
+    "B008",
+    # Docstrings do dominio sao escritas em portugues, com acento.
+    "RUF002",
+    "RUF003",
+    # N818 exige sufixo "Error" no nome da excecao. O dominio e escrito em
+    # portugues do Brasil (regra da casa): `ErroDeAplicacao`.
+    "N818",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gateway"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ==================================================================
+# mypy
+# ==================================================================
+[tool.mypy]
+python_version = "3.12"
+files = ["gateway"]
+strict = true
+warn_unused_configs = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*", "redis.*"]
+ignore_missing_imports = true
+
+# ==================================================================
+# pytest
+# ==================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["gateway"]
+omit = ["*/tests/*"]

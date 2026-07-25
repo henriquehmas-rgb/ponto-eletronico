@@ -1,0 +1,54 @@
+# =============================================================================
+# apps/worker/.dockerignore
+# =============================================================================
+# ATENCAO ao escopo deste arquivo. O build desta imagem usa a RAIZ do monorepo
+# como contexto (`context: ..` em infra/docker-compose.yml, `context: .` no
+# job `docker` do CI). Nessa configuracao o Docker le, nesta ordem:
+#
+#   1. apps/worker/Dockerfile.dockerignore   (BuildKit, se existir)
+#   2. <contexto>/.dockerignore              (ou seja, a raiz do monorepo)
+#
+# Este arquivo, portanto, so tem efeito em `docker build` disparado de DENTRO
+# de apps/worker (`docker build -f Dockerfile ..` com contexto local). Um
+# `.dockerignore` na raiz do monorepo ainda nao existe e esta anotado como
+# pendencia de infra no relatorio da Fase 0 — nenhum COPY deste Dockerfile
+# depende dele, porque todos citam caminho explicito.
+# =============================================================================
+
+# --- Controle de versao ------------------------------------------------------
+.git/
+.gitignore
+.gitattributes
+
+# --- Ambientes virtuais e caches Python --------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- Teste e ferramental que nao vao para a imagem de producao ---------------
+tests/
+
+# --- Segredos: nunca entram no contexto de build -----------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+keys/
+
+# --- Ruido de editor e sistema operacional -----------------------------------
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store

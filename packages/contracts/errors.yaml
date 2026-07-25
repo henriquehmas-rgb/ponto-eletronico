@@ -1,0 +1,1427 @@
+# =============================================================================
+# Ponto Eletronico (REP-P multiempresa) - CATALOGO DE ERROS
+# Arquivo: packages/contracts/errors.yaml
+# Fase 0 - Fundacao e Contratos - Agente A1b
+#
+# Este arquivo e a FONTE DA VERDADE das falhas da API. Nenhum servico inventa
+# string de erro: o backend responde com o `codigo` daqui, o web e o mobile
+# traduzem o `codigo` para a mensagem do usuario. Falta um erro? Abra RFC.
+#
+# Formato da resposta: RFC 9457 (application/problem+json). O schema esta em
+# openapi.yaml -> components.schemas.Problema. O campo `codigo` desta tabela e
+# o unico identificador estavel: `title` e `detail` sao texto e podem mudar.
+#
+# Convencoes:
+#   1. Codigo estavel `PONTO-<CATEGORIA>-<NNN>`. NUNCA reutilizado, NUNCA
+#      renumerado. Erro descontinuado vira `situacao: descontinuado`.
+#   2. `http_status` e o unico status que a operacao devolve para este codigo.
+#   3. `retentavel` responde: repetir a MESMA requisicao pode dar certo?
+#      true exige respeitar `Retry-After` quando presente.
+#   4. `expoe_regra` = false significa que a mensagem ao usuario final NAO deve
+#      revelar o parametro interno (limiar de score, faixa CIDR, geocerca).
+#      A causa completa vai para a auditoria, nao para a tela.
+#   5. `acao_sugerida` e escrita para quem consome a API, nao para quem opera.
+# =============================================================================
+
+versao: "1.0.0"
+atualizado_em: "2026-07-25"
+media_type: application/problem+json
+prefixo_type: "https://docs.ponto.seeg.com.br/erros/"
+
+# -----------------------------------------------------------------------------
+# Categorias (o segmento do meio do codigo)
+# -----------------------------------------------------------------------------
+categorias:
+  - id: AUTH
+    nome: Autenticacao
+    descricao: Identidade nao comprovada, token invalido, sessao encerrada, segundo fator.
+  - id: PERM
+    nome: Autorizacao
+    descricao: Identidade valida, mas sem permissao, escopo ou alcance hierarquico.
+  - id: VAL
+    nome: Validacao
+    descricao: Requisicao malformada ou semanticamente invalida.
+  - id: TEN
+    nome: Tenant
+    descricao: Resolucao, estado e isolamento do tenant (multi-tenancy e RLS).
+  - id: IDEM
+    nome: Idempotencia
+    descricao: Uso do cabecalho Idempotency-Key nas escritas.
+  - id: CONF
+    nome: Conflito
+    descricao: Estado do recurso incompativel com a operacao pedida.
+  - id: REC
+    nome: Recurso
+    descricao: Recurso inexistente, expirado ou fora do escopo visivel.
+  - id: RATE
+    nome: Limite de taxa
+    descricao: Cotas de requisicao por cliente, por rota e por colaborador.
+  - id: MARC
+    nome: Integridade de marcacao
+    descricao: Nucleo legal. Imutabilidade, NSR, idempotencia de canal e fila offline.
+  - id: SCORE
+    nome: Score de confianca
+    descricao: >-
+      Antifraude do registro: score composto, prova de vida e similaridade facial.
+  - id: REDE
+    nome: Rede de origem
+    descricao: Allowlist de CIDR e bloqueio de VPN, proxy e ASN de datacenter.
+  - id: GEO
+    nome: Geocerca
+    descricao: Pertencimento geografico e qualidade do sinal de localizacao.
+  - id: DISP
+    nome: Dispositivo
+    descricao: Vinculo de aparelho, attestation de plataforma e integridade do ambiente.
+  - id: PER
+    nome: Periodo e fechamento
+    descricao: Trava de periodo fechado, reabertura e conferencia.
+  - id: APUR
+    nome: Apuracao
+    descricao: Motor de calculo, recalculo e resolucao de jornada.
+  - id: BH
+    nome: Banco de horas
+    descricao: Regime, tetos, vencimento e quitacao do saldo.
+  - id: FISC
+    nome: Arquivos fiscais
+    descricao: Geracao de AFD e AEJ, REP-P, assinatura CAdES e espelho oficial.
+  - id: TERM
+    nome: Terminal coletor
+    descricao: Comunicacao com o coletor fisico (Control iD e equivalentes).
+  - id: LGPD
+    nome: LGPD
+    descricao: Consentimento, dado sensivel, retencao e direitos do titular.
+  - id: WEBH
+    nome: Webhooks
+    descricao: Assinatura de eventos, entrega e reenvio.
+  - id: IMP
+    nome: Importacao
+    descricao: Importadores de planilha, de AFD de terceiro e de cadastros.
+  - id: INT
+    nome: Interno
+    descricao: Falha do proprio sistema ou de dependencia de infraestrutura.
+
+# -----------------------------------------------------------------------------
+# Erros
+# -----------------------------------------------------------------------------
+erros:
+
+  # ===========================================================================
+  # AUTH - Autenticacao
+  # ===========================================================================
+  - codigo: PONTO-AUTH-001
+    categoria: AUTH
+    http_status: 401
+    titulo: Credenciais invalidas
+    descricao: >-
+      O par usuario e senha nao confere, ou o usuario informado nao existe neste tenant.
+      A resposta e deliberadamente identica nos dois casos para nao permitir enumeracao de contas.
+    causa_provavel: Senha digitada errada, usuario de outro tenant ou conta ainda nao criada.
+    acao_sugerida: >-
+      Peca nova tentativa ao usuario. Apos falhas sucessivas a credencial entra em bloqueio
+      progressivo e passa a responder PONTO-AUTH-009.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-AUTH-002
+    categoria: AUTH
+    http_status: 401
+    titulo: Credencial de acesso ausente
+    descricao: A requisicao nao trouxe Authorization, X-API-Key nem token OAuth valido.
+    causa_provavel: Cliente esqueceu o cabecalho ou perdeu o token guardado.
+    acao_sugerida: Autentique em POST /v1/auth/login ou POST /v1/auth/token e reenvie com Authorization Bearer.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-003
+    categoria: AUTH
+    http_status: 401
+    titulo: Token expirado
+    descricao: O access token apresentado esta fora do prazo de validade.
+    causa_provavel: Token de vida curta usado depois do vencimento sem renovacao.
+    acao_sugerida: Renove com POST /v1/auth/refresh e repita a chamada. Nao trate como erro do usuario.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-004
+    categoria: AUTH
+    http_status: 401
+    titulo: Token invalido
+    descricao: >-
+      Assinatura, emissor, audiencia ou formato do token nao conferem. Inclui token emitido
+      por outro ambiente (homologacao usado em producao).
+    causa_provavel: Token adulterado, chave de assinatura rotacionada ou ambiente trocado.
+    acao_sugerida: Descarte o token e autentique de novo. Confira se a URL do ambiente bate com a do token.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-AUTH-005
+    categoria: AUTH
+    http_status: 401
+    titulo: Refresh token ja utilizado
+    descricao: >-
+      Reapresentacao de um refresh token ja rotacionado. Caracteriza reuso e a familia inteira
+      de tokens daquele login foi revogada por seguranca.
+    causa_provavel: Token vazado e usado por terceiro, ou duas instancias do app renovando em paralelo.
+    acao_sugerida: Force novo login completo. Nao tente renovar de novo com o mesmo token.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-006
+    categoria: AUTH
+    http_status: 401
+    titulo: Sessao encerrada ou revogada
+    descricao: A sessao associada ao token foi encerrada por logout, expiracao, inatividade ou revogacao administrativa.
+    causa_provavel: Logout em outro dispositivo, troca de senha ou revogacao pelo administrador.
+    acao_sugerida: Limpe o estado local e leve o usuario para a tela de login.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-007
+    categoria: AUTH
+    http_status: 401
+    titulo: Segundo fator obrigatorio
+    descricao: >-
+      A politica do tenant ou do usuario exige MFA e o desafio ainda nao foi validado nesta sessao.
+      A resposta traz o identificador do desafio no campo detail.
+    causa_provavel: Login concluiu a etapa de senha e parou antes do segundo fator.
+    acao_sugerida: Colete o codigo do autenticador e chame POST /v1/auth/mfa/verificar com o desafio recebido.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-008
+    categoria: AUTH
+    http_status: 401
+    titulo: Codigo de segundo fator invalido
+    descricao: O codigo TOTP, WebAuthn ou de backup nao confere ou ja expirou.
+    causa_provavel: Codigo digitado errado, relogio do autenticador fora de sincronia ou codigo ja usado.
+    acao_sugerida: Peca um novo codigo. Codigos TOTP tem janela de 30 segundos e nao podem ser reutilizados.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-009
+    categoria: AUTH
+    http_status: 423
+    titulo: Credencial temporariamente bloqueada
+    descricao: >-
+      Excesso de tentativas consecutivas com falha. A credencial fica bloqueada por tempo
+      crescente. O cabecalho Retry-After traz os segundos restantes.
+    causa_provavel: Tentativa de forca bruta ou usuario legitimo insistindo com a senha errada.
+    acao_sugerida: >-
+      Exiba o tempo restante e ofereca a recuperacao de senha. Nao tente de novo antes do
+      prazo: cada tentativa estende o bloqueio.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-010
+    categoria: AUTH
+    http_status: 401
+    titulo: Usuario inativo ou bloqueado
+    descricao: O usuario existe mas esta com status bloqueado ou inativo e nao pode autenticar.
+    causa_provavel: Desligamento do colaborador ou bloqueio de seguranca aplicado pelo administrador.
+    acao_sugerida: Oriente o usuario a procurar o RH. A reativacao e feita em PATCH /v1/admin/usuarios/{usuarioId}.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-011
+    categoria: AUTH
+    http_status: 401
+    titulo: Reautenticacao necessaria
+    descricao: >-
+      A operacao exige reautenticacao recente mesmo com sessao valida. E o caso do registro de
+      ponto pela web, por exigencia de politicas_registro.exigeReautenticacao.
+    causa_provavel: Sessao aberta ha muito tempo tentando registrar ponto ou alterar dado sensivel.
+    acao_sugerida: Chame POST /v1/auth/reautenticar com a senha do usuario e repita a operacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-AUTH-012
+    categoria: AUTH
+    http_status: 401
+    titulo: Credenciais de cliente OAuth invalidas
+    descricao: client_id inexistente, client_secret incorreto ou cliente revogado.
+    causa_provavel: Segredo rotacionado sem atualizar a integracao, ou credencial de sandbox usada em producao.
+    acao_sugerida: Confira o par client_id e client_secret e o ambiente do cliente em GET /v1/admin/api-clients.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-AUTH-013
+    categoria: AUTH
+    http_status: 401
+    titulo: Chave de API invalida ou revogada
+    descricao: A chave enviada em X-API-Key nao existe, expirou ou foi revogada.
+    causa_provavel: Chave rotacionada, expirada ou copiada de outro ambiente.
+    acao_sugerida: Gere nova chave em POST /v1/admin/api-clients e atualize a integracao.
+    retentavel: false
+    expoe_regra: false
+
+  # ===========================================================================
+  # PERM - Autorizacao
+  # ===========================================================================
+  - codigo: PONTO-PERM-001
+    categoria: PERM
+    http_status: 403
+    titulo: Permissao ausente
+    descricao: >-
+      A identidade e valida, mas nenhum perfil atribuido concede a permissao exigida pela
+      operacao. O codigo da permissao faltante vai em detail.
+    causa_provavel: Perfil do usuario nao inclui o par recurso e acao exigido pelo endpoint.
+    acao_sugerida: Peca ao administrador do tenant que ajuste o perfil em PATCH /v1/admin/perfis/{perfilId}.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PERM-002
+    categoria: PERM
+    http_status: 403
+    titulo: Fora do alcance hierarquico
+    descricao: >-
+      O usuario tem a permissao, mas o registro alvo esta fora do seu escopo (empresa, unidade,
+      departamento, equipe ou arvore de subordinados).
+    causa_provavel: Gestor consultando colaborador que nao e seu subordinado direto nem indireto.
+    acao_sugerida: >-
+      Filtre a listagem pelo escopo do proprio usuario. Se o alcance deveria existir, revise a
+      hierarquia em GET /v1/colaboradores/{colaboradorId}/gestores.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-PERM-003
+    categoria: PERM
+    http_status: 403
+    titulo: Escopo OAuth insuficiente
+    descricao: O token de cliente nao carrega o escopo exigido pela operacao. O escopo faltante vai em detail.
+    causa_provavel: Cliente de integracao criado com escopos menores do que a rota exige.
+    acao_sugerida: Solicite a inclusao do escopo ao administrador e emita novo token em POST /v1/auth/token.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PERM-004
+    categoria: PERM
+    http_status: 403
+    titulo: Perfil somente leitura
+    descricao: >-
+      O perfil ativo e marcado como somente leitura (auditor, fiscal, suporte) e nao executa
+      escrita em nenhum recurso.
+    causa_provavel: Usuario auditor tentando criar, alterar ou aprovar.
+    acao_sugerida: Use uma identidade com perfil operacional. Perfis somente leitura sao propositais e nao devem ser contornados.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PERM-005
+    categoria: PERM
+    http_status: 403
+    titulo: Delegacao invalida ou expirada
+    descricao: A acao foi tentada por delegacao, mas a delegacao nao esta vigente, foi revogada ou nao cobre este tipo de recurso.
+    causa_provavel: Delegacao de ferias do gestor ja encerrada ou com escopo restrito a outro tipo de solicitacao.
+    acao_sugerida: Consulte GET /v1/delegacoes e peca ao titular que renove ou amplie o escopo.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PERM-006
+    categoria: PERM
+    http_status: 403
+    titulo: Origem nao permitida para o cliente de API
+    descricao: O IP de origem da chamada nao esta na lista de IPs permitidos configurada no cliente de API.
+    causa_provavel: Integracao migrou de servidor sem atualizar a restricao de origem.
+    acao_sugerida: Atualize ipsPermitidos do cliente ou chame a partir de um endereco autorizado.
+    retentavel: false
+    expoe_regra: false
+
+  # ===========================================================================
+  # VAL - Validacao
+  # ===========================================================================
+  - codigo: PONTO-VAL-001
+    categoria: VAL
+    http_status: 400
+    titulo: Corpo da requisicao invalido
+    descricao: >-
+      Um ou mais campos falharam na validacao de tipo, formato, tamanho ou obrigatoriedade.
+      A lista completa vem em errosCampo, um item por campo.
+    causa_provavel: Campo obrigatorio ausente, tipo trocado ou enumeracao com valor desconhecido.
+    acao_sugerida: Percorra errosCampo e destaque cada campo no formulario. Nao repita a chamada sem corrigir.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-002
+    categoria: VAL
+    http_status: 422
+    titulo: CPF invalido
+    descricao: O CPF tem 11 digitos mas os digitos verificadores nao conferem.
+    causa_provavel: Erro de digitacao ou importacao de planilha com coluna deslocada.
+    acao_sugerida: Valide o CPF na origem antes de enviar. Envie somente digitos, sem ponto nem traco.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-003
+    categoria: VAL
+    http_status: 422
+    titulo: CNPJ invalido
+    descricao: O CNPJ tem 14 digitos mas os digitos verificadores nao conferem.
+    causa_provavel: Erro de digitacao ou CNPJ de filial montado manualmente.
+    acao_sugerida: Envie somente digitos, sem pontuacao, e valide o digito verificador na origem.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-004
+    categoria: VAL
+    http_status: 422
+    titulo: PIS ou NIT invalido
+    descricao: O PIS, PASEP ou NIT informado nao passa na validacao de digito verificador.
+    causa_provavel: Numero digitado errado. O campo e exigido pelos leiautes fiscais e pela folha.
+    acao_sugerida: Corrija o numero no cadastro. Sem PIS valido o vinculo nao entra no AEJ.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-005
+    categoria: VAL
+    http_status: 400
+    titulo: Parametro de consulta invalido
+    descricao: Um parametro de query tem valor fora do dominio aceito, formato incorreto ou nome desconhecido.
+    causa_provavel: Filtro com data mal formatada, limite fora da faixa ou campo de ordenacao inexistente.
+    acao_sugerida: Confira a lista de parametros aceitos na documentacao da operacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-006
+    categoria: VAL
+    http_status: 400
+    titulo: Cursor incompativel com a ordenacao
+    descricao: >-
+      O cursor foi emitido para outra ordenacao ou outro conjunto de filtros. O cursor e opaco
+      e carrega a ordenacao usada na pagina anterior.
+    causa_provavel: Cliente alterou ordenar ou os filtros sem voltar para a primeira pagina.
+    acao_sugerida: Descarte o cursor e refaca a consulta a partir da primeira pagina com os novos criterios.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-007
+    categoria: VAL
+    http_status: 422
+    titulo: Intervalo de datas invalido
+    descricao: A data final e anterior a inicial, ou a janela pedida excede o maximo permitido pela operacao.
+    causa_provavel: Inversao dos campos de periodo ou consulta de intervalo muito largo em rota sincrona.
+    acao_sugerida: Ajuste o intervalo. Para janelas longas use a execucao assincrona de relatorio.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-008
+    categoria: VAL
+    http_status: 413
+    titulo: Arquivo acima do tamanho maximo
+    descricao: O arquivo enviado excede o limite aceito pela operacao.
+    causa_provavel: Foto de atestado em resolucao maxima ou planilha nao compactada.
+    acao_sugerida: Reduza o arquivo antes de enviar. O limite vigente vai em detail.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-009
+    categoria: VAL
+    http_status: 415
+    titulo: Tipo de conteudo nao suportado
+    descricao: O Content-Type enviado nao esta entre os aceitos pela operacao.
+    causa_provavel: Envio de multipart onde se espera JSON, ou extensao de arquivo fora da lista permitida.
+    acao_sugerida: Ajuste o Content-Type conforme a operacao. Captura facial nunca aceita upload de arquivo.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-010
+    categoria: VAL
+    http_status: 422
+    titulo: Vigencia sobreposta
+    descricao: >-
+      A vigencia informada se sobrepoe a outra ja existente para a mesma chave (vinculo, jornada,
+      escala, gestor imediato ou delegacao). O banco impede a sobreposicao por constraint de exclusao.
+    causa_provavel: Nova vigencia iniciada sem encerrar a anterior.
+    acao_sugerida: Encerre a vigencia atual informando vigenciaFim antes de criar a proxima.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-VAL-011
+    categoria: VAL
+    http_status: 400
+    titulo: Cabecalho obrigatorio ausente
+    descricao: Um cabecalho exigido pela operacao nao foi enviado. O nome do cabecalho vai em detail.
+    causa_provavel: Cliente nao envia X-Tenant em chamada por host generico.
+    acao_sugerida: Adicione o cabecalho indicado e repita. Para Idempotency-Key veja PONTO-IDEM-001.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # TEN - Tenant
+  # ===========================================================================
+  - codigo: PONTO-TEN-001
+    categoria: TEN
+    http_status: 404
+    titulo: Tenant nao encontrado
+    descricao: O slug ou identificador de tenant informado nao existe.
+    causa_provavel: Subdominio digitado errado ou tenant ainda nao provisionado.
+    acao_sugerida: Confira o subdominio de acesso. A resolucao publica e feita em GET /v1/tenants/atual.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-TEN-002
+    categoria: TEN
+    http_status: 403
+    titulo: Tenant divergente do token
+    descricao: O tenant indicado em X-Tenant ou no host nao e o mesmo do token apresentado.
+    causa_provavel: Token de um cliente sendo usado contra o subdominio de outro.
+    acao_sugerida: Use o token emitido para o tenant correto. Tokens nao sao portateis entre tenants.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-TEN-003
+    categoria: TEN
+    http_status: 403
+    titulo: Tenant suspenso ou cancelado
+    descricao: >-
+      O tenant existe mas esta suspenso ou cancelado. Leitura de dado legal permanece disponivel
+      para auditoria e fiscalizacao; escrita e registro de ponto ficam bloqueados.
+    causa_provavel: Contrato suspenso por inadimplencia ou encerramento do servico.
+    acao_sugerida: Procure o suporte comercial. Nao ha o que corrigir no cliente.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-TEN-004
+    categoria: TEN
+    http_status: 403
+    titulo: Acesso cross-tenant negado
+    descricao: >-
+      A requisicao tentou alcancar um registro de outro tenant. Barrado pelo filtro da aplicacao e,
+      em profundidade, pela Row Level Security do banco.
+    causa_provavel: Identificador copiado de outro ambiente ou defeito de escopo no cliente.
+    acao_sugerida: >-
+      Trate como defeito, nao como caso de uso. Reveja de onde veio o identificador; o evento fica
+      registrado na trilha de auditoria.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-TEN-005
+    categoria: TEN
+    http_status: 409
+    titulo: Limite contratual de colaboradores atingido
+    descricao: A criacao excederia o teto de colaboradores ativos contratado pelo tenant.
+    causa_provavel: Importacao em massa acima do plano contratado.
+    acao_sugerida: Desative colaboradores desligados ou solicite ampliacao do plano antes de repetir.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # IDEM - Idempotencia
+  # ===========================================================================
+  - codigo: PONTO-IDEM-001
+    categoria: IDEM
+    http_status: 400
+    titulo: Idempotency-Key ausente
+    descricao: Toda escrita exige o cabecalho Idempotency-Key. A requisicao foi recusada sem qualquer efeito colateral.
+    causa_provavel: Cliente nao implementou o cabecalho ou o perdeu em um proxy intermediario.
+    acao_sugerida: >-
+      Gere um identificador unico por operacao logica (UUID ou ULID), guarde-o antes de enviar e
+      reutilize exatamente o mesmo valor em cada retentativa da mesma operacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-IDEM-002
+    categoria: IDEM
+    http_status: 409
+    titulo: Idempotency-Key reutilizada com corpo diferente
+    descricao: >-
+      A chave ja foi usada nas ultimas 24 horas com um corpo diferente. Reaproveitar a chave para
+      outra operacao mascararia uma escrita distinta e por isso e recusado.
+    causa_provavel: Chave fixa no codigo em vez de gerada por operacao.
+    acao_sugerida: Gere uma chave nova para cada operacao logica distinta. Reuse a chave somente para repetir a MESMA operacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-IDEM-003
+    categoria: IDEM
+    http_status: 409
+    titulo: Requisicao concorrente em processamento
+    descricao: Outra requisicao com a mesma Idempotency-Key esta em andamento neste instante.
+    causa_provavel: Retentativa disparada antes de a primeira chamada responder.
+    acao_sugerida: Aguarde o intervalo de Retry-After e repita com a mesma chave para obter a resposta original.
+    retentavel: true
+    expoe_regra: true
+
+  # ===========================================================================
+  # CONF / REC - Conflito e recurso
+  # ===========================================================================
+  - codigo: PONTO-CONF-001
+    categoria: CONF
+    http_status: 409
+    titulo: Registro duplicado
+    descricao: Ja existe registro com a mesma chave unica (codigo, CPF, matricula, CNPJ, slug ou serie).
+    causa_provavel: Recadastro do mesmo dado ou reimportacao de planilha ja processada.
+    acao_sugerida: Localize o registro existente pela listagem e atualize-o em vez de criar outro.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-CONF-002
+    categoria: CONF
+    http_status: 409
+    titulo: Versao desatualizada
+    descricao: O registro foi alterado por outra pessoa depois da leitura que originou esta escrita.
+    causa_provavel: Dois usuarios editando a mesma tela ao mesmo tempo.
+    acao_sugerida: Recarregue o registro, reaplique a alteracao sobre a versao atual e reenvie.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-CONF-003
+    categoria: CONF
+    http_status: 409
+    titulo: Transicao de estado invalida
+    descricao: O recurso esta em um estado que nao admite a operacao pedida. Estado atual e transicoes validas vao em detail.
+    causa_provavel: Aprovar solicitacao ja cancelada, encerrar vinculo ja encerrado ou assinar espelho ja assinado.
+    acao_sugerida: Releia o recurso e apresente ao usuario apenas as acoes validas para o estado corrente.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-CONF-004
+    categoria: CONF
+    http_status: 409
+    titulo: Registro com dependentes
+    descricao: A exclusao foi recusada porque existem registros que dependem deste.
+    causa_provavel: Excluir unidade com colaboradores ativos, ou jornada em uso por vinculos.
+    acao_sugerida: Remova ou reaponte os dependentes indicados em detail e repita. Considere desativar em vez de excluir.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-REC-001
+    categoria: REC
+    http_status: 404
+    titulo: Recurso nao encontrado
+    descricao: >-
+      Nao existe recurso com o identificador informado dentro do tenant corrente. Recurso de outro
+      tenant tambem responde 404, por isolamento.
+    causa_provavel: Identificador errado, registro excluido logicamente ou pertencente a outro tenant.
+    acao_sugerida: Confira o identificador na listagem correspondente antes de repetir.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-REC-002
+    categoria: REC
+    http_status: 410
+    titulo: Artefato expirado
+    descricao: O arquivo gerado (relatorio, exportacao ou pacote de titular) passou do prazo de retencao e foi removido.
+    causa_provavel: Link de download antigo. Artefatos tem expiracao configurada por politica de retencao.
+    acao_sugerida: Gere novamente o artefato e use o novo link.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # RATE - Limite de taxa
+  # ===========================================================================
+  - codigo: PONTO-RATE-001
+    categoria: RATE
+    http_status: 429
+    titulo: Limite de requisicoes excedido
+    descricao: A cota da janela corrente acabou. Os cabecalhos RateLimit-* e Retry-After descrevem o estado.
+    causa_provavel: Integracao em laco apertado ou carga sem espacamento.
+    acao_sugerida: >-
+      Respeite Retry-After e aplique recuo exponencial com jitter. Para cargas grandes prefira
+      importacao em lote a chamadas item a item.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-RATE-002
+    categoria: RATE
+    http_status: 429
+    titulo: Limite de registros por colaborador excedido
+    descricao: >-
+      Protecao antiflood do registro de ponto: quantidade de marcacoes do mesmo colaborador em
+      janela curta acima do razoavel.
+    causa_provavel: Toque repetido no botao, retentativa automatica ou fila offline reenviando sem controle.
+    acao_sugerida: >-
+      Nao repita automaticamente. Confirme em GET /v1/marcacoes se o registro ja foi aceito antes
+      de nova tentativa.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-RATE-003
+    categoria: RATE
+    http_status: 429
+    titulo: Limite de geracao de arquivo fiscal excedido
+    descricao: Geracao de AFD, AEJ ou espelho oficial acima da cota por empresa e periodo.
+    causa_provavel: Reemissao repetida do mesmo arquivo em vez de reutilizar o ja gerado.
+    acao_sugerida: Reaproveite o arquivo listado em GET /v1/fiscal/afd. Regerar so faz sentido apos mudanca de dado.
+    retentavel: true
+    expoe_regra: true
+
+  # ===========================================================================
+  # MARC - Integridade de marcacao (nucleo legal)
+  # ===========================================================================
+  - codigo: PONTO-MARC-001
+    categoria: MARC
+    http_status: 405
+    titulo: Alteracao de marcacao vedada
+    descricao: >-
+      Nao existe e nunca existira operacao de alteracao de marcacao. A Portaria MTP 671/2021 veda
+      ao REP alterar registro de ponto. Correcao se faz por tratamento, que se soma a marcacao na
+      apuracao sem tocar no registro legal.
+    causa_provavel: Cliente supondo CRUD completo sobre marcacoes.
+    acao_sugerida: Use POST /v1/tratamentos. O espelho e o AEJ mostram a correcao; o AFD permanece fidedigno.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-002
+    categoria: MARC
+    http_status: 405
+    titulo: Exclusao de marcacao vedada
+    descricao: >-
+      Marcacao e append-only. Nao ha exclusao logica nem fisica: gatilho no banco aborta DELETE e a
+      role da aplicacao nao tem o privilegio.
+    causa_provavel: Tentativa de remover batida duplicada ou registrada por engano.
+    acao_sugerida: >-
+      Crie um tratamento de categoria desconsideracaoMarcacao. A marcacao continua no AFD e deixa de
+      contar na apuracao, com autor e motivo registrados.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-003
+    categoria: MARC
+    http_status: 409
+    titulo: Marcacao duplicada
+    descricao: >-
+      Ja existe marcacao para a mesma chave de idempotencia do canal (externalId, par dispositivo
+      mais logExternoId, Idempotency-Key ou HMAC do item offline). A resposta traz a marcacao original.
+    causa_provavel: Reenvio de fila offline, catch-up de terminal repetindo access_log ou retentativa do integrador.
+    acao_sugerida: >-
+      Trate como sucesso idempotente: a marcacao existe e esta em dados. Nao gere nova chave
+      para forcar duplicata.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-004
+    categoria: MARC
+    http_status: 422
+    titulo: Data e hora fora da janela aceitavel
+    descricao: >-
+      A datahora informada esta no futuro alem da tolerancia de relogio, ou tao no passado que so
+      poderia vir de importacao. O relogio do servidor e a fonte de verdade.
+    causa_provavel: Relogio do dispositivo adulterado ou fuso horario aplicado duas vezes.
+    acao_sugerida: >-
+      Envie datahoraDispositivo como evidencia e deixe o servidor carimbar o fato. Para carga
+      historica use o importador, nao o endpoint de registro.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-005
+    categoria: MARC
+    http_status: 422
+    titulo: Item offline fora do prazo de sincronizacao
+    descricao: >-
+      O item da fila offline chegou depois do TTL definido em politicas_registro (padrao 72 horas).
+      Vira ocorrencia para tratamento humano em vez de marcacao silenciosa.
+    causa_provavel: Aparelho sem rede por dias ou app parado com fila pendente.
+    acao_sugerida: >-
+      Consulte a ocorrencia gerada e abra solicitacao de ajuste. O sistema nao converte item vencido
+      em marcacao para nao inserir registro que nao corresponde ao controle do periodo.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-006
+    categoria: MARC
+    http_status: 422
+    titulo: Assinatura do item offline invalida
+    descricao: O HMAC do item nao confere com a chave do dispositivo. O item e rejeitado sem virar marcacao.
+    causa_provavel: Payload adulterado, chave do keystore rotacionada ou item corrompido.
+    acao_sugerida: Descarte o item local, refaca o vinculo do dispositivo e oriente o colaborador a registrar de novo.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-MARC-007
+    categoria: MARC
+    http_status: 409
+    titulo: Contador monotonico reutilizado
+    descricao: O contador antirreplay do dispositivo repetiu um valor ja consumido. Caracteriza reenvio de payload capturado.
+    causa_provavel: Restauracao de backup do aparelho, clonagem de app ou tentativa deliberada de replay.
+    acao_sugerida: Refaca o vinculo do dispositivo para reiniciar o contador em conjunto com o servidor.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-MARC-008
+    categoria: MARC
+    http_status: 409
+    titulo: Falha ao alocar NSR
+    descricao: >-
+      Nao foi possivel alocar o Numero Sequencial de Registro de forma transacional. A gravacao foi
+      abortada por inteiro: e preferivel recusar a marcacao a produzir lacuna no AFD.
+    causa_provavel: Contencao extrema na sequencia do REP-P ou indisponibilidade momentanea do banco.
+    acao_sugerida: Repita a chamada com a MESMA Idempotency-Key. A retentativa e segura e nao duplica.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-009
+    categoria: MARC
+    http_status: 422
+    titulo: Colaborador sem vinculo ativo na data
+    descricao: Nao existe vinculo ativo e sujeito a apuracao para o colaborador na data da marcacao.
+    causa_provavel: Registro antes da admissao, depois do desligamento ou vinculo com apuraPonto falso.
+    acao_sugerida: Confira o periodo do vinculo em GET /v1/vinculos e corrija a admissao ou o desligamento.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-MARC-010
+    categoria: MARC
+    http_status: 422
+    titulo: REP-P nao configurado
+    descricao: >-
+      A empresa nao possui REP-P ativo, logo nao ha sequencia de NSR nem cabecalho de AFD para o
+      registro. Sem REP-P nao existe marcacao legal.
+    causa_provavel: Empresa recem-criada sem o passo de cadastro do REP-P.
+    acao_sugerida: Cadastre o REP-P em POST /v1/fiscal/rep-ps informando o numero de registro no INPI.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # SCORE - Score de confianca e antifraude do registro
+  # ===========================================================================
+  - codigo: PONTO-SCORE-001
+    categoria: SCORE
+    http_status: 403
+    titulo: Registro reprovado pelo score de confianca
+    descricao: >-
+      O score composto (attestation, RASP, modo desenvolvedor, localizacao simulada, coerencia
+      geografica, velocidade implicita e reputacao do aparelho) ficou abaixo do limiar de bloqueio
+      configurado pela empresa.
+    causa_provavel: Combinacao de sinais de risco no aparelho ou no ambiente de captura.
+    acao_sugerida: >-
+      Oriente o colaborador a usar um canal alternativo (terminal, quiosque) e avise o gestor. Nao
+      exiba o score nem os limiares na tela: a mensagem deve dizer que o registro nao pode ser
+      confirmado por este canal.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-SCORE-002
+    categoria: SCORE
+    http_status: 403
+    titulo: Prova de vida reprovada
+    descricao: A analise de vivacidade recusou a captura (foto de foto, video em tela, mascara ou desafio nao cumprido).
+    causa_provavel: Tentativa de fraude, iluminacao ruim ou desafio executado fora do tempo.
+    acao_sugerida: Repita a captura com boa iluminacao e rosto desobstruido. Apos falhas seguidas ofereca o fallback por PIN.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-SCORE-003
+    categoria: SCORE
+    http_status: 403
+    titulo: Similaridade facial abaixo do limiar
+    descricao: O vetor capturado nao alcancou o limiar de similaridade contra o template cadastrado.
+    causa_provavel: Mudanca de aparencia, template antigo, qualidade baixa no cadastro ou pessoa diferente.
+    acao_sugerida: Use o fallback por matricula e PIN e solicite recadastro biometrico ao RH.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-SCORE-004
+    categoria: SCORE
+    http_status: 403
+    titulo: Camera virtual detectada
+    descricao: A captura veio de um dispositivo de video virtual, o que invalida a prova de presenca.
+    causa_provavel: OBS Virtual Camera ou software equivalente ativo na maquina.
+    acao_sugerida: Encerre o software de camera virtual e repita usando a webcam fisica.
+    retentavel: true
+    expoe_regra: true
+
+  # ===========================================================================
+  # REDE - Rede de origem
+  # ===========================================================================
+  - codigo: PONTO-REDE-001
+    categoria: REDE
+    http_status: 403
+    titulo: IP de origem fora da lista permitida
+    descricao: >-
+      O registro por este canal so e aceito a partir das faixas CIDR autorizadas para a empresa ou
+      unidade. O endereco de origem nao pertence a nenhuma delas.
+    causa_provavel: Colaborador tentando registrar de fora da rede corporativa.
+    acao_sugerida: >-
+      Registre a partir da rede autorizada ou use outro canal permitido. Nao exiba as faixas
+      configuradas na mensagem ao usuario.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-REDE-002
+    categoria: REDE
+    http_status: 403
+    titulo: Origem por VPN, proxy ou datacenter bloqueada
+    descricao: A empresa configurou bloqueio de origens anonimizadas e o endereco pertence a um ASN classificado como tal.
+    causa_provavel: VPN corporativa ou pessoal ativa no momento do registro.
+    acao_sugerida: Desligue a VPN e repita. Se a VPN corporativa for legitima, peca a inclusao da faixa na allowlist.
+    retentavel: true
+    expoe_regra: true
+
+  # ===========================================================================
+  # GEO - Geocerca
+  # ===========================================================================
+  - codigo: PONTO-GEO-001
+    categoria: GEO
+    http_status: 403
+    titulo: Fora da geocerca da unidade
+    descricao: >-
+      A posicao informada esta fora da cerca (circular ou poligonal) da unidade e a politica da
+      empresa e de bloqueio. Quando a politica e sinalizar, a marcacao e gravada e enviada para
+      revisao do gestor em vez de recusada.
+    causa_provavel: Colaborador longe do local de trabalho ou geocerca cadastrada com raio curto demais.
+    acao_sugerida: Aproxime-se do local. Para trabalho externo, peca ao RH que ajuste a politica da unidade para sinalizar.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-GEO-002
+    categoria: GEO
+    http_status: 422
+    titulo: Precisao de localizacao insuficiente
+    descricao: A precisao informada pelo GPS e larga demais para decidir pertencimento a geocerca.
+    causa_provavel: Sinal fraco em ambiente fechado ou permissao de localizacao em modo aproximado.
+    acao_sugerida: Conceda permissao de localizacao precisa, aguarde a estabilizacao do sinal e repita.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-GEO-003
+    categoria: GEO
+    http_status: 403
+    titulo: Localizacao simulada
+    descricao: O sistema operacional sinalizou posicao vinda de provedor simulado, ou os sinais de corroboracao nao batem.
+    causa_provavel: Aplicativo de fake GPS instalado e ativo.
+    acao_sugerida: Remova o aplicativo de localizacao simulada. Enquanto ativo, a politica da empresa decide entre bloquear e sinalizar.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # DISP - Dispositivo
+  # ===========================================================================
+  - codigo: PONTO-DISP-001
+    categoria: DISP
+    http_status: 403
+    titulo: Dispositivo nao vinculado ao colaborador
+    descricao: O aparelho nao possui vinculo ativo com o colaborador que tenta registrar.
+    causa_provavel: Troca de celular sem aprovacao do RH ou app instalado em aparelho de terceiro.
+    acao_sugerida: Solicite o vinculo em POST /v1/dispositivos/{dispositivoId}/vincular e aguarde a aprovacao do RH.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-DISP-002
+    categoria: DISP
+    http_status: 403
+    titulo: Dispositivo bloqueado ou revogado
+    descricao: O aparelho esta com status bloqueado, revogado ou substituido e nao origina marcacao.
+    causa_provavel: Aparelho perdido, roubado ou substituido por outro ja aprovado.
+    acao_sugerida: Use o aparelho ativo do colaborador ou peca ao RH a reativacao com justificativa.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-DISP-003
+    categoria: DISP
+    http_status: 403
+    titulo: Attestation de plataforma reprovado
+    descricao: >-
+      O veredito do Play Integrity ou do App Attest, verificado no servidor, reprovou o aparelho ou
+      a integridade do binario do aplicativo.
+    causa_provavel: Aparelho sem Google Play certificado, app modificado ou veredito indisponivel com politica estrita.
+    acao_sugerida: >-
+      Reinstale o aplicativo pela loja oficial. Aparelho antigo pode reprovar legitimamente: nesse
+      caso a empresa deve ajustar a politica ou oferecer canal alternativo.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-DISP-004
+    categoria: DISP
+    http_status: 403
+    titulo: Modo desenvolvedor ou depuracao ativos
+    descricao: >-
+      Opcoes do desenvolvedor ou depuracao USB estao habilitadas e a politica da empresa para esse
+      sinal e bloquear.
+    causa_provavel: Aparelho com opcoes do desenvolvedor ligadas.
+    acao_sugerida: Desative as opcoes do desenvolvedor e a depuracao USB nas configuracoes do aparelho e repita.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-DISP-005
+    categoria: DISP
+    http_status: 403
+    titulo: Ambiente comprometido
+    descricao: >-
+      Foi detectado root, jailbreak, framework de hooking, depurador anexado, emulador ou binario
+      adulterado.
+    causa_provavel: Aparelho com root ou execucao do app em emulador.
+    acao_sugerida: >-
+      Use um aparelho integro. Este sinal nao e configuravel para permitir: e bloqueio duro do produto.
+    retentavel: false
+    expoe_regra: false
+
+  - codigo: PONTO-DISP-006
+    categoria: DISP
+    http_status: 409
+    titulo: Colaborador ja possui dispositivo ativo
+    descricao: A regra e de um unico aparelho ativo por colaborador e ja existe um vinculo ativo.
+    causa_provavel: Troca de aparelho sem revogar o anterior.
+    acao_sugerida: Revogue o vinculo atual antes de criar o novo. A troca fica registrada para auditoria.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # PER - Periodo e fechamento
+  # ===========================================================================
+  - codigo: PONTO-PER-001
+    categoria: PER
+    http_status: 409
+    titulo: Periodo fechado
+    descricao: >-
+      A data alvo pertence a um periodo ja fechado. Tratamento, recalculo e lancamento de banco de
+      horas ficam travados ate a reabertura autorizada.
+    causa_provavel: Correcao retroativa depois do fechamento da folha.
+    acao_sugerida: >-
+      Solicite a reabertura em POST /v1/fechamentos/{fechamentoId}/reabrir com justificativa. A
+      reabertura e nominal e fica na auditoria.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PER-002
+    categoria: PER
+    http_status: 409
+    titulo: Periodo ja fechado
+    descricao: O fechamento pedido ja foi concluido para este escopo e periodo.
+    causa_provavel: Duplo clique no botao de fechar ou retentativa sem idempotencia.
+    acao_sugerida: Consulte GET /v1/fechamentos para obter o fechamento existente. Nao ha o que refazer.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PER-003
+    categoria: PER
+    http_status: 422
+    titulo: Reabertura sem justificativa
+    descricao: A reabertura exige motivo textual e autor identificado. O banco recusa a operacao sem os dois.
+    causa_provavel: Campo motivo vazio no formulario de reabertura.
+    acao_sugerida: Informe motivo com conteudo util. Ele aparece no espelho retificado e na trilha de auditoria.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-PER-004
+    categoria: PER
+    http_status: 409
+    titulo: Fechamento com pendencias bloqueantes
+    descricao: >-
+      Existem ocorrencias ou solicitacoes abertas classificadas como bloqueantes pela politica do
+      tenant. O total vai em detail.
+    causa_provavel: Marcacoes impares ou ajustes pendentes de aprovacao no periodo.
+    acao_sugerida: Resolva as pendencias listadas ou feche com forcar igual a true, o que registra o total pendente no fechamento.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # APUR - Apuracao
+  # ===========================================================================
+  - codigo: PONTO-APUR-001
+    categoria: APUR
+    http_status: 409
+    titulo: Recalculo ja em andamento
+    descricao: Existe recalculo em execucao para escopo e periodo que se sobrepoem ao pedido.
+    causa_provavel: Reenvio do comando antes de o anterior concluir.
+    acao_sugerida: Acompanhe o processamento em andamento pelo identificador devolvido em detail antes de disparar outro.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-APUR-002
+    categoria: APUR
+    http_status: 422
+    titulo: Jornada nao resolvida para a data
+    descricao: >-
+      O resolvedor nao encontrou jornada nem escala vigente para o vinculo na data, logo nao ha
+      horario previsto para apurar.
+    causa_provavel: Vinculo sem jornada atribuida ou vigencia com buraco entre duas atribuicoes.
+    acao_sugerida: Atribua a jornada em POST /v1/vinculos/{vinculoId}/jornadas cobrindo a data e recalcule o periodo.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-APUR-003
+    categoria: APUR
+    http_status: 409
+    titulo: Apuracao travada por fechamento
+    descricao: O dia pertence a uma apuracao ja travada por fechamento e nao pode ser recalculado.
+    causa_provavel: Recalculo pedido sobre intervalo que inclui periodo fechado.
+    acao_sugerida: Restrinja o intervalo aos dias abertos ou reabra o periodo antes de recalcular.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # BH - Banco de horas
+  # ===========================================================================
+  - codigo: PONTO-BH-001
+    categoria: BH
+    http_status: 409
+    titulo: Teto positivo do banco atingido
+    descricao: O lancamento levaria o saldo credor acima do teto configurado e a politica bloqueia novas horas extras.
+    causa_provavel: Saldo credor no limite com a politica bloqueiaExtraNoTeto ativa.
+    acao_sugerida: Programe folga ou quitacao para reduzir o saldo antes de novos creditos.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-BH-002
+    categoria: BH
+    http_status: 409
+    titulo: Teto negativo do banco atingido
+    descricao: O lancamento levaria o saldo devedor alem do teto negativo permitido pela politica.
+    causa_provavel: Sequencia de faltas ou compensacoes sem contrapartida.
+    acao_sugerida: Revise a politica com o RH ou trate o excedente como falta em vez de debito de banco.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-BH-003
+    categoria: BH
+    http_status: 422
+    titulo: Periodo de compensacao acima do limite legal
+    descricao: >-
+      Acordo individual escrito admite compensacao em ate 6 meses; acordo ou convencao coletiva, em
+      ate 12. O periodo informado excede o limite do regime escolhido.
+    causa_provavel: Regime individual configurado com periodo de 12 meses.
+    acao_sugerida: Ajuste periodoMeses ao regime, ou mude o regime e anexe o instrumento coletivo correspondente.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-BH-004
+    categoria: BH
+    http_status: 409
+    titulo: Conta de banco encerrada
+    descricao: A conta esta encerrada, quitada ou expirada e nao recebe novos lancamentos.
+    causa_provavel: Lancamento retroativo em periodo de banco ja liquidado.
+    acao_sugerida: Lance na conta vigente do periodo atual, ou registre um ajuste com justificativa na conta corrente.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-BH-005
+    categoria: BH
+    http_status: 409
+    titulo: Saldo insuficiente para a quitacao
+    descricao: A quitacao pedida e maior que o saldo credor disponivel na conta.
+    causa_provavel: Quitacao calculada sobre saldo desatualizado.
+    acao_sugerida: Releia o saldo em GET /v1/banco-horas/{colaboradorId}/saldo e ajuste os minutos da quitacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-BH-006
+    categoria: BH
+    http_status: 422
+    titulo: Acordo de banco de horas ausente
+    descricao: >-
+      A politica exige o documento do acordo (individual escrito ou instrumento coletivo) e nenhum
+      esta anexado. Sem ele o regime e juridicamente fragil.
+    causa_provavel: Politica criada antes de o acordo assinado ser digitalizado.
+    acao_sugerida: Anexe o documento e informe documentoAcordoId na politica antes de ativar o regime.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # FISC - Arquivos fiscais
+  # ===========================================================================
+  - codigo: PONTO-FISC-001
+    categoria: FISC
+    http_status: 409
+    titulo: Lacuna de NSR detectada
+    descricao: >-
+      A verificacao previa a geracao encontrou descontinuidade na sequencia de NSR do REP-P. O
+      arquivo NAO e gerado: um AFD com lacuna e pior do que nenhum arquivo.
+    causa_provavel: Defeito grave de gravacao ou intervencao direta no banco. Nao deveria ocorrer.
+    acao_sugerida: >-
+      Acione o suporte imediatamente com a faixa indicada em detail. Nao regere nem tente contornar:
+      trate como incidente de conformidade.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-002
+    categoria: FISC
+    http_status: 409
+    titulo: Geracao de arquivo fiscal ja em andamento
+    descricao: Ja existe geracao em execucao para o mesmo REP-P e periodo.
+    causa_provavel: Reenvio do comando antes da conclusao.
+    acao_sugerida: Acompanhe o arquivo em GET /v1/fiscal/afd/{arquivoId} ate o status mudar de gerando.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-003
+    categoria: FISC
+    http_status: 422
+    titulo: REP-P sem numero de registro no INPI
+    descricao: O numero do registro do programa no INPI e obrigatorio no cabecalho do AFD e nao esta preenchido.
+    causa_provavel: Registro no INPI ainda em andamento.
+    acao_sugerida: >-
+      Conclua o registro e preencha numeroInpi no REP-P. Ate la o sistema opera normalmente, mas nao
+      emite AFD valido para fiscalizacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-004
+    categoria: FISC
+    http_status: 424
+    titulo: Certificado ICP-Brasil indisponivel
+    descricao: >-
+      A assinatura CAdES exige o certificado e-CNPJ A1 configurado no ambiente e ele nao esta
+      disponivel. O arquivo permanece gerado e integro, porem nao assinado.
+    causa_provavel: Certificado ainda nao emitido ou nao instalado no ambiente.
+    acao_sugerida: Baixe o arquivo nao assinado se precisar conferir o conteudo e assine depois em POST /v1/fiscal/arquivos/{arquivoId}/assinar.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-005
+    categoria: FISC
+    http_status: 422
+    titulo: Certificado expirado ou revogado
+    descricao: O certificado configurado esta fora da validade ou consta como revogado na cadeia ICP-Brasil.
+    causa_provavel: Certificado A1 vencido (validade de 1 ano) sem renovacao.
+    acao_sugerida: Renove o certificado e reassine os arquivos pendentes. Assinatura com certificado invalido nao tem valor probatorio.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-006
+    categoria: FISC
+    http_status: 500
+    titulo: Falha na geracao do arquivo fiscal
+    descricao: A geracao abortou por erro interno. Nenhum arquivo parcial e publicado.
+    causa_provavel: Indisponibilidade do armazenamento de objetos ou defeito no gerador.
+    acao_sugerida: Repita a geracao. Persistindo, acione o suporte com o identificador do arquivo e o requestId.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-FISC-007
+    categoria: FISC
+    http_status: 409
+    titulo: Espelho ja assinado
+    descricao: O espelho ja possui assinatura valida do mesmo signatario e nao aceita nova assinatura.
+    causa_provavel: Duplo envio do aceite eletronico.
+    acao_sugerida: >-
+      Consulte o espelho para obter a assinatura existente. Se o espelho mudou, gere uma nova versao:
+      assinatura nao se sobrescreve.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # TERM - Terminal coletor
+  # ===========================================================================
+  - codigo: PONTO-TERM-001
+    categoria: TERM
+    http_status: 502
+    titulo: Terminal inacessivel
+    descricao: O gateway nao conseguiu falar com o coletor no modo de comunicacao configurado.
+    causa_provavel: Equipamento desligado, sem rede, ou IP e porta incorretos no cadastro.
+    acao_sugerida: >-
+      Verifique a energia e a rede do equipamento. Em modo push nao ha conexao ativa do servidor:
+      o comando fica enfileirado ate o proximo contato.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-TERM-002
+    categoria: TERM
+    http_status: 504
+    titulo: Tempo esgotado na comunicacao com o terminal
+    descricao: O coletor nao respondeu dentro do tempo limite.
+    causa_provavel: Rede lenta na LAN do cliente ou equipamento ocupado processando faces.
+    acao_sugerida: >-
+      Repita mais tarde. Marcacoes nao se perdem: ficam no equipamento e sao recuperadas pelo catch-up.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-TERM-003
+    categoria: TERM
+    http_status: 502
+    titulo: Credenciais do terminal recusadas
+    descricao: O coletor recusou a sessao com o usuario e senha configurados.
+    causa_provavel: Senha do equipamento alterada localmente sem atualizar o cadastro.
+    acao_sugerida: Atualize usuarioApi e a senha do terminal em PATCH /v1/terminais/{terminalId}.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-TERM-004
+    categoria: TERM
+    http_status: 409
+    titulo: Terminal offline, comando enfileirado
+    descricao: >-
+      O comando foi aceito e ficara na fila ate o proximo contato do equipamento. Nao e falha
+      definitiva, e sim ausencia de confirmacao imediata.
+    causa_provavel: Equipamento em modo push com intervalo de consulta ainda nao vencido.
+    acao_sugerida: Acompanhe GET /v1/terminais/{terminalId}/saude. O comando e entregue assim que o equipamento voltar.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-TERM-005
+    categoria: TERM
+    http_status: 502
+    titulo: Resposta invalida do terminal
+    descricao: O coletor respondeu em formato inesperado ou com payload corrompido.
+    causa_provavel: Firmware incompativel com a versao de protocolo suportada.
+    acao_sugerida: Confira a versao de firmware em GET /v1/terminais/{terminalId}/saude e atualize o equipamento.
+    retentavel: true
+    expoe_regra: true
+
+  # ===========================================================================
+  # LGPD
+  # ===========================================================================
+  - codigo: PONTO-LGPD-001
+    categoria: LGPD
+    http_status: 403
+    titulo: Consentimento biometrico ausente ou revogado
+    descricao: >-
+      Biometria e dado pessoal sensivel e exige consentimento especifico vigente. Sem consentimento
+      concedido o template nao pode ser cadastrado nem usado em verificacao.
+    causa_provavel: Colaborador nao aceitou o termo, ou revogou o consentimento depois do cadastro.
+    acao_sugerida: >-
+      Colete o consentimento em POST /v1/lgpd/consentimentos com a finalidade biometriaFacial. Sem
+      ele, use o fallback por matricula e PIN ou cartao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-LGPD-002
+    categoria: LGPD
+    http_status: 403
+    titulo: Acesso ao template biometrico vedado
+    descricao: >-
+      Nenhum perfil, incluindo suporte da SEEG e super administrador, le o vetor biometrico em
+      claro. A API expoe apenas metadados da credencial.
+    causa_provavel: Integracao tentando exportar templates.
+    acao_sugerida: Use os metadados disponiveis. Migracao de motor facial e feita por rotina interna versionada, nunca por exportacao.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-LGPD-003
+    categoria: LGPD
+    http_status: 409
+    titulo: Eliminacao vedada por retencao legal
+    descricao: >-
+      O pedido de eliminacao alcanca dado com guarda obrigatoria, como marcacao de ponto (5 anos) e
+      trilha de auditoria. A recusa e parcial e precisa ser fundamentada na resposta ao titular.
+    causa_provavel: Pedido de eliminacao total feito por ex-colaborador.
+    acao_sugerida: >-
+      Registre o atendimento parcial, elimine o que pode ser eliminado (foto de captura, dados de
+      contato) e fundamente a retencao do restante.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-LGPD-004
+    categoria: LGPD
+    http_status: 422
+    titulo: Termo de consentimento desatualizado
+    descricao: A versao de termo aceita nao e a vigente. Mudanca de termo exige novo consentimento, sem reaproveitar o anterior.
+    causa_provavel: Aplicativo desatualizado exibindo termo antigo.
+    acao_sugerida: Atualize o aplicativo, exiba a versao vigente do termo e colete o aceite de novo.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # WEBH - Webhooks
+  # ===========================================================================
+  - codigo: PONTO-WEBH-001
+    categoria: WEBH
+    http_status: 422
+    titulo: URL de webhook invalida
+    descricao: A URL precisa ser HTTPS, publica e nao apontar para faixa privada ou de loopback.
+    causa_provavel: Cadastro de endpoint http, localhost ou IP interno.
+    acao_sugerida: Publique o receptor em HTTPS com certificado valido. Para desenvolvimento use um tunel com TLS.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-WEBH-002
+    categoria: WEBH
+    http_status: 409
+    titulo: Webhook desabilitado por falhas consecutivas
+    descricao: >-
+      O endpoint acumulou falhas consecutivas acima do limite e foi desabilitado automaticamente
+      para nao inundar um destino morto. As entregas ficam na dead letter queue.
+    causa_provavel: Receptor fora do ar ou respondendo erro por periodo prolongado.
+    acao_sugerida: Corrija o receptor, reative o webhook e reenvie as entregas pendentes a partir da DLQ.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-WEBH-003
+    categoria: WEBH
+    http_status: 422
+    titulo: Evento desconhecido
+    descricao: Um dos eventos assinados nao existe no catalogo events.yaml ou nao e exposto publicamente.
+    causa_provavel: Nome de evento digitado errado ou evento interno que nao vira webhook.
+    acao_sugerida: Consulte events.yaml. Somente eventos com webhookPublico verdadeiro podem ser assinados.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # IMP - Importacao
+  # ===========================================================================
+  - codigo: PONTO-IMP-001
+    categoria: IMP
+    http_status: 422
+    titulo: Layout de arquivo nao reconhecido
+    descricao: O arquivo enviado nao corresponde ao layout esperado para o tipo de importacao.
+    causa_provavel: Colunas ausentes, ordem trocada ou separador diferente do declarado.
+    acao_sugerida: Baixe o modelo do tipo de importacao e refaca o arquivo a partir dele.
+    retentavel: false
+    expoe_regra: true
+
+  - codigo: PONTO-IMP-002
+    categoria: IMP
+    http_status: 409
+    titulo: Importacao ja em andamento
+    descricao: Existe importacao do mesmo tipo em processamento para esta empresa.
+    causa_provavel: Novo envio antes de a carga anterior concluir.
+    acao_sugerida: Acompanhe GET /v1/importacoes ate a conclusao para nao gerar cadastro duplicado.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-IMP-003
+    categoria: IMP
+    http_status: 422
+    titulo: AFD de terceiro invalido
+    descricao: >-
+      O AFD importado falhou na verificacao estrutural: CRC de registro divergente, sequencia de NSR
+      inconsistente ou codificacao fora do leiaute.
+    causa_provavel: Arquivo truncado no download ou convertido para UTF-8 perdendo a codificacao original.
+    acao_sugerida: >-
+      Reobtenha o arquivo original em ISO-8859-1, sem reencodar. As marcacoes importadas usam
+      namespace de NSR separado e nunca interferem na sequencia do nosso REP-P.
+    retentavel: false
+    expoe_regra: true
+
+  # ===========================================================================
+  # INT - Interno
+  # ===========================================================================
+  - codigo: PONTO-INT-001
+    categoria: INT
+    http_status: 500
+    titulo: Erro interno
+    descricao: Falha nao prevista. O detalhe tecnico vai para o log e para o Sentry, nunca para a resposta.
+    causa_provavel: Defeito de software ou estado inesperado.
+    acao_sugerida: Repita uma vez. Persistindo, acione o suporte informando o requestId da resposta.
+    retentavel: true
+    expoe_regra: false
+
+  - codigo: PONTO-INT-002
+    categoria: INT
+    http_status: 503
+    titulo: Servico em manutencao
+    descricao: A instancia esta em janela de manutencao programada e nao aceita requisicoes.
+    causa_provavel: Deploy ou migracao de banco em andamento.
+    acao_sugerida: Respeite Retry-After. Registros feitos offline no app sincronizam normalmente depois.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-INT-003
+    categoria: INT
+    http_status: 503
+    titulo: Dependencia indisponivel
+    descricao: Uma dependencia de infraestrutura (banco, fila, armazenamento de objetos ou servico facial) esta fora.
+    causa_provavel: Indisponibilidade momentanea de um componente interno.
+    acao_sugerida: Repita com recuo exponencial. Escritas com Idempotency-Key sao seguras para retentar.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-INT-004
+    categoria: INT
+    http_status: 504
+    titulo: Tempo de processamento esgotado
+    descricao: A operacao excedeu o tempo maximo de resposta sincrona.
+    causa_provavel: Consulta muito ampla em rota sincrona.
+    acao_sugerida: Reduza o intervalo ou use a variante assincrona da operacao, que devolve 202 e um identificador de execucao.
+    retentavel: true
+    expoe_regra: true
+
+  - codigo: PONTO-INT-005
+    categoria: INT
+    http_status: 501
+    titulo: Operacao ainda nao implementada
+    descricao: >-
+      A operacao existe no contrato e ainda nao tem implementacao nesta versao. E a resposta padrao
+      de todos os endpoints durante a Fase 0, que entrega contrato e andaime, nao regra de negocio.
+    causa_provavel: Consumo de endpoint cuja fase de implementacao ainda nao foi executada.
+    acao_sugerida: Consulte o painel de fases para saber quando a operacao entra. O contrato ja pode ser usado para gerar clientes e mocks.
+    retentavel: false
+    expoe_regra: true

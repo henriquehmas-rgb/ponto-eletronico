@@ -1,0 +1,17 @@
+# Dependencias e artefatos de build (o .gitignore da raiz ja cobre; repetido
+# aqui para quem trabalha so dentro de apps/web).
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# Cobertura e cache de teste
+coverage/
+.vitest/
+
+# Ambiente local — nunca versionar segredo.
+.env
+.env.*
+!.env.example

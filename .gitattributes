@@ -1,0 +1,121 @@
+# .gitattributes — Ponto Eletronico
+# Desenvolvemos em Windows e executamos em Linux (Docker). Normalizamos tudo
+# para LF no repositorio; o checkout no Windows fica com LF tambem, evitando
+# quebra de scripts de container e diffs ruidosos.
+
+# Padrao: deixa o git detectar texto e normalizar para LF no repositorio.
+* text=auto eol=lf
+
+# -----------------------------------------------------------------------------
+# Texto — LF explicito (rodam dentro de container Linux)
+# -----------------------------------------------------------------------------
+*.py        text eol=lf diff=python
+*.pyi       text eol=lf diff=python
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.dart      text eol=lf
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.sql       text eol=lf
+*.sh        text eol=lf
+*.md        text eol=lf diff=markdown
+*.css       text eol=lf
+*.scss      text eol=lf
+*.html      text eol=lf diff=html
+*.env.example text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.Dockerfile text eol=lf
+.dockerignore text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# -----------------------------------------------------------------------------
+# Texto — CRLF obrigatorio (executados pelo Windows)
+# -----------------------------------------------------------------------------
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# -----------------------------------------------------------------------------
+# Arquivos fiscais REP-P — bytes intocaveis
+# A Portaria MTP 671/2021 exige ISO 8859-1 com terminacao CR+LF. Qualquer
+# normalizacao do git corromperia o CRC-16 e o SHA-256 das fixtures de teste.
+# -----------------------------------------------------------------------------
+*.afd       -text
+*.aej       -text
+*.p7s       -text
+*.acjef     -text
+*.afdt      -text
+
+# -----------------------------------------------------------------------------
+# Binarios — nunca normalizar, nunca tentar diff
+# -----------------------------------------------------------------------------
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.avif      binary
+*.ico       binary
+*.pdf       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.7z        binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.eot       binary
+*.onnx      binary
+*.tflite    binary
+*.pt        binary
+*.pth       binary
+*.npy       binary
+*.npz       binary
+*.jks       binary
+*.keystore  binary
+*.p12       binary
+*.pfx       binary
+*.apk       binary
+*.aab       binary
+*.ipa       binary
+*.xlsx      binary
+*.xls       binary
+*.docx      binary
+
+# -----------------------------------------------------------------------------
+# Lockfiles — gerados; colapsar no diff das PRs
+# -----------------------------------------------------------------------------
+pnpm-lock.yaml      linguist-generated=true -diff
+package-lock.json   linguist-generated=true -diff
+yarn.lock           linguist-generated=true -diff
+poetry.lock         linguist-generated=true -diff
+uv.lock             linguist-generated=true -diff
+pubspec.lock        linguist-generated=true -diff
+
+# -----------------------------------------------------------------------------
+# Estatisticas de linguagem do GitHub
+# -----------------------------------------------------------------------------
+docs/**             linguist-documentation=true
+tests/fixtures/**   linguist-vendored=true
+
+# -----------------------------------------------------------------------------
+# Nao empacotar no `git archive`
+# -----------------------------------------------------------------------------
+.github/            export-ignore
+.gitattributes      export-ignore
+.gitignore          export-ignore
+tests/              export-ignore

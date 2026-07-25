@@ -1,0 +1,540 @@
+# =============================================================================
+# CI — Ponto Eletronico
+# =============================================================================
+# Jobs paralelos:
+#   deteccao       descobre quais arvores do monorepo ja existem
+#   lint-python    ruff (lint + format) + mypy
+#   test-python    pytest com servico PostgreSQL 16 real
+#   web            eslint + tsc --noEmit + next build
+#   openapi        spectral lint sobre packages/contracts/openapi.yaml
+#   docker         build das imagens (sem push)
+#   ci-ok          gate agregador para branch protection
+#
+# -----------------------------------------------------------------------------
+# NOTA SOBRE O JOB `deteccao` (concessao explicita e temporaria da Fase 0)
+# -----------------------------------------------------------------------------
+# A Fase 0 e construida por agentes em paralelo: o andaime de infra/CI nasce
+# antes de apps/ e packages/contracts/ estarem no repositorio. Sem um guarda,
+# o primeiro push ficaria vermelho por ausencia de arquivo, e nao por defeito.
+#
+# A saida escolhida NAO mascara erro: o job `deteccao` apenas responde
+# "esta arvore existe?". Quando a resposta e nao, o job dependente e PULADO
+# (status skipped, visivel no PR) — nunca "passa" com erro engolido. Quando a
+# resposta e sim, o job roda em modo estrito: sem `|| true`, sem
+# `continue-on-error`, qualquer achado reprova.
+#
+# Consequencia pratica: no dia em que openapi.yaml existir, o spectral passa a
+# ser bloqueante automaticamente e para sempre. Um `continue-on-error: true`
+# teria o efeito oposto — continuaria verde depois que o arquivo chegasse, que
+# e exatamente o mascaramento que queremos evitar.
+#
+# REMOVER apos o fim da Fase 0: com o monorepo completo, os `if:` devem cair e
+# todos os jobs passam a ser incondicionais.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, "f*-**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9"
+  # Ferramental de lint/tipos/teste fixado aqui para o CI ser reprodutivel
+  # mesmo antes de apps/api trazer o proprio arquivo de dependencias.
+  PY_TOOLING: "ruff==0.7.4 mypy==1.13.0 pytest==8.3.4 pytest-asyncio==0.24.0 pytest-cov==6.0.0"
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # Descobre o que ja existe no monorepo. Ver nota no cabecalho.
+  # ---------------------------------------------------------------------------
+  deteccao:
+    name: Deteccao de arvores
+    runs-on: ubuntu-latest
+    outputs:
+      tem_python: ${{ steps.check.outputs.tem_python }}
+      tem_web: ${{ steps.check.outputs.tem_web }}
+      tem_openapi: ${{ steps.check.outputs.tem_openapi }}
+      dockerfiles: ${{ steps.check.outputs.dockerfiles }}
+      tem_dockerfile: ${{ steps.check.outputs.tem_dockerfile }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        name: Verifica presenca de codigo por arvore
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          tem_python=false
+          if [ -d apps ] && [ -n "$(find apps -name '*.py' -not -path '*/node_modules/*' -print -quit)" ]; then
+            tem_python=true
+          fi
+
+          tem_web=false
+          if [ -f apps/web/package.json ]; then
+            tem_web=true
+          fi
+
+          tem_openapi=false
+          if [ -f packages/contracts/openapi.yaml ]; then
+            tem_openapi=true
+          fi
+
+          # Matriz de imagens: so entra servico cujo Dockerfile ja existe.
+          servicos=(api worker device-gw facial-svc web)
+          encontrados=()
+          for s in "${servicos[@]}"; do
+            if [ -f "apps/$s/Dockerfile" ]; then
+              encontrados+=("$s")
+            fi
+          done
+
+          if [ ${#encontrados[@]} -gt 0 ]; then
+            matriz=$(printf '"%s",' "${encontrados[@]}")
+            matriz="[${matriz%,}]"
+            tem_dockerfile=true
+          else
+            matriz='[]'
+            tem_dockerfile=false
+          fi
+
+          {
+            echo "tem_python=$tem_python"
+            echo "tem_web=$tem_web"
+            echo "tem_openapi=$tem_openapi"
+            echo "tem_dockerfile=$tem_dockerfile"
+            echo "dockerfiles=$matriz"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Deteccao de arvores"
+            echo ""
+            echo "| Arvore | Presente |"
+            echo "|---|---|"
+            echo "| Python (apps/*) | $tem_python |"
+            echo "| Web (apps/web) | $tem_web |"
+            echo "| OpenAPI (packages/contracts/openapi.yaml) | $tem_openapi |"
+            echo "| Dockerfiles | $matriz |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # (a) Lint e tipos Python
+  # ---------------------------------------------------------------------------
+  lint-python:
+    name: Python · ruff + mypy
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala ferramental e dependencias das apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          python -m pip install --upgrade pip
+          pip install ${{ env.PY_TOOLING }}
+          # packages/ ANTES de apps/: `apps/api` importa `ponto_contracts`
+          # (migrations/env.py e seed_dev.py). Sem esta instalacao o mypy
+          # reprova com import-not-found e o alembic cai no fallback de sys.path.
+          #
+          # NAO editavel de proposito: instalacao editavel (PEP 660) usa um
+          # importador dinamico que o mypy nao segue, e o erro import-not-found
+          # continuaria mesmo com o pacote instalado. Aqui packages/ e
+          # dependencia, nao codigo em edicao.
+          for proj in packages/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install $dir"
+            pip install "$dir[dev]" || pip install "$dir"
+            echo "::endgroup::"
+          done
+          # nullglob: glob sem correspondencia some, o laco simplesmente nao roda.
+          for req in apps/*/requirements.txt apps/*/requirements-dev.txt; do
+            echo "::group::pip install -r $req"
+            pip install -r "$req"
+            echo "::endgroup::"
+          done
+          for proj in apps/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install -e $dir"
+            pip install -e "$dir[dev]" || pip install -e "$dir"
+            echo "::endgroup::"
+          done
+
+      - name: ruff check
+        run: ruff check apps packages tests --output-format=github
+
+      - name: ruff format (verificacao)
+        run: ruff format --check --diff apps packages tests
+
+      - name: mypy
+        run: mypy apps packages
+
+  # ---------------------------------------------------------------------------
+  # (b) Testes Python com PostgreSQL 16 de verdade
+  #     RLS, triggers append-only e sequencia de NSR nao sao testaveis em SQLite.
+  # ---------------------------------------------------------------------------
+  test-python:
+    name: Python · pytest
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_python == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ponto
+          POSTGRES_PASSWORD: ponto_ci
+          POSTGRES_DB: ponto_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ponto -d ponto_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AMBIENTE: ci
+      TZ: America/Sao_Paulo
+      DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
+      DATABASE_URL_SYNC: postgresql+psycopg://ponto:ponto_ci@localhost:5432/ponto_test
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala ferramental e dependencias das apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          python -m pip install --upgrade pip
+          pip install ${{ env.PY_TOOLING }}
+          # packages/ ANTES de apps/: o alembic desta etapa importa
+          # `ponto_contracts` para montar o `target_metadata`.
+          for proj in packages/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install $dir"
+            pip install "$dir[dev]" || pip install "$dir"
+            echo "::endgroup::"
+          done
+          # nullglob: glob sem correspondencia some, o laco simplesmente nao roda.
+          for req in apps/*/requirements.txt apps/*/requirements-dev.txt; do
+            echo "::group::pip install -r $req"
+            pip install -r "$req"
+            echo "::endgroup::"
+          done
+          for proj in apps/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install -e $dir"
+            pip install -e "$dir[dev]" || pip install -e "$dir"
+            echo "::endgroup::"
+          done
+
+      - name: Migrations Alembic (aplica e reverte)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f apps/api/alembic.ini ]; then
+            cd apps/api
+            alembic upgrade head
+            alembic downgrade base
+            alembic upgrade head
+          else
+            echo "::notice::alembic.ini ainda nao existe; etapa pulada nesta execucao."
+          fi
+
+      - name: pytest
+        run: pytest -q --cov --cov-report=xml --cov-report=term-missing
+
+      - name: Publica relatorio de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-python
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # (c) Lint, tipos e build do web
+  # ---------------------------------------------------------------------------
+  web:
+    name: Web · eslint + tsc + next build
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: "**/pnpm-lock.yaml"
+
+      # O lockfile pode viver na raiz (workspace pnpm) ou dentro de apps/web.
+      # Descobrimos qual e o diretorio de instalacao em vez de assumir.
+      - name: Descobre a raiz do workspace pnpm
+        id: raiz
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-workspace.yaml ] || [ -f pnpm-lock.yaml ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=apps/web" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Instala dependencias
+        working-directory: ${{ steps.raiz.outputs.dir }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache do Next.js
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.[jt]s', 'apps/web/**/*.[jt]sx') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}-
+
+      - name: eslint
+        working-directory: apps/web
+        run: pnpm lint
+
+      - name: Verificacao de tipos
+        working-directory: apps/web
+        run: pnpm exec tsc --noEmit
+
+      - name: next build
+        working-directory: apps/web
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
+  # (d) Validacao do contrato OpenAPI
+  #     Ver a nota do cabecalho sobre a tolerancia a ausencia do arquivo.
+  # ---------------------------------------------------------------------------
+  openapi:
+    name: Contrato · spectral
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_openapi == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Instala spectral
+        run: npm install -g @stoplight/spectral-cli@6.14.2
+
+      - name: Seleciona ruleset
+        id: ruleset
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f packages/contracts/.spectral.yaml ]; then
+            echo "arquivo=packages/contracts/.spectral.yaml" >> "$GITHUB_OUTPUT"
+          elif [ -f .spectral.yaml ]; then
+            echo "arquivo=.spectral.yaml" >> "$GITHUB_OUTPUT"
+          else
+            # Fallback: ruleset embutido do spectral para OpenAPI 3.x.
+            printf 'extends: ["spectral:oas"]\n' > /tmp/spectral-padrao.yaml
+            echo "arquivo=/tmp/spectral-padrao.yaml" >> "$GITHUB_OUTPUT"
+            echo "::notice::Usando ruleset padrao spectral:oas (nenhum .spectral.yaml no repositorio)."
+          fi
+
+      # Estrito de proposito: --fail-severity=warn. Sem `|| true`,
+      # sem `continue-on-error`. Achado do spectral reprova o CI.
+      - name: spectral lint
+        run: |
+          spectral lint packages/contracts/openapi.yaml \
+            --ruleset "${{ steps.ruleset.outputs.arquivo }}" \
+            --fail-severity=warn \
+            --format=pretty
+
+      - name: Valida demais contratos YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import pathlib, sys, yaml
+          base = pathlib.Path("packages/contracts")
+          erros = 0
+          for arq in sorted(base.glob("*.yaml")) + sorted(base.glob("*.yml")):
+              try:
+                  yaml.safe_load(arq.read_text(encoding="utf-8"))
+                  print(f"ok   {arq}")
+              except Exception as exc:
+                  erros += 1
+                  print(f"FALHA {arq}: {exc}", file=sys.stderr)
+          sys.exit(1 if erros else 0)
+          PY
+
+  # ---------------------------------------------------------------------------
+  # (e) Build das imagens Docker (sem push — push e responsabilidade do deploy)
+  # ---------------------------------------------------------------------------
+  docker:
+    name: Docker · build ${{ matrix.servico }}
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_dockerfile == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: ${{ fromJSON(needs.deteccao.outputs.dockerfiles) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.servico }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.servico }}/Dockerfile
+          push: false
+          load: false
+          tags: ponto-${{ matrix.servico }}:ci-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+
+  # ---------------------------------------------------------------------------
+  # Validacao dos proprios arquivos de infra (sempre roda: infra/ ja existe)
+  # ---------------------------------------------------------------------------
+  infra:
+    name: Infra · compose + YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Sintaxe YAML de todos os arquivos versionados
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install --quiet pyyaml
+          python - <<'PY'
+          import pathlib, sys, yaml
+          raiz = pathlib.Path(".")
+          ignorar = {".git", "node_modules", ".venv", ".next", "dist", "build"}
+          erros = 0
+          alvos = [p for ext in ("*.yml", "*.yaml") for p in raiz.rglob(ext)
+                   if not set(p.parts) & ignorar]
+          for arq in sorted(alvos):
+              try:
+                  list(yaml.safe_load_all(arq.read_text(encoding="utf-8")))
+                  print(f"ok    {arq}")
+              except Exception as exc:
+                  erros += 1
+                  print(f"FALHA {arq}: {exc}", file=sys.stderr)
+          print(f"\n{len(alvos)} arquivo(s), {erros} falha(s)")
+          sys.exit(1 if erros else 0)
+          PY
+
+      # docker compose config resolve interpolacao; usamos o .env.example para
+      # ter valores. Se uma variavel obrigatoria sumir do exemplo, isso quebra —
+      # o que e desejado: o exemplo tem que continuar sendo suficiente.
+      - name: docker compose config (producao)
+        run: |
+          docker compose \
+            --env-file infra/.env.example \
+            -f infra/docker-compose.yml \
+            config --quiet
+
+      - name: docker compose config (dev)
+        run: |
+          docker compose \
+            --env-file infra/.env.example \
+            -f infra/docker-compose.yml \
+            -f infra/docker-compose.dev.yml \
+            config --quiet
+
+      - name: Nenhum segredo versionado
+        shell: bash
+        run: |
+          set -euo pipefail
+          proibidos=$(git ls-files \
+            | grep -E '(^|/)\.env($|\.)|\.(pem|p12|pfx|key|jks|keystore)$|local\.properties$' \
+            | grep -v '\.example$' || true)
+          if [ -n "$proibidos" ]; then
+            echo "::error::Arquivo com aparencia de segredo versionado:"
+            echo "$proibidos"
+            exit 1
+          fi
+          echo "Nenhum segredo versionado."
+
+  # ---------------------------------------------------------------------------
+  # Gate agregador — este e o unico check a marcar como obrigatorio na branch
+  # protection. Jobs pulados (arvore ainda inexistente) nao reprovam; jobs que
+  # rodaram e falharam reprovam.
+  # ---------------------------------------------------------------------------
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [deteccao, lint-python, test-python, web, openapi, docker, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consolida resultado
+        shell: bash
+        run: |
+          set -euo pipefail
+          resultados='${{ toJSON(needs) }}'
+          echo "$resultados"
+          if echo "$resultados" | grep -q '"result": *"failure"'; then
+            echo "::error::Ao menos um job do CI falhou."
+            exit 1
+          fi
+          if echo "$resultados" | grep -q '"result": *"cancelled"'; then
+            echo "::error::Ao menos um job do CI foi cancelado."
+            exit 1
+          fi
+          echo "CI verde."

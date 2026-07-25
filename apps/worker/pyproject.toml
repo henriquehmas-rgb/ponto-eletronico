@@ -1,0 +1,109 @@
+####################################################################
+# ponto-worker - processamento assincrono (ARQ + Redis)
+#
+# Dois processos saem deste mesmo pacote, como declarado em
+# `infra/docker-compose.yml`:
+#
+#   worker     arq worker.main.WorkerSettings
+#   scheduler  arq worker.scheduler.SchedulerSettings
+#
+# Fase 0 entrega ANDAIME: as oito tarefas do sistema estao registradas
+# com nome, fila e assinatura definitivos, e devolvem um resultado
+# marcado como nao implementado. Nenhum calculo acontece aqui ainda.
+####################################################################
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ponto-worker"
+version = "0.1.0"
+description = "Workers ARQ do Ponto Eletronico: apuracao, arquivos fiscais, relatorios e webhooks"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "SEEG Servicos de Tecnologia da Informacao" }]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.12",
+    "Natural Language :: Portuguese (Brazilian)",
+]
+
+dependencies = [
+    "arq>=0.26",
+    "redis>=5.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0.30,<3.0",
+    "asyncpg>=0.29",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.7.4",
+    "mypy==1.13.0",
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    # `arq --watch /app` (command do override de desenvolvimento) importa
+    # watchfiles em tempo de execucao e falha com ImportError sem ela.
+    "watchfiles>=0.24",
+]
+
+[tool.setuptools]
+packages = ["worker", "worker.tarefas"]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.package-data]
+worker = ["py.typed"]
+
+# ==================================================================
+# ruff
+# ==================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "TID", "RUF", "ASYNC", "S"]
+ignore = ["B008", "RUF002", "RUF003", "N818"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["worker"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ==================================================================
+# mypy
+# ==================================================================
+[tool.mypy]
+python_version = "3.12"
+files = ["worker"]
+strict = true
+warn_unused_configs = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["arq.*", "redis.*"]
+ignore_missing_imports = true
+
+# ==================================================================
+# pytest
+# ==================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers --strict-config"

@@ -1,0 +1,982 @@
+# =============================================================================
+# Ponto Eletronico (REP-P multiempresa) - CATALOGO DE EVENTOS E WEBHOOKS
+# Arquivo: packages/contracts/events.yaml
+# Fase 0 - Fundacao e Contratos - Agente A1b
+#
+# Este arquivo e a FONTE DA VERDADE dos eventos de dominio. O worker publica
+# usando estes nomes, a tabela `webhooks.eventos` so aceita valores daqui, a
+# coluna `notificacoes.evento` referencia estes codigos e a trilha de auditoria
+# grava o mesmo nome em `auditoria.evento`. Falta um evento? Abra RFC.
+#
+# Convencoes:
+#   1. Nome no formato `<agregado>.<fato no participio>`, sempre em passado:
+#      o evento descreve algo que JA aconteceu e nao pode ser recusado.
+#   2. `versao` e inteiro. Mudanca compativel (campo novo opcional) NAO troca a
+#      versao; mudanca incompativel publica `<nome>` na versao seguinte e mantem
+#      a anterior por, no minimo, um ciclo de depreciacao de 180 dias.
+#   3. `webhook_publico: false` significa evento interno: dispara notificacao e
+#      trabalho de worker, mas nao e assinavel por cliente de integracao.
+#   4. O payload NUNCA carrega dado pessoal sensivel. Nada de template
+#      biometrico, foto, CID de atestado ou coordenada exata. O consumidor que
+#      precisar do detalhe busca na API com o proprio token e fica registrado
+#      em `acessos_dados_sensiveis`.
+#   5. Entrega ao menos uma vez (at-least-once). O consumidor DEVE deduplicar
+#      por `id` do envelope e tolerar reordenacao.
+# =============================================================================
+
+versao: "1.0.0"
+atualizado_em: "2026-07-25"
+
+# -----------------------------------------------------------------------------
+# Envelope de entrega (identico para todos os eventos)
+# -----------------------------------------------------------------------------
+envelope:
+  descricao: >-
+    Corpo HTTP de toda entrega de webhook. O evento especifico vai no campo `dados`,
+    conforme o `payload` declarado para aquele nome de evento.
+  media_type: application/json
+  schema:
+    type: object
+    required: [id, tipo, versao, ocorridoEm, tenantId, dados]
+    properties:
+      id:
+        type: string
+        format: uuid
+        description: >-
+          Identificador unico do evento de dominio. Estavel entre retentativas da mesma
+          entrega. E a chave de deduplicacao do consumidor.
+      tipo:
+        type: string
+        description: Nome do evento no catalogo, por exemplo marcacao.criada.
+      versao:
+        type: integer
+        format: int32
+        description: Versao do contrato do payload deste evento.
+      ocorridoEm:
+        type: string
+        format: date-time
+        description: Instante em que o fato ocorreu, no relogio do servidor.
+      publicadoEm:
+        type: string
+        format: date-time
+        description: Instante em que o evento foi enfileirado para entrega.
+      tenantId:
+        type: string
+        format: uuid
+        description: Tenant dono do dado. Sempre conferir contra o tenant esperado pelo consumidor.
+      empresaId:
+        type: string
+        format: uuid
+        description: Empresa (CNPJ) a que o fato pertence, quando aplicavel.
+      ambiente:
+        type: string
+        enum: [sandbox, producao]
+        description: Ambiente que originou o evento. Evento de sandbox nunca alcanca endpoint de producao.
+      tentativa:
+        type: integer
+        format: int32
+        description: Numero da tentativa de entrega, comecando em 1.
+      dados:
+        type: object
+        additionalProperties: true
+        description: Payload especifico do evento, conforme o catalogo abaixo.
+  exemplo:
+    id: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+    tipo: marcacao.criada
+    versao: 1
+    ocorridoEm: "2026-07-25T08:02:13-03:00"
+    publicadoEm: "2026-07-25T08:02:13-03:00"
+    tenantId: 1e5b93c0-7d24-4a11-9b6e-3c8f0a2d5471
+    empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+    ambiente: producao
+    tentativa: 1
+    dados: {}
+
+# -----------------------------------------------------------------------------
+# Assinatura HMAC
+# -----------------------------------------------------------------------------
+assinatura:
+  cabecalho: X-Ponto-Signature
+  algoritmo: HMAC-SHA256
+  formato: "t=<epoch_segundos>,v1=<hex_minusculo>"
+  base_assinada: "<epoch_segundos>.<corpo bruto exatamente como recebido>"
+  tolerancia_segundos: 300
+  observacoes: >-
+    Compare em tempo constante. Assine o corpo BRUTO, antes de qualquer parse ou
+    reserializacao, porque reserializar altera a ordem das chaves e quebra a verificacao.
+    Rejeite entregas com carimbo fora da tolerancia: e a defesa contra replay.
+  cabecalhos_adicionais:
+    X-Ponto-Event: Nome do evento, igual a `tipo` do envelope.
+    X-Ponto-Event-Id: Identificador do evento, igual a `id` do envelope. Use para deduplicar.
+    X-Ponto-Delivery-Id: Identificador da tentativa de entrega. Muda a cada retentativa.
+    X-Ponto-Tenant: Slug do tenant de origem.
+
+# -----------------------------------------------------------------------------
+# Politica de entrega
+# -----------------------------------------------------------------------------
+entrega:
+  garantia: at-least-once
+  ordem_garantida: false
+  timeout_padrao_segundos: 10
+  sucesso: Qualquer status 2xx. O corpo da resposta e ignorado.
+  max_tentativas_padrao: 8
+  backoff: "exponencial com jitter: 10s, 30s, 2min, 10min, 30min, 2h, 6h, 12h"
+  dead_letter: >-
+    Esgotadas as tentativas, a entrega vai para a DLQ e pode ser reenviada manualmente em
+    POST /v1/webhooks/{webhookId}/entregas/{entregaId}/reenviar.
+  desabilitacao_automatica: >-
+    Falhas consecutivas acima do limite do webhook mudam o status para desabilitadoPorFalha
+    e passam a responder PONTO-WEBH-002 no cadastro.
+  recomendacao_consumidor: >-
+    Responda 2xx assim que persistir o evento e processe de forma assincrona. Processar
+    de forma sincrona antes de responder aumenta o timeout e provoca reentrega desnecessaria.
+
+# =============================================================================
+# Eventos
+# =============================================================================
+eventos:
+
+  # ---------------------------------------------------------------------------
+  # Marcacao
+  # ---------------------------------------------------------------------------
+  - nome: marcacao.criada
+    versao: 1
+    descricao: >-
+      Uma marcacao de ponto foi gravada com NSR atribuido e comprovante emitido. E o evento
+      mais volumoso do sistema: dimensione o consumidor para o pico de entrada e saida.
+    quando_dispara: >-
+      Imediatamente apos o commit da transacao que grava a marcacao, em qualquer canal
+      (terminal, mobile, web, totem ou api). Nunca dispara para item de fila offline
+      recusado nem para tratamento.
+    webhook_publico: true
+    escopo_requerido: marcacoes:ler
+    origem: api
+    payload:
+      type: object
+      required: [marcacaoId, colaboradorId, cpf, nsr, datahoraMarcacao, canal, repPId]
+      properties:
+        marcacaoId: {type: string, format: uuid, description: Identificador da marcacao.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador identificado no registro.}
+        vinculoId: {type: string, format: uuid, description: Vinculo ao qual a marcacao sera apurada.}
+        cpf: {type: string, pattern: "^[0-9]{11}$", description: "CPF congelado no registro, como vai para o AFD."}
+        matricula: {type: string, description: Matricula interna do colaborador na empresa.}
+        nsr: {type: integer, format: int64, description: Numero Sequencial de Registro atribuido pelo servidor.}
+        repPId: {type: string, format: uuid, description: REP-P dono da sequencia de NSR.}
+        unidadeId: {type: string, format: uuid, description: Unidade de origem do registro.}
+        datahoraMarcacao: {type: string, format: date-time, description: "Momento do fato, no relogio do servidor."}
+        datahoraGravacao: {type: string, format: date-time, description: Momento em que o servidor persistiu o registro.}
+        canal:
+          type: string
+          enum: [terminal, mobile, web, totem, api, importacao]
+          description: Canal de origem da marcacao.
+        coletadaOffline: {type: boolean, description: Verdadeiro quando o registro chegou por fila offline.}
+        comprovanteId: {type: string, format: uuid, description: Comprovante emitido para esta marcacao.}
+        hashRegistro: {type: string, pattern: "^[0-9a-f]{64}$", description: "SHA-256 do registro, elo da cadeia de hash."}
+    exemplo:
+      marcacaoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      cpf: "12345678909"
+      matricula: "001234"
+      nsr: 1842
+      repPId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      unidadeId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      datahoraMarcacao: "2026-07-25T08:02:13-03:00"
+      datahoraGravacao: "2026-07-25T08:02:13-03:00"
+      canal: terminal
+      coletadaOffline: false
+      comprovanteId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      hashRegistro: "3f5a1c9e2b7d40681a4c8e0f2d6b9137548ac0e2f1b3d7695a8c0e4f2d1b6937"
+
+  - nome: marcacao.suspeita
+    versao: 1
+    descricao: >-
+      Marcacao gravada com score de confianca entre o limiar de bloqueio e o de revisao. O
+      registro EXISTE e vale legalmente; o que fica pendente e a revisao humana do risco.
+    quando_dispara: >-
+      Junto com marcacao.criada, quando a classificacao de confianca resulta em media e o
+      registro entra na fila de revisao do gestor.
+    webhook_publico: true
+    escopo_requerido: marcacoes:ler
+    origem: api
+    observacao_lgpd: >-
+      O payload traz apenas os nomes dos sinais acionados, nunca a coordenada exata, a foto
+      nem o identificador do aparelho.
+    payload:
+      type: object
+      required: [marcacaoId, colaboradorId, scoreConfianca, classificacao, sinais]
+      properties:
+        marcacaoId: {type: string, format: uuid, description: Marcacao sinalizada.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador do registro.}
+        nsr: {type: integer, format: int64, description: NSR da marcacao sinalizada.}
+        canal:
+          type: string
+          enum: [terminal, mobile, web, totem, api, importacao]
+          description: Canal de origem.
+        scoreConfianca: {type: integer, format: int32, description: Score composto de 0 a 100 calculado no servidor.}
+        classificacao:
+          type: string
+          enum: [alta, media, baixa, bloqueada]
+          description: Faixa resultante da comparacao com os limiares da politica de registro.
+        sinais:
+          type: array
+          items: {type: string}
+          description: >-
+            Sinais que puxaram o score para baixo, por exemplo foraGeocerca, modoDesenvolvedor,
+            attestationReprovado, mockLocation, velocidadeImpossivel.
+        revisaoStatus:
+          type: string
+          enum: [naoRequer, pendente, aprovada, rejeitada]
+          description: Estado da fila de revisao no momento do evento.
+    exemplo:
+      marcacaoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      nsr: 1842
+      canal: mobile
+      scoreConfianca: 58
+      classificacao: media
+      sinais: [foraGeocerca, modoDesenvolvedor]
+      revisaoStatus: pendente
+
+  - nome: marcacao.sincronizada_offline
+    versao: 1
+    descricao: >-
+      Item capturado sem rede foi validado (HMAC e contador monotonico) e convertido em
+      marcacao. A marcacao permanece sinalizada como coletada offline no espelho: o sistema
+      nunca finge que o registro foi online.
+    quando_dispara: >-
+      Quando a fila offline e processada com sucesso. Itens fora do TTL nao geram este evento:
+      viram ocorrencia (PONTO-MARC-005).
+    webhook_publico: true
+    escopo_requerido: marcacoes:ler
+    origem: worker
+    payload:
+      type: object
+      required: [marcacaoId, filaOfflineId, colaboradorId, datahoraMarcacao, atrasoMinutos]
+      properties:
+        marcacaoId: {type: string, format: uuid, description: Marcacao criada a partir do item.}
+        filaOfflineId: {type: string, format: uuid, description: Item da fila offline consumido.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador do registro.}
+        dispositivoId: {type: string, format: uuid, description: Aparelho que originou a captura.}
+        datahoraMarcacao: {type: string, format: date-time, description: Momento do fato preservado do instante da captura.}
+        datahoraDispositivo: {type: string, format: date-time, description: "Relogio do aparelho no momento da captura, guardado como evidencia."}
+        recebidoEm: {type: string, format: date-time, description: Momento em que o item chegou ao servidor.}
+        atrasoMinutos: {type: integer, format: int32, description: Minutos entre a captura e a sincronizacao.}
+        confiancaTemporal:
+          type: string
+          enum: [alta, media, baixa]
+          description: Classificacao da confianca do horario, derivada do relogio monotonico do aparelho.
+    exemplo:
+      marcacaoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      filaOfflineId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      dispositivoId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      datahoraMarcacao: "2026-07-24T17:58:41-03:00"
+      datahoraDispositivo: "2026-07-24T17:58:39-03:00"
+      recebidoEm: "2026-07-25T07:12:05-03:00"
+      atrasoMinutos: 794
+      confiancaTemporal: alta
+
+  # ---------------------------------------------------------------------------
+  # Ajuste de ponto (solicitacao + tratamento)
+  # ---------------------------------------------------------------------------
+  - nome: ajuste.solicitado
+    versao: 1
+    descricao: >-
+      Um pedido de ajuste de ponto foi aberto e entrou na cadeia de aprovacao. Ajuste NUNCA
+      altera marcacao: aprovado, ele vira tratamento e se soma a marcacao na apuracao.
+    quando_dispara: Na criacao de uma solicitacao cujo tipo pertence a categoria ajustePonto.
+    webhook_publico: true
+    escopo_requerido: solicitacoes:ler
+    origem: api
+    payload:
+      type: object
+      required: [solicitacaoId, protocolo, colaboradorId, dataReferencia, tipoSolicitacaoCodigo]
+      properties:
+        solicitacaoId: {type: string, format: uuid, description: Solicitacao criada.}
+        protocolo: {type: string, description: Numero de protocolo legivel informado ao colaborador.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador alvo do ajuste.}
+        vinculoId: {type: string, format: uuid, description: Vinculo alvo do ajuste.}
+        solicitanteUsuarioId: {type: string, format: uuid, description: Usuario que abriu o pedido.}
+        tipoSolicitacaoCodigo: {type: string, description: Codigo do tipo de solicitacao.}
+        dataReferencia: {type: string, format: date, description: Dia da jornada a ser corrigido.}
+        descricao: {type: string, description: Justificativa informada pelo solicitante.}
+        possuiAnexo: {type: boolean, description: Indica se ha documento anexado (o conteudo nao trafega no evento).}
+        prazoEm: {type: string, format: date-time, description: Prazo de resposta da etapa corrente.}
+        etapaAtual: {type: integer, format: int32, description: Indice da etapa em andamento na cadeia de aprovacao.}
+    exemplo:
+      solicitacaoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      protocolo: "2026-000184"
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      solicitanteUsuarioId: 1e5b93c0-7d24-4a11-9b6e-3c8f0a2d5471
+      tipoSolicitacaoCodigo: ajuste_ponto
+      dataReferencia: "2026-07-22"
+      descricao: Esqueci de registrar a saida do intervalo.
+      possuiAnexo: false
+      prazoEm: "2026-07-27T18:00:00-03:00"
+      etapaAtual: 1
+
+  - nome: ajuste.aprovado
+    versao: 1
+    descricao: >-
+      O pedido de ajuste percorreu a cadeia e foi aprovado. O tratamento correspondente foi
+      criado e o dia entrou na fila de recalculo.
+    quando_dispara: Na aprovacao da ultima etapa da cadeia definida no tipo de solicitacao.
+    webhook_publico: true
+    escopo_requerido: solicitacoes:ler
+    origem: api
+    payload:
+      type: object
+      required: [solicitacaoId, protocolo, colaboradorId, dataReferencia, tratamentoId, decididoEm]
+      properties:
+        solicitacaoId: {type: string, format: uuid, description: Solicitacao aprovada.}
+        protocolo: {type: string, description: Numero de protocolo.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador alvo.}
+        vinculoId: {type: string, format: uuid, description: Vinculo alvo.}
+        dataReferencia: {type: string, format: date, description: Dia corrigido.}
+        tratamentoId: {type: string, format: uuid, description: Tratamento gerado pela aprovacao.}
+        aprovadorUsuarioId: {type: string, format: uuid, description: Usuario que decidiu.}
+        porDelegacao: {type: boolean, description: Verdadeiro quando a decisao foi exercida por delegacao.}
+        decididoEm: {type: string, format: date-time, description: Instante da decisao final.}
+        comentario: {type: string, description: Comentario do aprovador.}
+    exemplo:
+      solicitacaoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      protocolo: "2026-000184"
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      dataReferencia: "2026-07-22"
+      tratamentoId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      aprovadorUsuarioId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      porDelegacao: false
+      decididoEm: "2026-07-23T10:41:02-03:00"
+      comentario: Conferido com o registro do portao.
+
+  - nome: ajuste.reprovado
+    versao: 1
+    descricao: O pedido de ajuste foi reprovado. Nenhum tratamento e criado e a apuracao do dia nao muda.
+    quando_dispara: Quando qualquer etapa da cadeia decide por reprovar.
+    webhook_publico: true
+    escopo_requerido: solicitacoes:ler
+    origem: api
+    payload:
+      type: object
+      required: [solicitacaoId, protocolo, colaboradorId, dataReferencia, decididoEm, motivo]
+      properties:
+        solicitacaoId: {type: string, format: uuid, description: Solicitacao reprovada.}
+        protocolo: {type: string, description: Numero de protocolo.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador alvo.}
+        dataReferencia: {type: string, format: date, description: Dia que permanece sem correcao.}
+        etapa: {type: integer, format: int32, description: Etapa em que a reprovacao ocorreu.}
+        aprovadorUsuarioId: {type: string, format: uuid, description: Usuario que decidiu.}
+        decididoEm: {type: string, format: date-time, description: Instante da decisao.}
+        motivo: {type: string, description: "Justificativa da reprovacao, exibida ao colaborador."}
+    exemplo:
+      solicitacaoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      protocolo: "2026-000184"
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      dataReferencia: "2026-07-22"
+      etapa: 1
+      aprovadorUsuarioId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      decididoEm: "2026-07-23T10:44:57-03:00"
+      motivo: Horario informado nao confere com o controle de acesso da unidade.
+
+  # ---------------------------------------------------------------------------
+  # Apuracao e fechamento
+  # ---------------------------------------------------------------------------
+  - nome: apuracao.recalculada
+    versao: 1
+    descricao: >-
+      O motor reprocessou um intervalo e o resultado mudou. Recalculo sem mudanca efetiva NAO
+      dispara evento: o hash dos insumos e comparado antes.
+    quando_dispara: Ao final do processamento assincrono de recalculo, por vinculo e intervalo.
+    webhook_publico: true
+    escopo_requerido: tratamentos:ler
+    origem: worker
+    payload:
+      type: object
+      required: [vinculoId, colaboradorId, dataInicio, dataFim, diasAlterados, motivo]
+      properties:
+        recalculoId: {type: string, format: uuid, description: Processamento que originou o recalculo.}
+        vinculoId: {type: string, format: uuid, description: Vinculo reprocessado.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador do vinculo.}
+        dataInicio: {type: string, format: date, description: Primeiro dia do intervalo reprocessado.}
+        dataFim: {type: string, format: date, description: Ultimo dia do intervalo reprocessado.}
+        diasAlterados: {type: integer, format: int32, description: Quantidade de dias cujo resultado mudou.}
+        motivo:
+          type: string
+          enum: [tratamento, afastamento, jornada, escala, feriado, marcacaoTardia, politicaBanco, manual]
+          description: Insumo que provocou o reprocessamento.
+        saldoAnteriorMinutos: {type: integer, format: int32, description: Soma do saldo do intervalo antes do recalculo.}
+        saldoNovoMinutos: {type: integer, format: int32, description: Soma do saldo do intervalo depois do recalculo.}
+    exemplo:
+      recalculoId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      dataInicio: "2026-07-22"
+      dataFim: "2026-07-22"
+      diasAlterados: 1
+      motivo: tratamento
+      saldoAnteriorMinutos: -62
+      saldoNovoMinutos: 0
+
+  - nome: periodo.fechado
+    versao: 1
+    descricao: >-
+      Um periodo foi fechado para um escopo. A partir daqui, tratamento e recalculo nos dias
+      cobertos respondem PONTO-PER-001 ate a reabertura autorizada.
+    quando_dispara: Na conclusao do fechamento, depois de gerados os espelhos do escopo.
+    webhook_publico: true
+    escopo_requerido: fechamentos:ler
+    origem: api
+    payload:
+      type: object
+      required: [fechamentoId, periodoId, empresaId, escopo, dataInicio, dataFim, fechadoEm]
+      properties:
+        fechamentoId: {type: string, format: uuid, description: Fechamento concluido.}
+        periodoId: {type: string, format: uuid, description: Periodo de apuracao travado.}
+        empresaId: {type: string, format: uuid, description: Empresa do fechamento.}
+        escopo:
+          type: string
+          enum: [empresa, unidade, departamento, equipe, colaborador]
+          description: Abrangencia da trava.
+        dataInicio: {type: string, format: date, description: Primeiro dia travado.}
+        dataFim: {type: string, format: date, description: Ultimo dia travado.}
+        competenciaFolha: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$", description: Competencia da folha que consome o periodo.}
+        totalColaboradores: {type: integer, format: int32, description: Colaboradores abrangidos.}
+        totalPendencias: {type: integer, format: int32, description: Ocorrencias e solicitacoes ainda abertas no momento do fechamento.}
+        fechadoPor: {type: string, format: uuid, description: Usuario que fechou.}
+        fechadoEm: {type: string, format: date-time, description: Instante do fechamento.}
+        hashConteudo: {type: string, pattern: "^[0-9a-f]{64}$", description: Hash do conjunto de apuracoes travadas.}
+    exemplo:
+      fechamentoId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      periodoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      escopo: empresa
+      dataInicio: "2026-07-01"
+      dataFim: "2026-07-31"
+      competenciaFolha: "2026-07"
+      totalColaboradores: 184
+      totalPendencias: 0
+      fechadoPor: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      fechadoEm: "2026-08-03T16:20:11-03:00"
+      hashConteudo: "9a1f7c3e5b0d284617ac9e0f3d2b6851740ce2a1f9b3d76058c2e4f1a6d093b7"
+
+  - nome: periodo.reaberto
+    versao: 1
+    descricao: >-
+      Um periodo fechado foi reaberto. A reabertura e sempre nominal e justificada; o motivo
+      aparece no espelho retificado e na trilha de auditoria.
+    quando_dispara: Na reabertura autorizada de um fechamento.
+    webhook_publico: true
+    escopo_requerido: fechamentos:ler
+    origem: api
+    payload:
+      type: object
+      required: [fechamentoId, periodoId, empresaId, reabertoEm, reabertoPor, motivo]
+      properties:
+        fechamentoId: {type: string, format: uuid, description: Fechamento reaberto.}
+        periodoId: {type: string, format: uuid, description: Periodo destravado.}
+        empresaId: {type: string, format: uuid, description: Empresa do fechamento.}
+        dataInicio: {type: string, format: date, description: Primeiro dia destravado.}
+        dataFim: {type: string, format: date, description: Ultimo dia destravado.}
+        reabertoPor: {type: string, format: uuid, description: Usuario responsavel pela reabertura.}
+        reabertoEm: {type: string, format: date-time, description: Instante da reabertura.}
+        motivo: {type: string, description: Justificativa obrigatoria da reabertura.}
+        espelhosInvalidados: {type: integer, format: int32, description: Espelhos oficiais que precisarao de nova versao.}
+    exemplo:
+      fechamentoId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      periodoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      dataInicio: "2026-07-01"
+      dataFim: "2026-07-31"
+      reabertoPor: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      reabertoEm: "2026-08-05T09:03:44-03:00"
+      motivo: Atestado medico retroativo entregue pelo colaborador em 04/08.
+      espelhosInvalidados: 1
+
+  # ---------------------------------------------------------------------------
+  # Banco de horas
+  # ---------------------------------------------------------------------------
+  - nome: banco_horas.vencendo
+    versao: 1
+    descricao: >-
+      Horas de banco vao vencer dentro de uma das antecedencias configuradas na politica
+      (padrao 30, 15 e 7 dias). Dispara uma vez por antecedencia, por conta.
+    quando_dispara: Rotina diaria do scheduler que projeta o vencimento por conta aberta.
+    webhook_publico: true
+    escopo_requerido: banco-horas:ler
+    origem: scheduler
+    payload:
+      type: object
+      required: [contaId, colaboradorId, vinculoId, minutosAVencer, venceEm, diasRestantes]
+      properties:
+        contaId: {type: string, format: uuid, description: Conta de banco de horas.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador titular do saldo.}
+        vinculoId: {type: string, format: uuid, description: Vinculo dono da conta.}
+        contaCodigo: {type: string, description: "Codigo da conta dentro do vinculo, por exemplo normal ou sobreaviso."}
+        minutosAVencer: {type: integer, format: int32, description: Minutos que vencem na data indicada.}
+        saldoAtualMinutos: {type: integer, format: int32, description: Saldo total da conta no momento do aviso.}
+        venceEm: {type: string, format: date, description: Data do vencimento.}
+        diasRestantes: {type: integer, format: int32, description: "Antecedencia do aviso, em dias."}
+        acaoVencimento:
+          type: string
+          enum: [quitarFolha, expirar, prorrogar, manter]
+          description: O que a politica fara com as horas no vencimento.
+    exemplo:
+      contaId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      contaCodigo: normal
+      minutosAVencer: 720
+      saldoAtualMinutos: 1980
+      venceEm: "2026-08-24"
+      diasRestantes: 30
+      acaoVencimento: quitarFolha
+
+  - nome: banco_horas.quitado
+    versao: 1
+    descricao: >-
+      Uma quitacao foi efetivada: pagamento em folha, folga usufruida, acerto de rescisao,
+      compensacao programada ou expiracao. O lancamento correspondente ja esta no extrato.
+    quando_dispara: Na efetivacao da quitacao, depois de gravado o lancamento no extrato imutavel.
+    webhook_publico: true
+    escopo_requerido: banco-horas:ler
+    origem: api
+    payload:
+      type: object
+      required: [quitacaoId, contaId, colaboradorId, tipo, minutos, dataEfetivacao, saldoAposMinutos]
+      properties:
+        quitacaoId: {type: string, format: uuid, description: Quitacao efetivada.}
+        contaId: {type: string, format: uuid, description: Conta liquidada.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador titular.}
+        lancamentoId: {type: string, format: uuid, description: Lancamento gerado no extrato.}
+        tipo:
+          type: string
+          enum: [folha, folga, rescisao, expiracao, compensacaoProgramada]
+          description: Forma de liquidacao.
+        minutos: {type: integer, format: int32, description: Minutos liquidados.}
+        valor: {type: number, format: double, description: Valor monetario quando a quitacao e em dinheiro.}
+        competenciaFolha: {type: string, pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$", description: Competencia em que o pagamento entra na folha.}
+        dataEfetivacao: {type: string, format: date, description: Data da efetivacao.}
+        saldoAposMinutos: {type: integer, format: int32, description: Saldo da conta apos a quitacao.}
+    exemplo:
+      quitacaoId: 1e5b93c0-7d24-4a11-9b6e-3c8f0a2d5471
+      contaId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      lancamentoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      tipo: folha
+      minutos: 720
+      valor: 312.5
+      competenciaFolha: "2026-08"
+      dataEfetivacao: "2026-08-25"
+      saldoAposMinutos: 1260
+
+  # ---------------------------------------------------------------------------
+  # Pessoas
+  # ---------------------------------------------------------------------------
+  - nome: colaborador.admitido
+    versao: 1
+    descricao: >-
+      Um colaborador passou a ter vinculo ativo. E o gatilho tipico de provisionamento em
+      sistemas externos: cracha, acesso, e-mail e folha.
+    quando_dispara: >-
+      Na criacao do vinculo com status ativo, ou na virada da data de inicio quando o vinculo
+      foi cadastrado com antecedencia.
+    webhook_publico: true
+    escopo_requerido: colaboradores:ler
+    origem: api
+    payload:
+      type: object
+      required: [colaboradorId, vinculoId, empresaId, matricula, cpf, dataInicio]
+      properties:
+        colaboradorId: {type: string, format: uuid, description: Colaborador admitido.}
+        vinculoId: {type: string, format: uuid, description: Vinculo criado.}
+        empresaId: {type: string, format: uuid, description: Empresa empregadora.}
+        unidadeId: {type: string, format: uuid, description: Unidade de lotacao.}
+        matricula: {type: string, description: Matricula interna da empresa.}
+        matriculaEsocial: {type: string, description: Matricula do vinculo no eSocial.}
+        cpf: {type: string, pattern: "^[0-9]{11}$", description: CPF do colaborador.}
+        nomeCompleto: {type: string, description: "Nome completo, ou nome social quando preenchido."}
+        cargoId: {type: string, format: uuid, description: Cargo do vinculo.}
+        dataInicio: {type: string, format: date, description: Data de inicio do vinculo.}
+        apuraPonto: {type: boolean, description: Falso quando o vinculo existe para folha mas nao entra no motor de apuracao.}
+    exemplo:
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      unidadeId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      matricula: "001234"
+      matriculaEsocial: "0000000001234"
+      cpf: "12345678909"
+      nomeCompleto: Maria Aparecida de Souza
+      cargoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      dataInicio: "2026-08-01"
+      apuraPonto: true
+
+  - nome: colaborador.demitido
+    versao: 1
+    descricao: >-
+      Um vinculo foi encerrado. Desprovisione acessos externos, mas NAO elimine dados: a
+      marcacao tem guarda obrigatoria de 5 anos.
+    quando_dispara: No encerramento do vinculo, com data de desligamento definida.
+    webhook_publico: true
+    escopo_requerido: colaboradores:ler
+    origem: api
+    payload:
+      type: object
+      required: [colaboradorId, vinculoId, empresaId, dataFim]
+      properties:
+        colaboradorId: {type: string, format: uuid, description: Colaborador desligado.}
+        vinculoId: {type: string, format: uuid, description: Vinculo encerrado.}
+        empresaId: {type: string, format: uuid, description: Empresa empregadora.}
+        matricula: {type: string, description: Matricula interna da empresa.}
+        dataFim: {type: string, format: date, description: Ultimo dia do vinculo.}
+        motivoDesligamento: {type: string, description: Motivo registrado no encerramento.}
+        saldoBancoMinutos: {type: integer, format: int32, description: Saldo de banco de horas pendente de acerto na rescisao.}
+        possuiPendencias: {type: boolean, description: Verdadeiro quando ha ocorrencias ou solicitacoes abertas.}
+    exemplo:
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      matricula: "001234"
+      dataFim: "2026-09-30"
+      motivoDesligamento: Pedido de demissao
+      saldoBancoMinutos: 480
+      possuiPendencias: false
+
+  # ---------------------------------------------------------------------------
+  # Terminal coletor
+  # ---------------------------------------------------------------------------
+  - nome: terminal.offline
+    versao: 1
+    descricao: >-
+      Um coletor deixou de dar sinal por mais tempo que o tolerado. Marcacoes nao se perdem: o
+      equipamento armazena localmente e o catch-up recupera na volta.
+    quando_dispara: >-
+      Quando a rotina de saude constata ausencia de contato acima do limite configurado para o
+      modo de comunicacao do terminal.
+    webhook_publico: true
+    escopo_requerido: dispositivos:ler
+    origem: scheduler
+    payload:
+      type: object
+      required: [terminalId, empresaId, numeroSerie, ultimoContatoEm, minutosSemContato]
+      properties:
+        terminalId: {type: string, format: uuid, description: Terminal afetado.}
+        empresaId: {type: string, format: uuid, description: Empresa dona do terminal.}
+        unidadeId: {type: string, format: uuid, description: Unidade onde o terminal esta instalado.}
+        numeroSerie: {type: string, description: Numero de serie do equipamento.}
+        fabricante: {type: string, description: Fabricante do coletor.}
+        ultimoContatoEm: {type: string, format: date-time, description: Ultimo contato conhecido.}
+        minutosSemContato: {type: integer, format: int32, description: Minutos decorridos desde o ultimo contato.}
+        logsPendentesEstimados: {type: integer, format: int32, description: Estimativa de registros ainda nao coletados.}
+    exemplo:
+      terminalId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      unidadeId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      numeroSerie: IDF-2026-000417
+      fabricante: control_id
+      ultimoContatoEm: "2026-07-25T06:41:00-03:00"
+      minutosSemContato: 37
+      logsPendentesEstimados: 12
+
+  - nome: terminal.online
+    versao: 1
+    descricao: >-
+      O coletor voltou a se comunicar. O evento traz quantos registros o catch-up recuperou,
+      o que permite ao consumidor saber que houve reposicao retroativa de marcacoes.
+    quando_dispara: No primeiro contato bem-sucedido apos um periodo classificado como offline.
+    webhook_publico: true
+    escopo_requerido: dispositivos:ler
+    origem: worker
+    payload:
+      type: object
+      required: [terminalId, empresaId, numeroSerie, retornoEm]
+      properties:
+        terminalId: {type: string, format: uuid, description: Terminal que retornou.}
+        empresaId: {type: string, format: uuid, description: Empresa dona do terminal.}
+        unidadeId: {type: string, format: uuid, description: Unidade do terminal.}
+        numeroSerie: {type: string, description: Numero de serie do equipamento.}
+        retornoEm: {type: string, format: date-time, description: Instante do retorno.}
+        minutosIndisponivel: {type: integer, format: int32, description: Duracao total da indisponibilidade.}
+        marcacoesRecuperadas: {type: integer, format: int32, description: Registros trazidos pelo catch-up apos o retorno.}
+        firmware: {type: string, description: Versao de firmware reportada no retorno.}
+    exemplo:
+      terminalId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      unidadeId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      numeroSerie: IDF-2026-000417
+      retornoEm: "2026-07-25T07:18:22-03:00"
+      minutosIndisponivel: 74
+      marcacoesRecuperadas: 12
+      firmware: "6.9.1"
+
+  # ---------------------------------------------------------------------------
+  # Arquivos fiscais e espelho
+  # ---------------------------------------------------------------------------
+  - nome: afd.gerado
+    versao: 1
+    descricao: >-
+      Um Arquivo Fonte de Dados foi gerado. O AFD deriva exclusivamente das marcacoes; nenhum
+      tratamento entra nele. O evento nao carrega o arquivo, apenas o metadado e o hash.
+    quando_dispara: Ao final da geracao, quando o status do arquivo passa a gerado.
+    webhook_publico: true
+    escopo_requerido: fiscal:ler
+    origem: worker
+    payload:
+      type: object
+      required: [arquivoId, empresaId, repPId, periodoInicio, periodoFim, nsrInicial, nsrFinal, totalRegistros, hashSha256]
+      properties:
+        arquivoId: {type: string, format: uuid, description: Arquivo AFD gerado.}
+        empresaId: {type: string, format: uuid, description: Empresa do arquivo.}
+        repPId: {type: string, format: uuid, description: REP-P que originou os registros.}
+        nomeArquivo: {type: string, description: Nome do arquivo gerado.}
+        periodoInicio: {type: string, format: date, description: Primeiro dia contemplado.}
+        periodoFim: {type: string, format: date, description: Ultimo dia contemplado.}
+        nsrInicial: {type: integer, format: int64, description: Primeiro NSR contido no arquivo.}
+        nsrFinal: {type: integer, format: int64, description: Ultimo NSR contido no arquivo.}
+        totalRegistros: {type: integer, format: int64, description: Quantidade de registros no arquivo.}
+        tamanhoBytes: {type: integer, format: int64, description: Tamanho do arquivo em bytes.}
+        hashSha256: {type: string, pattern: "^[0-9a-f]{64}$", description: "SHA-256 do arquivo, exigido pelo leiaute."}
+        assinado: {type: boolean, description: Verdadeiro quando o .p7s CAdES ja foi produzido.}
+        fracionado: {type: boolean, description: Verdadeiro quando o arquivo e uma fracao do periodo.}
+    exemplo:
+      arquivoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      repPId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      nomeArquivo: AFD_60258502000149_20260701_20260731.txt
+      periodoInicio: "2026-07-01"
+      periodoFim: "2026-07-31"
+      nsrInicial: 1
+      nsrFinal: 8421
+      totalRegistros: 8424
+      tamanhoBytes: 683520
+      hashSha256: "5c2e8a1f4b70d963285ae0c1f7d3b6940a8e2c5f1b7d0396482ae1c0f5d3b697"
+      assinado: true
+      fracionado: false
+
+  - nome: aej.gerado
+    versao: 1
+    descricao: >-
+      Um Arquivo Eletronico de Jornada foi gerado pelo Programa de Tratamento. O AEJ e quem
+      enxerga tratamento, horario contratual, ausencias e banco de horas.
+    quando_dispara: Ao final da geracao, quando o status do arquivo passa a gerado.
+    webhook_publico: true
+    escopo_requerido: fiscal:ler
+    origem: worker
+    payload:
+      type: object
+      required: [arquivoId, empresaId, periodoInicio, periodoFim, totalVinculos, hashSha256]
+      properties:
+        arquivoId: {type: string, format: uuid, description: Arquivo AEJ gerado.}
+        empresaId: {type: string, format: uuid, description: Empresa do arquivo.}
+        periodoId: {type: string, format: uuid, description: Periodo de apuracao correspondente.}
+        nomeArquivo: {type: string, description: Nome do arquivo gerado.}
+        periodoInicio: {type: string, format: date, description: Primeiro dia contemplado.}
+        periodoFim: {type: string, format: date, description: Ultimo dia contemplado.}
+        totalVinculos: {type: integer, format: int32, description: Vinculos exportados.}
+        totalMarcacoes: {type: integer, format: int64, description: Marcacoes exportadas.}
+        totalAusencias: {type: integer, format: int32, description: Ausencias exportadas.}
+        totalLancamentosBanco: {type: integer, format: int32, description: Lancamentos de banco de horas exportados.}
+        hashSha256: {type: string, pattern: "^[0-9a-f]{64}$", description: SHA-256 do arquivo.}
+        assinado: {type: boolean, description: Verdadeiro quando o .p7s CAdES ja foi produzido.}
+    exemplo:
+      arquivoId: 1e5b93c0-7d24-4a11-9b6e-3c8f0a2d5471
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      periodoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      nomeArquivo: AEJ_60258502000149_20260701_20260731.txt
+      periodoInicio: "2026-07-01"
+      periodoFim: "2026-07-31"
+      totalVinculos: 184
+      totalMarcacoes: 8424
+      totalAusencias: 37
+      totalLancamentosBanco: 412
+      hashSha256: "0d7b3f1a6c5e2984170ac3e2f0d1b68594c7ae201f9b3d6580c2e4a1f6d0937b"
+      assinado: false
+
+  - nome: espelho.assinado
+    versao: 1
+    descricao: >-
+      O colaborador (ou outro signatario) registrou o aceite eletronico do espelho de ponto. A
+      assinatura vincula o hash do espelho no instante do aceite: se o espelho mudar, a
+      assinatura deixa de conferir, que e o comportamento desejado.
+    quando_dispara: No registro do aceite, com carimbo de tempo do servidor.
+    webhook_publico: true
+    escopo_requerido: fechamentos:ler
+    origem: api
+    payload:
+      type: object
+      required: [espelhoId, colaboradorId, vinculoId, periodoId, signatarioTipo, metodo, carimboTempo, hashAssinado]
+      properties:
+        espelhoId: {type: string, format: uuid, description: Espelho assinado.}
+        assinaturaId: {type: string, format: uuid, description: Registro da assinatura.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador dono do espelho.}
+        vinculoId: {type: string, format: uuid, description: Vinculo do espelho.}
+        periodoId: {type: string, format: uuid, description: Periodo apurado.}
+        versaoEspelho: {type: integer, format: int32, description: Versao do espelho assinada.}
+        signatarioTipo:
+          type: string
+          enum: [colaborador, gestor, rh, empregador]
+          description: Papel de quem assinou.
+        metodo:
+          type: string
+          enum: [aceiteEletronico, icpBrasil, biometria, senha, tokenEmail]
+          description: Meio de assinatura utilizado.
+        carimboTempo: {type: string, format: date-time, description: Instante do aceite registrado pelo servidor.}
+        hashAssinado: {type: string, pattern: "^[0-9a-f]{64}$", description: Hash do espelho no momento do aceite.}
+    exemplo:
+      espelhoId: 3b9d47e2-8c15-4a60-bf7c-2e0a9d61c483
+      assinaturaId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      periodoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      versaoEspelho: 1
+      signatarioTipo: colaborador
+      metodo: aceiteEletronico
+      carimboTempo: "2026-08-04T11:07:55-03:00"
+      hashAssinado: "e1c7a09f3b5d2846170ac9e2f0d3b68514c7ae209f1b3d6580c2e4a1f6d09b37"
+
+  # ---------------------------------------------------------------------------
+  # Eventos internos (nao assinaveis por cliente de integracao)
+  # ---------------------------------------------------------------------------
+  - nome: ocorrencia.aberta
+    versao: 1
+    descricao: >-
+      O motor detectou uma inconsistencia e abriu ocorrencia. Ocorrencia nao corrige nada: ela
+      chama o humano e alimenta a fila de trabalho do gestor.
+    quando_dispara: Durante a apuracao do dia, ao identificar desvio ou inconsistencia.
+    webhook_publico: false
+    escopo_requerido: tratamentos:ler
+    origem: worker
+    motivo_interno: >-
+      Volume alto e util sobretudo para a interface e as notificacoes. Integradores devem
+      consumir o relatorio de ocorrencias, que ja vem agregado.
+    payload:
+      type: object
+      required: [ocorrenciaId, colaboradorId, data, codigo, severidade]
+      properties:
+        ocorrenciaId: {type: string, format: uuid, description: Ocorrencia aberta.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador afetado.}
+        vinculoId: {type: string, format: uuid, description: Vinculo afetado.}
+        apuracaoDiaId: {type: string, format: uuid, description: Apuracao que originou a ocorrencia.}
+        data: {type: string, format: date, description: Dia da ocorrencia.}
+        codigo: {type: string, description: "Codigo fechado da ocorrencia, por exemplo marcacaoImpar."}
+        severidade:
+          type: string
+          enum: [info, atencao, alta, critica]
+          description: Gravidade atribuida pelo motor.
+        descricao: {type: string, description: Texto explicativo da ocorrencia.}
+    exemplo:
+      ocorrenciaId: c5a90f23-1b47-4e6d-82a5-9d3f0c7b6e18
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      vinculoId: 7e14a2c6-5d09-4b83-93f1-6a0c8e2d7b54
+      apuracaoDiaId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      data: "2026-07-22"
+      codigo: marcacao_impar
+      severidade: alta
+      descricao: Dia com numero impar de marcacoes; falta o par de saida.
+
+  - nome: comprovante.emitido
+    versao: 1
+    descricao: >-
+      O comprovante de registro foi emitido e esta disponivel eletronicamente. E o que dispensa
+      a impressao no momento da marcacao, desde que as ultimas 48 horas fiquem acessiveis.
+    quando_dispara: Na mesma transacao da marcacao, imediatamente apos a atribuicao do NSR.
+    webhook_publico: false
+    escopo_requerido: marcacoes:ler
+    origem: api
+    motivo_interno: >-
+      Redundante com marcacao.criada, que ja traz comprovanteId. Existe para a interface e para
+      a fila de notificacao push, nao para integracao externa.
+    payload:
+      type: object
+      required: [comprovanteId, marcacaoId, colaboradorId, numero, nsr, emitidoEm, hashSha256]
+      properties:
+        comprovanteId: {type: string, format: uuid, description: Comprovante emitido.}
+        marcacaoId: {type: string, format: uuid, description: Marcacao correspondente.}
+        colaboradorId: {type: string, format: uuid, description: Colaborador do registro.}
+        numero: {type: string, description: "Numero do comprovante, unico no tenant."}
+        nsr: {type: integer, format: int64, description: NSR da marcacao.}
+        emitidoEm: {type: string, format: date-time, description: Instante da emissao.}
+        hashSha256: {type: string, pattern: "^[0-9a-f]{64}$", description: Hash do conteudo do comprovante.}
+        canalEntrega:
+          type: string
+          enum: [app, web, email, impresso, api, terminal]
+          description: Canal por onde o comprovante foi disponibilizado.
+    exemplo:
+      comprovanteId: 8f3d0b71-4a2e-4c95-b06d-51e7a9c2f483
+      marcacaoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+      colaboradorId: f27c1a90-6e5b-4d38-9a02-8c4b71e3d605
+      numero: "2026072500001842"
+      nsr: 1842
+      emitidoEm: "2026-07-25T08:02:13-03:00"
+      hashSha256: "7b0d3f1a5c9e2846170ac3e2f0d1b68594c7ae201f9b3d6580c2e4a1f6d0937b"
+      canalEntrega: terminal
+
+  - nome: importacao.concluida
+    versao: 1
+    descricao: >-
+      Uma importacao terminou. O relatorio linha a linha fica disponivel para download e e o
+      que torna a carga de milhares de registros auditavel.
+    quando_dispara: Ao final do processamento, com sucesso total ou parcial.
+    webhook_publico: true
+    escopo_requerido: integracoes:ler
+    origem: worker
+    payload:
+      type: object
+      required: [importacaoId, tipo, status, totalLinhas, linhasSucesso, linhasErro]
+      properties:
+        importacaoId: {type: string, format: uuid, description: Importacao processada.}
+        empresaId: {type: string, format: uuid, description: Empresa alvo da carga.}
+        tipo:
+          type: string
+          enum: [colaboradores, estrutura, escalas, feriados, marcacoes, afdTerceiro, bancoHoras, biometria, afastamentos]
+          description: Tipo de importacao executada.
+        status:
+          type: string
+          enum: [concluido, concluidoComErros, falhou]
+          description: Desfecho do processamento.
+        totalLinhas: {type: integer, format: int32, description: Linhas lidas do arquivo.}
+        linhasSucesso: {type: integer, format: int32, description: Linhas processadas com sucesso.}
+        linhasErro: {type: integer, format: int32, description: Linhas recusadas.}
+        relatorioDisponivel: {type: boolean, description: Indica se ha relatorio de erros para download.}
+    exemplo:
+      importacaoId: 1e5b93c0-7d24-4a11-9b6e-3c8f0a2d5471
+      empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+      tipo: colaboradores
+      status: concluidoComErros
+      totalLinhas: 5000
+      linhasSucesso: 4987
+      linhasErro: 13
+      relatorioDisponivel: true
+
+  - nome: webhook.desabilitado
+    versao: 1
+    descricao: >-
+      Um webhook foi desabilitado automaticamente por falhas consecutivas. Nao e entregue no
+      proprio webhook desabilitado: aparece no painel de entregas e nas notificacoes do tenant.
+    quando_dispara: Quando falhasConsecutivas ultrapassa o limite configurado no webhook.
+    webhook_publico: false
+    escopo_requerido: webhooks:ler
+    origem: worker
+    motivo_interno: Entregar a um endpoint morto o aviso de que ele esta morto nao funcionaria.
+    payload:
+      type: object
+      required: [webhookId, nome, falhasConsecutivas, desabilitadoEm]
+      properties:
+        webhookId: {type: string, format: uuid, description: Webhook desabilitado.}
+        nome: {type: string, description: Nome do webhook no cadastro.}
+        url: {type: string, format: uri, description: Destino configurado.}
+        falhasConsecutivas: {type: integer, format: int32, description: Falhas consecutivas acumuladas.}
+        ultimoErro: {type: string, description: Ultimo erro observado na entrega.}
+        entregasNaDlq: {type: integer, format: int32, description: Entregas aguardando reenvio manual.}
+        desabilitadoEm: {type: string, format: date-time, description: Instante da desabilitacao automatica.}
+    exemplo:
+      webhookId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+      nome: folha-dominio
+      url: https://erp.cliente.com.br/hooks/ponto
+      falhasConsecutivas: 8
+      ultimoErro: "HTTP 502 apos 10s"
+      entregasNaDlq: 34
+      desabilitadoEm: "2026-07-25T04:15:00-03:00"

@@ -1,0 +1,8 @@
+.next
+node_modules
+pnpm-lock.yaml
+next-env.d.ts
+
+# Gerados a partir de packages/contracts/ — a formatacao e do gerador.
+src/lib/api/tipos.gerado.ts
+src/estilos/tokens.gerado.css

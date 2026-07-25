@@ -1,0 +1,271 @@
+# =============================================================================
+# Seguranca — Ponto Eletronico
+# =============================================================================
+# Sistema de ponto guarda CPF, PIS, geolocalizacao e biometria: o gate de
+# seguranca nao e opcional. Ver PROJETO.md §13 (gate de CI) e §7 (seguranca).
+#
+# Jobs:
+#   semgrep          SAST multi-linguagem (Python, TS/JS, Dockerfile, YAML)
+#   deps-python      pip-audit sobre as dependencias Python
+#   deps-node        pnpm audit sobre as dependencias do web
+#   segredos         gitleaks — nenhum segredo pode entrar no historico
+#   licencas         inventario de licencas (informativo, nao bloqueante)
+#
+# Politica de bloqueio: `semgrep`, `deps-*` e `segredos` reprovam o pipeline.
+# `licencas` e informativo — bloquear licenca ainda nao e decisao tomada.
+# =============================================================================
+
+name: Seguranca
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Toda segunda as 06:00 UTC (03:00 America/Sao_Paulo). Dependencia
+    # vulneravel aparece depois do merge, entao varredura periodica e necessaria.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: seguranca-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "9"
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # SAST — Semgrep
+  # ---------------------------------------------------------------------------
+  semgrep:
+    name: Semgrep · SAST
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala semgrep
+        run: pip install semgrep==1.97.0
+
+      # Regras usadas:
+      #   p/default          base curada do Semgrep
+      #   p/security-audit   varredura ampla de padroes inseguros
+      #   p/secrets          credencial embutida em codigo
+      #   p/python p/typescript p/dockerfile   especificas da stack
+      #   p/owasp-top-ten    cobertura OWASP
+      # Se existir .semgrep.yml no repositorio, ele entra tambem.
+      - name: Monta lista de configs
+        id: configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          configs="--config=p/default --config=p/security-audit --config=p/secrets"
+          configs="$configs --config=p/python --config=p/typescript"
+          configs="$configs --config=p/dockerfile --config=p/owasp-top-ten"
+          if [ -f .semgrep.yml ]; then
+            configs="$configs --config=.semgrep.yml"
+          fi
+          echo "valor=$configs" >> "$GITHUB_OUTPUT"
+
+      # Bloqueante: qualquer achado ERROR reprova. Achados WARNING/INFO viram
+      # anotacao no PR pelo SARIF, sem reprovar.
+      - name: Semgrep (achados ERROR reprovam)
+        run: |
+          semgrep scan ${{ steps.configs.outputs.valor }} \
+            --severity=ERROR \
+            --error \
+            --metrics=off \
+            --exclude=node_modules \
+            --exclude=.venv \
+            --exclude=.next \
+            --exclude='*.min.js'
+
+      - name: Semgrep (relatorio SARIF completo)
+        if: always()
+        run: |
+          semgrep scan ${{ steps.configs.outputs.valor }} \
+            --sarif \
+            --output=semgrep.sarif \
+            --metrics=off \
+            --exclude=node_modules \
+            --exclude=.venv \
+            --exclude=.next \
+            --exclude='*.min.js' || true
+
+      - name: Envia SARIF para o Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+        continue-on-error: true
+
+      - name: Guarda o SARIF como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Dependencias Python — pip-audit (base OSV/PyPI Advisory)
+  # ---------------------------------------------------------------------------
+  deps-python:
+    name: Dependencias · Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala pip-audit
+        run: pip install pip-audit==2.7.3
+
+      - name: Audita cada app Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          alvos=(apps/*/requirements.txt apps/*/pyproject.toml)
+          if [ ${#alvos[@]} -eq 0 ]; then
+            echo "::notice::Nenhuma arvore Python ainda; nada a auditar."
+            exit 0
+          fi
+
+          falhou=0
+          for alvo in "${alvos[@]}"; do
+            echo "::group::pip-audit $alvo"
+            case "$alvo" in
+              *requirements.txt) pip-audit --strict -r "$alvo" || falhou=1 ;;
+              *pyproject.toml)   pip-audit --strict -p "$(dirname "$alvo")" || falhou=1 ;;
+            esac
+            echo "::endgroup::"
+          done
+          exit $falhou
+
+  # ---------------------------------------------------------------------------
+  # Dependencias Node — pnpm audit
+  # ---------------------------------------------------------------------------
+  deps-node:
+    name: Dependencias · Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ha projeto Node?
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f package.json ] || [ -f apps/web/package.json ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Nenhum package.json ainda; nada a auditar."
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.existe == 'true'
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.existe == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: "**/pnpm-lock.yaml"
+
+      # --audit-level=high: vulnerabilidade alta ou critica reprova.
+      # Moderadas viram relatorio, para nao travar o time em ruido transitivo.
+      - name: pnpm audit
+        if: steps.check.outputs.existe == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="."
+          [ -f pnpm-lock.yaml ] || dir="apps/web"
+          cd "$dir"
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm audit --audit-level=high
+
+  # ---------------------------------------------------------------------------
+  # Segredos no historico — gitleaks
+  # Regra inegociavel da casa: segredo nunca entra no git.
+  # ---------------------------------------------------------------------------
+  segredos:
+    name: Segredos · gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Historico completo: segredo apagado em commit posterior continua
+          # sendo segredo vazado.
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+      # Rede de seguranca independente do gitleaks: nomes de arquivo que
+      # jamais podem estar versionados.
+      - name: Arquivos proibidos por nome
+        shell: bash
+        run: |
+          set -euo pipefail
+          proibidos=$(git ls-files \
+            | grep -E '(^|/)\.env($|\.)|\.(pem|p12|pfx|key|jks|keystore|p7s)$|local\.properties$|google-services\.json$|GoogleService-Info\.plist$' \
+            | grep -v '\.example$' || true)
+          if [ -n "$proibidos" ]; then
+            echo "::error::Arquivo sensivel versionado:"
+            echo "$proibidos"
+            exit 1
+          fi
+          echo "Nenhum arquivo sensivel versionado."
+
+  # ---------------------------------------------------------------------------
+  # Inventario de licencas — informativo
+  # ---------------------------------------------------------------------------
+  licencas:
+    name: Licencas · inventario
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Inventario Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          pip install pip-licenses==5.0.0
+          for req in apps/*/requirements.txt; do
+            pip install -r "$req"
+          done
+          pip-licenses --format=markdown --with-urls >> "$GITHUB_STEP_SUMMARY" || true

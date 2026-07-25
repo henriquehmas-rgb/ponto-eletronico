@@ -1,0 +1,4 @@
+# Ponto Eletronico — aplicacao interna, com dado pessoal de colaborador.
+# Nada aqui deve ser indexado. O layout raiz tambem envia robots: noindex.
+User-agent: *
+Disallow: /

@@ -1,0 +1,3795 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "$description": "Sistema de design tokens do Ponto Eletronico (REP-P multiempresa), no formato W3C Design Tokens (DTCG). FONTE DA VERDADE congelada na Fase 0: nenhuma fase posterior altera este arquivo sem RFC aprovada (protocolo em docs/rfc/README.md). ORGANIZACAO: 'primitivo' guarda os valores crus (rampas de cor 50..950, escala tipografica, grade de 8 pt); 'tema.claro' e 'tema.escuro' guardam os tokens SEMANTICOS, com caminhos identicos nos dois temas, cada um apontando por alias para um primitivo. O produto NUNCA consome primitivo diretamente na interface: consome sempre o token semantico do tema ativo. UNIDADES: tokens do tipo dimension usam o objeto {value, unit} do DTCG; converta para CSS concatenando (16 + 'px'). Cor em hexadecimal maiusculo de 6 digitos, ou 8 digitos quando ha alfa. CONTRASTE: todos os pares texto-sobre-fundo e elemento-de-interface deste arquivo foram MEDIDOS (nao estimados) pela formula da WCAG 2.2 a partir do hexadecimal final de 8 bits. A tabela completa com os ratios esta em $extensions['br.com.seeg.ponto'].contraste.pares.",
+  "$extensions": {
+    "br.com.seeg.ponto": {
+      "versao": "1.0.0",
+      "atualizadoEm": "2026-07-25",
+      "fase": "F0 - Fundacao e Contratos",
+      "agente": "A1c",
+      "metodo": {
+        "espacoDeCor": "As rampas foram geradas em OKLCH com luminosidade alvo fixa por passo (identica em todas as familias) e croma em curva de sino com pico no passo 500, depois convertidas para sRGB com reducao de croma ate caber no gamut. Consequencia pratica: o passo 600 de qualquer familia tem aproximadamente a mesma luminosidade percebida, entao trocar a cor de marca NAO quebra o contraste dos componentes.",
+        "luminosidadeAlvoOklch": {
+          "50": 0.985,
+          "100": 0.96,
+          "200": 0.925,
+          "300": 0.865,
+          "400": 0.775,
+          "500": 0.64,
+          "600": 0.53,
+          "700": 0.445,
+          "800": 0.36,
+          "900": 0.285,
+          "950": 0.215
+        },
+        "cromaRelativoPorPasso": {
+          "50": 0.16,
+          "100": 0.28,
+          "200": 0.48,
+          "300": 0.68,
+          "400": 0.88,
+          "500": 1.0,
+          "600": 0.98,
+          "700": 0.9,
+          "800": 0.78,
+          "900": 0.62,
+          "950": 0.46
+        },
+        "matizPorFamilia": {
+          "neutro": {
+            "matizOklch": 255,
+            "cromaPico": 0.022
+          },
+          "marca": {
+            "matizOklch": 272,
+            "cromaPico": 0.17
+          },
+          "sucesso": {
+            "matizOklch": 157,
+            "cromaPico": 0.14
+          },
+          "atencao": {
+            "matizOklch": 72,
+            "cromaPico": 0.155
+          },
+          "erro": {
+            "matizOklch": 24,
+            "cromaPico": 0.18
+          },
+          "info": {
+            "matizOklch": 233,
+            "cromaPico": 0.145
+          }
+        },
+        "formulaContraste": "WCAG 2.2, (L1 + 0.05) / (L2 + 0.05), com L = 0.2126R + 0.7152G + 0.0722B sobre os canais sRGB linearizados do hexadecimal de 8 bits. Ratios truncados para baixo em 2 casas.",
+        "simulacaoDaltonismo": "Matrizes de Machado, Oliveira e Fernandes (2009) para dicromacia severidade 1.0, aplicadas em RGB linear. A separacao entre series e medida como distancia euclidiana em OKLab (deltaE OK) apos a simulacao."
+      },
+      "temas": {
+        "claro": "tema.claro",
+        "escuro": "tema.escuro",
+        "observacao": "Os dois grupos tem exatamente os mesmos caminhos de token. Um build que troque o prefixo 'tema.claro' por 'tema.escuro' produz o tema alternativo sem nenhum caso especial. O tema escuro NAO e um filtro de inversao: cada alias foi escolhido e medido separadamente."
+      },
+      "contraste": {
+        "norma": "WCAG 2.2 nivel AA",
+        "limiares": {
+          "textoNormal": 4.5,
+          "textoGrande": 3.0,
+          "elementoInterface": 3.0,
+          "observacaoTextoGrande": "Texto grande = 18.66 px em peso 700 ou 24 px em qualquer peso."
+        },
+        "resumo": {
+          "paresVerificados": 124,
+          "reprovados": 0,
+          "menorRatioTextoNormal": 4.67,
+          "menorRatioElementoInterface": 3.01
+        },
+        "pares": [
+          {
+            "tema": "claro",
+            "par": "texto.primario sobre fundo.aplicacao",
+            "primeiroPlano": "#262B31",
+            "fundo": "#F8FAFC",
+            "ratio": 13.63,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.primario sobre fundo.superficie",
+            "primeiroPlano": "#262B31",
+            "fundo": "#FFFFFF",
+            "ratio": 14.26,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.primario sobre fundo.sutil",
+            "primeiroPlano": "#262B31",
+            "fundo": "#EFF2F6",
+            "ratio": 12.7,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.secundario sobre fundo.superficie",
+            "primeiroPlano": "#4D555F",
+            "fundo": "#FFFFFF",
+            "ratio": 7.55,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.secundario sobre fundo.aplicacao",
+            "primeiroPlano": "#4D555F",
+            "fundo": "#F8FAFC",
+            "ratio": 7.21,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.terciario sobre fundo.superficie",
+            "primeiroPlano": "#646D78",
+            "fundo": "#FFFFFF",
+            "ratio": 5.24,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.terciario sobre fundo.sutil",
+            "primeiroPlano": "#646D78",
+            "fundo": "#EFF2F6",
+            "ratio": 4.67,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.link sobre fundo.superficie",
+            "primeiroPlano": "#3948A7",
+            "fundo": "#FFFFFF",
+            "ratio": 7.89,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.link sobre fundo.aplicacao",
+            "primeiroPlano": "#3948A7",
+            "fundo": "#F8FAFC",
+            "ratio": 7.54,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "texto.inverso sobre fundo.inverso",
+            "primeiroPlano": "#F8FAFC",
+            "fundo": "#262B31",
+            "ratio": 13.63,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.primariaTexto sobre acao.primariaFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#4C5FCA",
+            "ratio": 5.53,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.primariaTexto sobre acao.primariaFundoHover",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#3948A7",
+            "ratio": 7.89,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.primariaFundo sobre fundo.superficie (limite do botao)",
+            "primeiroPlano": "#4C5FCA",
+            "fundo": "#FFFFFF",
+            "ratio": 5.53,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.secundariaTexto sobre acao.secundariaFundo",
+            "primeiroPlano": "#262B31",
+            "fundo": "#FFFFFF",
+            "ratio": 14.26,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.secundariaBorda sobre fundo.superficie",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#FFFFFF",
+            "ratio": 3.36,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.sutilTexto sobre acao.sutilFundo",
+            "primeiroPlano": "#273281",
+            "fundo": "#EDF1FF",
+            "ratio": 10.01,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "acao.destrutivaTexto sobre acao.destrutivaFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#BC3135",
+            "ratio": 5.78,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "borda.controle sobre fundo.superficie",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#FFFFFF",
+            "ratio": 3.36,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "borda.controle sobre fundo.aplicacao",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#F8FAFC",
+            "ratio": 3.21,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "borda.foco sobre fundo.superficie",
+            "primeiroPlano": "#4C5FCA",
+            "fundo": "#FFFFFF",
+            "ratio": 5.53,
+            "exigido": 3.0,
+            "criterio": "1.4.11 foco visivel",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "borda.foco sobre fundo.aplicacao",
+            "primeiroPlano": "#4C5FCA",
+            "fundo": "#F8FAFC",
+            "ratio": 5.28,
+            "exigido": 3.0,
+            "criterio": "1.4.11 foco visivel",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoTexto sobre estado.sucessoFundo",
+            "primeiroPlano": "#004A2A",
+            "fundo": "#DDFAE7",
+            "ratio": 9.39,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoIcone sobre estado.sucessoFundo",
+            "primeiroPlano": "#00653B",
+            "fundo": "#DDFAE7",
+            "ratio": 6.46,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoSolidoTexto sobre estado.sucessoSolidoFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#00814D",
+            "ratio": 4.94,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#00814D",
+            "fundo": "#FFFFFF",
+            "ratio": 4.94,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#00814D",
+            "fundo": "#FFFFFF",
+            "ratio": 4.94,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.sucessoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#DDFAE7",
+            "fundo": "#FFFFFF",
+            "ratio": 1.11,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoTexto sobre estado.atencaoFundo",
+            "primeiroPlano": "#563500",
+            "fundo": "#FFEFDC",
+            "ratio": 9.78,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoIcone sobre estado.atencaoFundo",
+            "primeiroPlano": "#744A00",
+            "fundo": "#FFEFDC",
+            "ratio": 6.84,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoSolidoTexto sobre estado.atencaoSolidoFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#945F00",
+            "ratio": 5.39,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#945F00",
+            "fundo": "#FFFFFF",
+            "ratio": 5.39,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#945F00",
+            "fundo": "#FFFFFF",
+            "ratio": 5.39,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.atencaoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#FFEFDC",
+            "fundo": "#FFFFFF",
+            "ratio": 1.12,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroTexto sobre estado.erroFundo",
+            "primeiroPlano": "#760614",
+            "fundo": "#FFEDEB",
+            "ratio": 10.27,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroIcone sobre estado.erroFundo",
+            "primeiroPlano": "#9A1A23",
+            "fundo": "#FFEDEB",
+            "ratio": 7.29,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroSolidoTexto sobre estado.erroSolidoFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#BC3135",
+            "ratio": 5.78,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#BC3135",
+            "fundo": "#FFFFFF",
+            "ratio": 5.78,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#BC3135",
+            "fundo": "#FFFFFF",
+            "ratio": 5.78,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.erroFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#FFEDEB",
+            "fundo": "#FFFFFF",
+            "ratio": 1.13,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoTexto sobre estado.infoFundo",
+            "primeiroPlano": "#00435E",
+            "fundo": "#E4F5FF",
+            "ratio": 9.57,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoIcone sobre estado.infoFundo",
+            "primeiroPlano": "#005C7E",
+            "fundo": "#E4F5FF",
+            "ratio": 6.63,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoSolidoTexto sobre estado.infoSolidoFundo",
+            "primeiroPlano": "#FFFFFF",
+            "fundo": "#0075A0",
+            "ratio": 5.18,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#0075A0",
+            "fundo": "#FFFFFF",
+            "ratio": 5.18,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#0075A0",
+            "fundo": "#FFFFFF",
+            "ratio": 5.18,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "estado.infoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#E4F5FF",
+            "fundo": "#FFFFFF",
+            "ratio": 1.11,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.rotulo sobre fundo.superficie",
+            "primeiroPlano": "#646D78",
+            "fundo": "#FFFFFF",
+            "ratio": 5.24,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie1 sobre fundo.superficie",
+            "primeiroPlano": "#89002A",
+            "fundo": "#FFFFFF",
+            "ratio": 10.01,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie1 sobre fundo.aplicacao",
+            "primeiroPlano": "#89002A",
+            "fundo": "#F8FAFC",
+            "ratio": 9.57,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie2 sobre fundo.superficie",
+            "primeiroPlano": "#855400",
+            "fundo": "#FFFFFF",
+            "ratio": 6.43,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie2 sobre fundo.aplicacao",
+            "primeiroPlano": "#855400",
+            "fundo": "#F8FAFC",
+            "ratio": 6.14,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie3 sobre fundo.superficie",
+            "primeiroPlano": "#959600",
+            "fundo": "#FFFFFF",
+            "ratio": 3.16,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie3 sobre fundo.aplicacao",
+            "primeiroPlano": "#959600",
+            "fundo": "#F8FAFC",
+            "ratio": 3.02,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie4 sobre fundo.superficie",
+            "primeiroPlano": "#008A5E",
+            "fundo": "#FFFFFF",
+            "ratio": 4.37,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie4 sobre fundo.aplicacao",
+            "primeiroPlano": "#008A5E",
+            "fundo": "#F8FAFC",
+            "ratio": 4.18,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie5 sobre fundo.superficie",
+            "primeiroPlano": "#006169",
+            "fundo": "#FFFFFF",
+            "ratio": 7.2,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie5 sobre fundo.aplicacao",
+            "primeiroPlano": "#006169",
+            "fundo": "#F8FAFC",
+            "ratio": 6.88,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie6 sobre fundo.superficie",
+            "primeiroPlano": "#0093E6",
+            "fundo": "#FFFFFF",
+            "ratio": 3.32,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie6 sobre fundo.aplicacao",
+            "primeiroPlano": "#0093E6",
+            "fundo": "#F8FAFC",
+            "ratio": 3.17,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie7 sobre fundo.superficie",
+            "primeiroPlano": "#591F97",
+            "fundo": "#FFFFFF",
+            "ratio": 10.15,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie7 sobre fundo.aplicacao",
+            "primeiroPlano": "#591F97",
+            "fundo": "#F8FAFC",
+            "ratio": 9.7,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie8 sobre fundo.superficie",
+            "primeiroPlano": "#C952A8",
+            "fundo": "#FFFFFF",
+            "ratio": 3.99,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "claro",
+            "par": "grafico.serie8 sobre fundo.aplicacao",
+            "primeiroPlano": "#C952A8",
+            "fundo": "#F8FAFC",
+            "ratio": 3.81,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.primario sobre fundo.aplicacao",
+            "primeiroPlano": "#F8FAFC",
+            "fundo": "#161A1E",
+            "ratio": 16.71,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.primario sobre fundo.superficie",
+            "primeiroPlano": "#F8FAFC",
+            "fundo": "#262B31",
+            "ratio": 13.63,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.primario sobre fundo.sutil",
+            "primeiroPlano": "#F8FAFC",
+            "fundo": "#373E46",
+            "ratio": 10.34,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.secundario sobre fundo.superficie",
+            "primeiroPlano": "#CCD3DD",
+            "fundo": "#262B31",
+            "ratio": 9.46,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.secundario sobre fundo.aplicacao",
+            "primeiroPlano": "#CCD3DD",
+            "fundo": "#161A1E",
+            "ratio": 11.6,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.terciario sobre fundo.superficie",
+            "primeiroPlano": "#AEB7C2",
+            "fundo": "#262B31",
+            "ratio": 7.03,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.terciario sobre fundo.sutil",
+            "primeiroPlano": "#AEB7C2",
+            "fundo": "#373E46",
+            "ratio": 5.33,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.link sobre fundo.superficie",
+            "primeiroPlano": "#C3D1FF",
+            "fundo": "#262B31",
+            "ratio": 9.43,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.link sobre fundo.aplicacao",
+            "primeiroPlano": "#C3D1FF",
+            "fundo": "#161A1E",
+            "ratio": 11.56,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "texto.inverso sobre fundo.inverso",
+            "primeiroPlano": "#262B31",
+            "fundo": "#EFF2F6",
+            "ratio": 12.7,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.primariaTexto sobre acao.primariaFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#9CB1FF",
+            "ratio": 8.45,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.primariaTexto sobre acao.primariaFundoHover",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#C3D1FF",
+            "ratio": 11.56,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.primariaFundo sobre fundo.superficie (limite do botao)",
+            "primeiroPlano": "#9CB1FF",
+            "fundo": "#262B31",
+            "ratio": 6.89,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.secundariaTexto sobre acao.secundariaFundo",
+            "primeiroPlano": "#F8FAFC",
+            "fundo": "#373E46",
+            "ratio": 10.34,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.secundariaBorda sobre fundo.superficie",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#262B31",
+            "ratio": 4.23,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.sutilTexto sobre acao.sutilFundo",
+            "primeiroPlano": "#DEE5FF",
+            "fundo": "#1A225D",
+            "ratio": 11.71,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "acao.destrutivaTexto sobre acao.destrutivaFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#FF928C",
+            "ratio": 8.11,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "borda.controle sobre fundo.superficie",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#262B31",
+            "ratio": 4.23,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "borda.controle sobre fundo.aplicacao",
+            "primeiroPlano": "#838D9A",
+            "fundo": "#161A1E",
+            "ratio": 5.19,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "borda.foco sobre fundo.superficie",
+            "primeiroPlano": "#9CB1FF",
+            "fundo": "#262B31",
+            "ratio": 6.89,
+            "exigido": 3.0,
+            "criterio": "1.4.11 foco visivel",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "borda.foco sobre fundo.aplicacao",
+            "primeiroPlano": "#9CB1FF",
+            "fundo": "#161A1E",
+            "ratio": 8.45,
+            "exigido": 3.0,
+            "criterio": "1.4.11 foco visivel",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoTexto sobre estado.sucessoFundo",
+            "primeiroPlano": "#DDFAE7",
+            "fundo": "#004A2A",
+            "ratio": 9.39,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoIcone sobre estado.sucessoFundo",
+            "primeiroPlano": "#9DE6BA",
+            "fundo": "#004A2A",
+            "ratio": 7.18,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoSolidoTexto sobre estado.sucessoSolidoFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#6CCD96",
+            "ratio": 9.0,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#6CCD96",
+            "fundo": "#262B31",
+            "ratio": 7.34,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#27A569",
+            "fundo": "#262B31",
+            "ratio": 4.53,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.sucessoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#004A2A",
+            "fundo": "#262B31",
+            "ratio": 1.36,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoTexto sobre estado.atencaoFundo",
+            "primeiroPlano": "#FFEFDC",
+            "fundo": "#563500",
+            "ratio": 9.78,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoIcone sobre estado.atencaoFundo",
+            "primeiroPlano": "#FEC883",
+            "fundo": "#563500",
+            "ratio": 7.24,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoSolidoTexto sobre estado.atencaoSolidoFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#EBA646",
+            "ratio": 8.39,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#EBA646",
+            "fundo": "#262B31",
+            "ratio": 6.84,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#BE7C00",
+            "fundo": "#262B31",
+            "ratio": 4.12,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.atencaoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#563500",
+            "fundo": "#262B31",
+            "ratio": 1.29,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroTexto sobre estado.erroFundo",
+            "primeiroPlano": "#FFEDEB",
+            "fundo": "#760614",
+            "ratio": 10.27,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroIcone sobre estado.erroFundo",
+            "primeiroPlano": "#FFC1BC",
+            "fundo": "#760614",
+            "ratio": 7.53,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroSolidoTexto sobre estado.erroSolidoFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#FF928C",
+            "ratio": 8.11,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#FF928C",
+            "fundo": "#262B31",
+            "ratio": 6.61,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#E55454",
+            "fundo": "#262B31",
+            "ratio": 3.89,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.erroFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#760614",
+            "fundo": "#262B31",
+            "ratio": 1.22,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoTexto sobre estado.infoFundo",
+            "primeiroPlano": "#E4F5FF",
+            "fundo": "#00435E",
+            "ratio": 9.57,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoIcone sobre estado.infoFundo",
+            "primeiroPlano": "#9DDCFF",
+            "fundo": "#00435E",
+            "ratio": 7.18,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoSolidoTexto sobre estado.infoSolidoFundo",
+            "primeiroPlano": "#161A1E",
+            "fundo": "#53C3FA",
+            "ratio": 8.79,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoSolidoFundo sobre fundo.superficie",
+            "primeiroPlano": "#53C3FA",
+            "fundo": "#262B31",
+            "ratio": 7.16,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoBorda sobre fundo.superficie (limite do selo)",
+            "primeiroPlano": "#0098CF",
+            "fundo": "#262B31",
+            "ratio": 4.34,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "estado.infoFundo sobre fundo.superficie (preenchimento do selo)",
+            "primeiroPlano": "#00435E",
+            "fundo": "#262B31",
+            "ratio": 1.33,
+            "exigido": 1.0,
+            "criterio": "informativo: preenchimento e decorativo, o limite do selo e a borda verificada acima",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.rotulo sobre fundo.superficie",
+            "primeiroPlano": "#AEB7C2",
+            "fundo": "#262B31",
+            "ratio": 7.03,
+            "exigido": 4.5,
+            "criterio": "1.4.3 texto normal",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie1 sobre fundo.superficie",
+            "primeiroPlano": "#E7566B",
+            "fundo": "#262B31",
+            "ratio": 4.03,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie1 sobre fundo.aplicacao",
+            "primeiroPlano": "#E7566B",
+            "fundo": "#161A1E",
+            "ratio": 4.94,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie2 sobre fundo.superficie",
+            "primeiroPlano": "#E09100",
+            "fundo": "#262B31",
+            "ratio": 5.58,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie2 sobre fundo.aplicacao",
+            "primeiroPlano": "#E09100",
+            "fundo": "#161A1E",
+            "ratio": 6.84,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie3 sobre fundo.superficie",
+            "primeiroPlano": "#CFD009",
+            "fundo": "#262B31",
+            "ratio": 8.61,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie3 sobre fundo.aplicacao",
+            "primeiroPlano": "#CFD009",
+            "fundo": "#161A1E",
+            "ratio": 10.56,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie4 sobre fundo.superficie",
+            "primeiroPlano": "#00E7A0",
+            "fundo": "#262B31",
+            "ratio": 8.78,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie4 sobre fundo.aplicacao",
+            "primeiroPlano": "#00E7A0",
+            "fundo": "#161A1E",
+            "ratio": 10.77,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie5 sobre fundo.superficie",
+            "primeiroPlano": "#00B3C2",
+            "fundo": "#262B31",
+            "ratio": 5.58,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie5 sobre fundo.aplicacao",
+            "primeiroPlano": "#00B3C2",
+            "fundo": "#161A1E",
+            "ratio": 6.85,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie6 sobre fundo.superficie",
+            "primeiroPlano": "#C2E2FF",
+            "fundo": "#262B31",
+            "ratio": 10.6,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie6 sobre fundo.aplicacao",
+            "primeiroPlano": "#C2E2FF",
+            "fundo": "#161A1E",
+            "ratio": 13.0,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie7 sobre fundo.superficie",
+            "primeiroPlano": "#9563DD",
+            "fundo": "#262B31",
+            "ratio": 3.46,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie7 sobre fundo.aplicacao",
+            "primeiroPlano": "#9563DD",
+            "fundo": "#161A1E",
+            "ratio": 4.25,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie8 sobre fundo.superficie",
+            "primeiroPlano": "#BB459B",
+            "fundo": "#262B31",
+            "ratio": 3.01,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          },
+          {
+            "tema": "escuro",
+            "par": "grafico.serie8 sobre fundo.aplicacao",
+            "primeiroPlano": "#BB459B",
+            "fundo": "#161A1E",
+            "ratio": 3.69,
+            "exigido": 3.0,
+            "criterio": "1.4.11 nao-texto",
+            "situacao": "aprovado"
+          }
+        ]
+      },
+      "paletaCategorica": {
+        "criterio": "8 series escolhidas por busca que maximiza a MENOR distancia perceptual entre qualquer par, avaliada simultaneamente em visao tricromata normal e nas tres dicromacias, com afastamento minimo de 30 graus de matiz (para que series diferentes tambem PARECAM diferentes ao tricromata) e contraste minimo de 3:1 contra o fundo do tema.",
+        "matizOklchPorSerie": {
+          "serie1": 15,
+          "serie2": 71,
+          "serie3": 110,
+          "serie4": 162,
+          "serie5": 205,
+          "serie6": 245,
+          "serie7": 300,
+          "serie8": 340
+        },
+        "separacaoMinimaDeltaEOk": {
+          "claro": {
+            "normal": 0.1388,
+            "protanopia": 0.0978,
+            "deuteranopia": 0.0961,
+            "tritanopia": 0.0994
+          },
+          "escuro": {
+            "normal": 0.1263,
+            "protanopia": 0.106,
+            "deuteranopia": 0.1077,
+            "tritanopia": 0.1042
+          }
+        },
+        "referenciaOkabeIto": {
+          "separacaoMinimaDeltaEOk": {
+            "normal": 0.1558,
+            "protanopia": 0.0949,
+            "deuteranopia": 0.0755,
+            "tritanopia": 0.0837
+          },
+          "nota": "Okabe-Ito e a paleta segura para daltonismo mais citada. Medida pelo mesmo criterio, esta paleta a supera em todas as dicromacias e, diferente dela, todas as 8 series atingem 3:1 contra o fundo nos dois temas (Okabe-Ito falha em amarelo, azul-celeste e laranja sobre fundo claro)."
+        },
+        "regraDeUso": "Cor NUNCA e o unico portador de informacao (WCAG 2.2, criterio 1.4.1). Serie de grafico sempre acompanha rotulo direto, legenda ou marcador de forma distinta. Acima de 8 series, agregue em 'outros' em vez de repetir ou clarear cor."
+      },
+      "acessibilidade": {
+        "alvoDeToque": "24x24 CSS px e o minimo do criterio 2.5.8 (AA). O projeto adota 44x44 como alvo de producao porque ponto e sistema de uso obrigatorio por todo funcionario, muitas vezes em celular na mao, em pe, com luva ou pressa. Ver dimensao.alvoToque.",
+        "foco": "Anel de foco de 2 px com deslocamento de 2 px, sempre com tema.<t>.borda.foco. Nunca remover outline sem substituir por indicador equivalente (criterio 2.4.7 e 2.4.11).",
+        "movimento": "Toda transicao respeita prefers-reduced-motion: reduce, caindo para duracao 0 ms (criterio 2.3.3). Ver movimento.duracao.nenhuma."
+      }
+    }
+  },
+  "primitivo": {
+    "cor": {
+      "neutro": {
+        "$description": "Neutra fria (matiz OKLCH 255). Base de fundo, texto, borda e superficie nos dois temas. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#F8FAFC",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#EFF2F6",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#E2E7ED",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#CCD3DD",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#AEB7C2",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#838D9A",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#646D78",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#4D555F",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#373E46",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#262B31",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#161A1E",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "marca": {
+        "$description": "Cor de marca (indigo, matiz OKLCH 272). Acao primaria, link, foco e selecao. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#F8FAFF",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#EDF1FF",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#DEE5FF",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#C3D1FF",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#9CB1FF",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#6A81F2",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#4C5FCA",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#3948A7",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#273281",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#1A225D",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#0E143D",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "sucesso": {
+        "$description": "Semantica de sucesso (verde, matiz OKLCH 157). Confirmacao de batida, aprovacao, periodo fechado sem pendencia. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#EFFFF4",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#DDFAE7",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#C2F4D5",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#9DE6BA",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#6CCD96",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#27A569",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#00814D",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#00653B",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#004A2A",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#00341C",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#00200F",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "atencao": {
+        "$description": "Semantica de atencao (ambar, matiz OKLCH 72). Marcacao fora da cerca, score de confianca intermediario, banco de horas perto do vencimento. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#FFF9F2",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#FFEFDC",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#FFE1BD",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#FEC883",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#EBA646",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#BE7C00",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#945F00",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#744A00",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#563500",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#3C2400",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#261500",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "erro": {
+        "$description": "Semantica de erro (vermelho, matiz OKLCH 24). Falha de validacao, registro bloqueado, inconsistencia de jornada. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#FFF8F8",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#FFEDEB",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#FFDDDA",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#FFC1BC",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#FF928C",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#E55454",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#BC3135",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#9A1A23",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#760614",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#55030B",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#370205",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "info": {
+        "$description": "Semantica informativa (azul-ciano, matiz OKLCH 233). Avisos neutros, dicas e estados em processamento. Escala de 11 passos; o passo 500 e o pico de croma.",
+        "50": {
+          "$type": "color",
+          "$value": "#F5FBFF",
+          "$description": "Passo 50. Luminosidade OKLCH alvo 0.985."
+        },
+        "100": {
+          "$type": "color",
+          "$value": "#E4F5FF",
+          "$description": "Passo 100. Luminosidade OKLCH alvo 0.960."
+        },
+        "200": {
+          "$type": "color",
+          "$value": "#CBECFF",
+          "$description": "Passo 200. Luminosidade OKLCH alvo 0.925."
+        },
+        "300": {
+          "$type": "color",
+          "$value": "#9DDCFF",
+          "$description": "Passo 300. Luminosidade OKLCH alvo 0.865."
+        },
+        "400": {
+          "$type": "color",
+          "$value": "#53C3FA",
+          "$description": "Passo 400. Luminosidade OKLCH alvo 0.775."
+        },
+        "500": {
+          "$type": "color",
+          "$value": "#0098CF",
+          "$description": "Passo 500. Luminosidade OKLCH alvo 0.640."
+        },
+        "600": {
+          "$type": "color",
+          "$value": "#0075A0",
+          "$description": "Passo 600. Luminosidade OKLCH alvo 0.530."
+        },
+        "700": {
+          "$type": "color",
+          "$value": "#005C7E",
+          "$description": "Passo 700. Luminosidade OKLCH alvo 0.445."
+        },
+        "800": {
+          "$type": "color",
+          "$value": "#00435E",
+          "$description": "Passo 800. Luminosidade OKLCH alvo 0.360."
+        },
+        "900": {
+          "$type": "color",
+          "$value": "#002E42",
+          "$description": "Passo 900. Luminosidade OKLCH alvo 0.285."
+        },
+        "950": {
+          "$type": "color",
+          "$value": "#001D2B",
+          "$description": "Passo 950. Luminosidade OKLCH alvo 0.215."
+        }
+      },
+      "branco": {
+        "$type": "color",
+        "$value": "#FFFFFF",
+        "$description": "Branco absoluto. Superficie de cartao no tema claro e texto sobre acao primaria clara."
+      },
+      "preto": {
+        "$type": "color",
+        "$value": "#000000",
+        "$description": "Preto absoluto. Usado apenas como base de sombra com alfa; nunca como fundo de tela."
+      },
+      "grafico": {
+        "$description": "Paleta categorica de 8 series para grafico, com variante propria por tema. A ordem e estavel: serie1 e sempre a primeira serie do grafico, nos dois temas.",
+        "claro": {
+          "$description": "Variante do tema claro.",
+          "serie1": {
+            "$type": "color",
+            "$value": "#89002A",
+            "$description": "Vermelho (matiz OKLCH 15). Contraste 10.01:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie2": {
+            "$type": "color",
+            "$value": "#855400",
+            "$description": "Ambar (matiz OKLCH 71). Contraste 6.43:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie3": {
+            "$type": "color",
+            "$value": "#959600",
+            "$description": "Oliva (matiz OKLCH 110). Contraste 3.16:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie4": {
+            "$type": "color",
+            "$value": "#008A5E",
+            "$description": "Verde (matiz OKLCH 162). Contraste 4.37:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie5": {
+            "$type": "color",
+            "$value": "#006169",
+            "$description": "Petroleo (matiz OKLCH 205). Contraste 7.20:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie6": {
+            "$type": "color",
+            "$value": "#0093E6",
+            "$description": "Azul (matiz OKLCH 245). Contraste 3.32:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie7": {
+            "$type": "color",
+            "$value": "#591F97",
+            "$description": "Roxo (matiz OKLCH 300). Contraste 10.15:1 contra a superficie do tema (#FFFFFF)."
+          },
+          "serie8": {
+            "$type": "color",
+            "$value": "#C952A8",
+            "$description": "Magenta (matiz OKLCH 340). Contraste 3.99:1 contra a superficie do tema (#FFFFFF)."
+          }
+        },
+        "escuro": {
+          "$description": "Variante do tema escuro.",
+          "serie1": {
+            "$type": "color",
+            "$value": "#E7566B",
+            "$description": "Vermelho (matiz OKLCH 15). Contraste 4.03:1 contra a superficie do tema (#262B31)."
+          },
+          "serie2": {
+            "$type": "color",
+            "$value": "#E09100",
+            "$description": "Ambar (matiz OKLCH 71). Contraste 5.58:1 contra a superficie do tema (#262B31)."
+          },
+          "serie3": {
+            "$type": "color",
+            "$value": "#CFD009",
+            "$description": "Oliva (matiz OKLCH 110). Contraste 8.61:1 contra a superficie do tema (#262B31)."
+          },
+          "serie4": {
+            "$type": "color",
+            "$value": "#00E7A0",
+            "$description": "Verde (matiz OKLCH 162). Contraste 8.78:1 contra a superficie do tema (#262B31)."
+          },
+          "serie5": {
+            "$type": "color",
+            "$value": "#00B3C2",
+            "$description": "Petroleo (matiz OKLCH 205). Contraste 5.58:1 contra a superficie do tema (#262B31)."
+          },
+          "serie6": {
+            "$type": "color",
+            "$value": "#C2E2FF",
+            "$description": "Azul (matiz OKLCH 245). Contraste 10.60:1 contra a superficie do tema (#262B31)."
+          },
+          "serie7": {
+            "$type": "color",
+            "$value": "#9563DD",
+            "$description": "Roxo (matiz OKLCH 300). Contraste 3.46:1 contra a superficie do tema (#262B31)."
+          },
+          "serie8": {
+            "$type": "color",
+            "$value": "#BB459B",
+            "$description": "Magenta (matiz OKLCH 340). Contraste 3.01:1 contra a superficie do tema (#262B31)."
+          }
+        }
+      }
+    }
+  },
+  "tipografia": {
+    "$description": "Familia, escala, peso, altura de linha e estilos compostos.",
+    "familia": {
+      "sans": {
+        "$type": "fontFamily",
+        "$value": [
+          "Inter",
+          "Inter var",
+          "system-ui",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif"
+        ],
+        "$description": "Interface inteira. Inter tem numerais tabulares e alternativas de 1/l/I, o que importa num sistema cheio de matricula, CPF e horario."
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": [
+          "JetBrains Mono",
+          "SFMono-Regular",
+          "Menlo",
+          "Consolas",
+          "Liberation Mono",
+          "monospace"
+        ],
+        "$description": "NSR, hash SHA-256, CRC-16, trecho de AFD, chave de idempotencia e qualquer identificador que o usuario precise conferir caractere a caractere."
+      }
+    },
+    "tamanho": {
+      "$description": "Escala modular ancorada em 14 px (corpo de interface densa). Razao 1.125 (segunda maior) de 3xs ate 2xl, e 1.2 (terca menor) de 3xl em diante, porque titulo precisa de salto maior que texto. Todos os valores arredondados ao pixel inteiro.",
+      "3xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 10,
+          "unit": "px"
+        },
+        "$description": "10 px."
+      },
+      "2xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 11,
+          "unit": "px"
+        },
+        "$description": "11 px."
+      },
+      "xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 12,
+          "unit": "px"
+        },
+        "$description": "12 px."
+      },
+      "sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 14,
+          "unit": "px"
+        },
+        "$description": "14 px."
+      },
+      "md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "16 px."
+      },
+      "lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 18,
+          "unit": "px"
+        },
+        "$description": "18 px."
+      },
+      "xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 20,
+          "unit": "px"
+        },
+        "$description": "20 px."
+      },
+      "2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 22,
+          "unit": "px"
+        },
+        "$description": "22 px."
+      },
+      "3xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 26,
+          "unit": "px"
+        },
+        "$description": "26 px."
+      },
+      "4xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 31,
+          "unit": "px"
+        },
+        "$description": "31 px."
+      },
+      "5xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 37,
+          "unit": "px"
+        },
+        "$description": "37 px."
+      },
+      "6xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 44,
+          "unit": "px"
+        },
+        "$description": "44 px."
+      }
+    },
+    "alturaLinha": {
+      "$description": "Altura de linha em pixel absoluto, sempre multiplo de 4, para que qualquer bloco de texto continue assentado na grade de 8 pt. Valor absoluto e nao relativo justamente para nao quebrar o ritmo vertical quando o tamanho muda.",
+      "3xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "16 px (para tipografia.tamanho.3xs)."
+      },
+      "2xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "16 px (para tipografia.tamanho.2xs)."
+      },
+      "xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 16,
+          "unit": "px"
+        },
+        "$description": "16 px (para tipografia.tamanho.xs)."
+      },
+      "sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 20,
+          "unit": "px"
+        },
+        "$description": "20 px (para tipografia.tamanho.sm)."
+      },
+      "md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 24,
+          "unit": "px"
+        },
+        "$description": "24 px (para tipografia.tamanho.md)."
+      },
+      "lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": 28,
+          "unit": "px"
+        },
+        "$description": "28 px (para tipografia.tamanho.lg)."
+      },
+      "xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 28,
+          "unit": "px"
+        },
+        "$description": "28 px (para tipografia.tamanho.xl)."
+      },
+      "2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 32,
+          "unit": "px"
+        },
+        "$description": "32 px (para tipografia.tamanho.2xl)."
+      },
+      "3xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 36,
+          "unit": "px"
+        },
+        "$description": "36 px (para tipografia.tamanho.3xl)."
+      },
+      "4xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 40,
+          "unit": "px"
+        },
+        "$description": "40 px (para tipografia.tamanho.4xl)."
+      },
+      "5xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 48,
+          "unit": "px"
+        },
+        "$description": "48 px (para tipografia.tamanho.5xl)."
+      },
+      "6xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": 56,
+          "unit": "px"
+        },
+        "$description": "56 px (para tipografia.tamanho.6xl)."
+      }
+    },
+    "peso": {
+      "$description": "Quatro pesos apenas. Hierarquia se resolve com tamanho e cor, nao com peso extra.",
+      "normal": {
+        "$type": "fontWeight",
+        "$value": 400,
+        "$description": "Corpo de texto."
+      },
+      "medio": {
+        "$type": "fontWeight",
+        "$value": 500,
+        "$description": "Rotulo, cabecalho de tabela, botao."
+      },
+      "semiforte": {
+        "$type": "fontWeight",
+        "$value": 600,
+        "$description": "Titulo de secao e numero em destaque."
+      },
+      "forte": {
+        "$type": "fontWeight",
+        "$value": 700,
+        "$description": "Titulo de pagina. Uso escasso."
+      }
+    },
+    "rastreio": {
+      "$description": "Espacamento entre letras em em, negativo nos tamanhos grandes e positivo nos pequenos, compensando a percepcao optica.",
+      "3xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.02,
+          "unit": "rem"
+        },
+        "$description": "0.02 em (aplicar como letter-spacing) para tipografia.tamanho.3xs."
+      },
+      "2xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.015,
+          "unit": "rem"
+        },
+        "$description": "0.015 em (aplicar como letter-spacing) para tipografia.tamanho.2xs."
+      },
+      "xs": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.01,
+          "unit": "rem"
+        },
+        "$description": "0.01 em (aplicar como letter-spacing) para tipografia.tamanho.xs."
+      },
+      "sm": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0.005,
+          "unit": "rem"
+        },
+        "$description": "0.005 em (aplicar como letter-spacing) para tipografia.tamanho.sm."
+      },
+      "md": {
+        "$type": "dimension",
+        "$value": {
+          "value": 0,
+          "unit": "rem"
+        },
+        "$description": "0 em (aplicar como letter-spacing) para tipografia.tamanho.md."
+      },
+      "lg": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.005,
+          "unit": "rem"
+        },
+        "$description": "-0.005 em (aplicar como letter-spacing) para tipografia.tamanho.lg."
+      },
+      "xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.01,
+          "unit": "rem"
+        },
+        "$description": "-0.01 em (aplicar como letter-spacing) para tipografia.tamanho.xl."
+      },
+      "2xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.012,
+          "unit": "rem"
+        },
+        "$description": "-0.012 em (aplicar como letter-spacing) para tipografia.tamanho.2xl."
+      },
+      "3xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.015,
+          "unit": "rem"
+        },
+        "$description": "-0.015 em (aplicar como letter-spacing) para tipografia.tamanho.3xl."
+      },
+      "4xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.018,
+          "unit": "rem"
+        },
+        "$description": "-0.018 em (aplicar como letter-spacing) para tipografia.tamanho.4xl."
+      },
+      "5xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.02,
+          "unit": "rem"
+        },
+        "$description": "-0.02 em (aplicar como letter-spacing) para tipografia.tamanho.5xl."
+      },
+      "6xl": {
+        "$type": "dimension",
+        "$value": {
+          "value": -0.022,
+          "unit": "rem"
+        },
+        "$description": "-0.022 em (aplicar como letter-spacing) para tipografia.tamanho.6xl."
+      }
+    },
+    "estilo": {
+      "$description": "Estilos compostos prontos. Preferir estes a recombinar tamanho e peso na mao.",
+      "corpo": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.sm}",
+          "fontWeight": "{tipografia.peso.normal}",
+          "lineHeight": "{tipografia.alturaLinha.sm}",
+          "letterSpacing": "{tipografia.rastreio.sm}"
+        },
+        "$description": "Texto padrao da interface."
+      },
+      "corpoGrande": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.md}",
+          "fontWeight": "{tipografia.peso.normal}",
+          "lineHeight": "{tipografia.alturaLinha.md}",
+          "letterSpacing": "{tipografia.rastreio.md}"
+        },
+        "$description": "Texto de leitura corrida: descricao de politica, texto de consentimento LGPD, ajuda."
+      },
+      "rotulo": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.xs}",
+          "fontWeight": "{tipografia.peso.medio}",
+          "lineHeight": "{tipografia.alturaLinha.xs}",
+          "letterSpacing": "{tipografia.rastreio.xs}"
+        },
+        "$description": "Rotulo de campo, cabecalho de coluna e selo."
+      },
+      "legenda": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.2xs}",
+          "fontWeight": "{tipografia.peso.normal}",
+          "lineHeight": "{tipografia.alturaLinha.2xs}",
+          "letterSpacing": "{tipografia.rastreio.2xs}"
+        },
+        "$description": "Texto auxiliar sob campo, carimbo de tempo e nota de rodape."
+      },
+      "tituloCartao": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.md}",
+          "fontWeight": "{tipografia.peso.semiforte}",
+          "lineHeight": "{tipografia.alturaLinha.md}",
+          "letterSpacing": "{tipografia.rastreio.md}"
+        },
+        "$description": "Titulo de cartao e de dialogo."
+      },
+      "tituloSecao": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.xl}",
+          "fontWeight": "{tipografia.peso.semiforte}",
+          "lineHeight": "{tipografia.alturaLinha.xl}",
+          "letterSpacing": "{tipografia.rastreio.xl}"
+        },
+        "$description": "Titulo de secao dentro da pagina."
+      },
+      "tituloPagina": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.3xl}",
+          "fontWeight": "{tipografia.peso.forte}",
+          "lineHeight": "{tipografia.alturaLinha.3xl}",
+          "letterSpacing": "{tipografia.rastreio.3xl}"
+        },
+        "$description": "Titulo principal da pagina. Um por tela."
+      },
+      "numeroDestaque": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.4xl}",
+          "fontWeight": "{tipografia.peso.semiforte}",
+          "lineHeight": "{tipografia.alturaLinha.4xl}",
+          "letterSpacing": "{tipografia.rastreio.4xl}"
+        },
+        "$description": "Numero de indicador: saldo de banco de horas, total de horas extras, headcount.",
+        "$extensions": {
+          "br.com.seeg.ponto": {
+            "fontFeatureSettings": "'tnum' 1, 'ss01' 1"
+          }
+        }
+      },
+      "tabular": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.sans}",
+          "fontSize": "{tipografia.tamanho.sm}",
+          "fontWeight": "{tipografia.peso.normal}",
+          "lineHeight": "{tipografia.alturaLinha.sm}",
+          "letterSpacing": "{tipografia.rastreio.sm}"
+        },
+        "$description": "Celula de grade de apuracao e de espelho de ponto. OBRIGATORIO usar numeral tabular: coluna de horario com numeral proporcional nao alinha e induz erro de leitura.",
+        "$extensions": {
+          "br.com.seeg.ponto": {
+            "fontFeatureSettings": "'tnum' 1, 'zero' 1"
+          }
+        }
+      },
+      "identificador": {
+        "$type": "typography",
+        "$value": {
+          "fontFamily": "{tipografia.familia.mono}",
+          "fontSize": "{tipografia.tamanho.xs}",
+          "fontWeight": "{tipografia.peso.normal}",
+          "lineHeight": "{tipografia.alturaLinha.xs}",
+          "letterSpacing": "{tipografia.rastreio.md}"
+        },
+        "$description": "NSR, hash, CRC-16, identificador de requisicao e chave de idempotencia."
+      }
+    }
+  },
+  "espacamento": {
+    "$description": "Grade de 8 pt. O nome do token e o multiplicador do passo base de 8 px: '1' = 8 px, '3' = 24 px. Os passos 'micro' (2 px) e 'mini' (4 px) e os meios passos ('1x5', '2x5') sao as unicas excecoes, existem para ajuste optico dentro de componente e nunca devem ser usados para layout de pagina.",
+    "0": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      },
+      "$description": "Zero."
+    },
+    "micro": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "2 px. Excecao documentada da grade: so para ajuste optico entre icone e texto."
+    },
+    "mini": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "4 px. Meio passo. Espaco interno de selo e distancia entre rotulo e campo."
+    },
+    "1": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "8 px. Passo base da grade."
+    },
+    "1x5": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "12 px. Um passo e meio."
+    },
+    "2": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "16 px. Espaco interno padrao de cartao compacto."
+    },
+    "2x5": {
+      "$type": "dimension",
+      "$value": {
+        "value": 20,
+        "unit": "px"
+      },
+      "$description": "20 px. Dois passos e meio."
+    },
+    "3": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "24 px. Espaco interno padrao de cartao."
+    },
+    "4": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "32 px. Distancia entre blocos."
+    },
+    "5": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "40 px."
+    },
+    "6": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "48 px. Distancia entre secoes."
+    },
+    "7": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "56 px."
+    },
+    "8": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "64 px."
+    },
+    "10": {
+      "$type": "dimension",
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      },
+      "$description": "80 px."
+    },
+    "12": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "96 px."
+    },
+    "16": {
+      "$type": "dimension",
+      "$value": {
+        "value": 128,
+        "unit": "px"
+      },
+      "$description": "128 px. Respiro de pagina vazia."
+    }
+  },
+  "raio": {
+    "$description": "Tres niveis de arredondamento, mais dois utilitarios que nao fazem parte da escala.",
+    "nulo": {
+      "$type": "dimension",
+      "$value": {
+        "value": 0,
+        "unit": "px"
+      },
+      "$description": "Sem arredondamento. Tabela densa e celula de grade."
+    },
+    "pequeno": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "Nivel 1. Campo, botao, selo, caixa de selecao."
+    },
+    "medio": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "Nivel 2. Cartao, painel, menu suspenso, dica."
+    },
+    "grande": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "Nivel 3. Dialogo, folha inferior no mobile, contorno de foto."
+    },
+    "pleno": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9999,
+        "unit": "px"
+      },
+      "$description": "Utilitario fora da escala: pilula, avatar e indicador circular."
+    }
+  },
+  "movimento": {
+    "$description": "Duracoes e curvas. Regra do produto: nenhuma animacao atrasa a confirmacao de uma batida de ponto. O retorno visual do registro comeca em ate 100 ms; o resto da animacao e enfeite que roda depois, nunca antes.",
+    "duracao": {
+      "nenhuma": {
+        "$type": "duration",
+        "$value": {
+          "value": 0,
+          "unit": "ms"
+        },
+        "$description": "Zero. Valor efetivo quando prefers-reduced-motion: reduce esta ativo."
+      },
+      "imediata": {
+        "$type": "duration",
+        "$value": {
+          "value": 80,
+          "unit": "ms"
+        },
+        "$description": "Realce de hover, troca de cor, foco."
+      },
+      "rapida": {
+        "$type": "duration",
+        "$value": {
+          "value": 140,
+          "unit": "ms"
+        },
+        "$description": "Selo, dica, caixa de selecao, alternador."
+      },
+      "padrao": {
+        "$type": "duration",
+        "$value": {
+          "value": 200,
+          "unit": "ms"
+        },
+        "$description": "Menu suspenso, popover, expandir e recolher."
+      },
+      "lenta": {
+        "$type": "duration",
+        "$value": {
+          "value": 320,
+          "unit": "ms"
+        },
+        "$description": "Dialogo, folha lateral, transicao de pagina."
+      },
+      "deliberada": {
+        "$type": "duration",
+        "$value": {
+          "value": 480,
+          "unit": "ms"
+        },
+        "$description": "Confirmacao de batida: a animacao existe para o funcionario ter certeza absoluta de que registrou."
+      }
+    },
+    "curva": {
+      "linear": {
+        "$type": "cubicBezier",
+        "$value": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "$description": "Barra de progresso e indicador continuo."
+      },
+      "padrao": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.2,
+          0,
+          0,
+          1
+        ],
+        "$description": "Curva geral do sistema."
+      },
+      "entrada": {
+        "$type": "cubicBezier",
+        "$value": [
+          0,
+          0,
+          0.2,
+          1
+        ],
+        "$description": "Elemento que aparece: desacelera ao chegar."
+      },
+      "saida": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.4,
+          0,
+          1,
+          1
+        ],
+        "$description": "Elemento que some: acelera ao sair."
+      },
+      "enfase": {
+        "$type": "cubicBezier",
+        "$value": [
+          0.34,
+          1.4,
+          0.64,
+          1
+        ],
+        "$description": "Leve ultrapassagem. Exclusivo da confirmacao de registro de ponto."
+      }
+    }
+  },
+  "camada": {
+    "$description": "Ordem de empilhamento. Nenhum componente inventa z-index proprio: se falta um nivel, abre RFC.",
+    "base": {
+      "$type": "number",
+      "$value": 0,
+      "$description": "Fluxo normal."
+    },
+    "elevado": {
+      "$type": "number",
+      "$value": 10,
+      "$description": "Linha fixada, celula congelada de grade."
+    },
+    "cabecalho": {
+      "$type": "number",
+      "$value": 100,
+      "$description": "Cabecalho fixo da pagina."
+    },
+    "navegacao": {
+      "$type": "number",
+      "$value": 200,
+      "$description": "Barra lateral e navegacao inferior."
+    },
+    "sobreposicao": {
+      "$type": "number",
+      "$value": 800,
+      "$description": "Fundo escurecido atras de modal."
+    },
+    "dialogo": {
+      "$type": "number",
+      "$value": 900,
+      "$description": "Dialogo e folha lateral."
+    },
+    "suspenso": {
+      "$type": "number",
+      "$value": 1000,
+      "$description": "Menu, seletor e combobox: precisam vencer o dialogo."
+    },
+    "dica": {
+      "$type": "number",
+      "$value": 1100,
+      "$description": "Dica de ferramenta."
+    },
+    "notificacao": {
+      "$type": "number",
+      "$value": 1200,
+      "$description": "Aviso efemero de canto."
+    },
+    "depuracao": {
+      "$type": "number",
+      "$value": 9999,
+      "$description": "Sobreposicao de desenvolvimento. Nunca em producao."
+    }
+  },
+  "pontoQuebra": {
+    "$description": "Pontos de quebra, mesma escala do Tailwind para nao brigar com a ferramenta. Abordagem e mobile-first: o estilo base atende o celular e cada ponto de quebra e um min-width. O portal do colaborador precisa funcionar a partir de 360 px; o painel de RH e de gestor tem 'lg' como largura minima de projeto e a grade de apuracao so mostra todas as colunas em 'xl'.",
+    "sm": {
+      "$type": "dimension",
+      "$value": {
+        "value": 640,
+        "unit": "px"
+      },
+      "$description": "640 px. Celular grande na horizontal."
+    },
+    "md": {
+      "$type": "dimension",
+      "$value": {
+        "value": 768,
+        "unit": "px"
+      },
+      "$description": "768 px. Tablet na vertical. Totem e quiosque assumem esta faixa."
+    },
+    "lg": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1024,
+        "unit": "px"
+      },
+      "$description": "1024 px. Tablet na horizontal e notebook pequeno. Piso do painel de gestao."
+    },
+    "xl": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1280,
+        "unit": "px"
+      },
+      "$description": "1280 px. Notebook. Alvo de projeto da grade de apuracao."
+    },
+    "2xl": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1536,
+        "unit": "px"
+      },
+      "$description": "1536 px. Monitor de mesa."
+    }
+  },
+  "dimensao": {
+    "$description": "Dimensoes de componente que precisam ser iguais em toda a interface.",
+    "alvoToqueMinimo": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "24 px. Piso da WCAG 2.2, criterio 2.5.8 (AA)."
+    },
+    "alvoToque": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "44 px. Alvo adotado pelo projeto para qualquer controle alcancavel por toque."
+    },
+    "alturaControle": {
+      "$type": "dimension",
+      "$value": {
+        "value": 36,
+        "unit": "px"
+      },
+      "$description": "36 px. Altura de campo e botao no adensamento padrao (desktop)."
+    },
+    "alturaControleCompacta": {
+      "$type": "dimension",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "28 px. Barra de filtro e controle dentro de grade densa."
+    },
+    "alturaControleToque": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "44 px. Altura de campo e botao em contexto de toque."
+    },
+    "alturaLinhaGrade": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "32 px. Altura fixa de linha da grade de apuracao. Fixa de proposito: virtualizacao com 10.000 linhas depende de altura conhecida."
+    },
+    "larguraBarraLateral": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "240 px. Barra lateral expandida."
+    },
+    "larguraBarraLateralRecolhida": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "56 px. Barra lateral recolhida (so icone)."
+    },
+    "larguraMaximaTexto": {
+      "$type": "dimension",
+      "$value": {
+        "value": 72,
+        "unit": "rem"
+      },
+      "$description": "72ch. Largura maxima de bloco de leitura corrida."
+    },
+    "larguraMaximaConteudo": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1440,
+        "unit": "px"
+      },
+      "$description": "1440 px. Largura maxima do conteudo centralizado."
+    },
+    "espessuraFoco": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "2 px. Espessura do anel de foco."
+    },
+    "deslocamentoFoco": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "2 px. Distancia entre o elemento e o anel de foco."
+    },
+    "espessuraBorda": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "1 px. Espessura padrao de borda."
+    }
+  },
+  "tema": {
+    "$description": "Tokens semanticos. Os dois temas tem os MESMOS caminhos; o build escolhe o prefixo. Consuma daqui, nunca de 'primitivo'.",
+    "claro": {
+      "$description": "Tema claro.",
+      "fundo": {
+        "$description": "Fundos e superficies.",
+        "aplicacao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.50}",
+          "$description": "Fundo da janela inteira."
+        },
+        "superficie": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Superficie de cartao, tabela, painel e dialogo."
+        },
+        "superficieElevada": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Superficie que precisa flutuar acima de outra superficie (menu sobre cartao)."
+        },
+        "sutil": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.100}",
+          "$description": "Fundo discreto: cabecalho de tabela, listra alternada, area de codigo."
+        },
+        "enfase": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.200}",
+          "$description": "Fundo de hover e de linha selecionada."
+        },
+        "inverso": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.900}",
+          "$description": "Fundo invertido: dica de ferramenta e aviso efemero."
+        },
+        "desabilitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.100}",
+          "$description": "Fundo de controle desabilitado."
+        },
+        "sobreposicao": {
+          "$type": "color",
+          "$value": "#161A1EA6",
+          "$description": "Cortina atras de dialogo. Hexadecimal de 8 digitos (os 2 ultimos sao o alfa)."
+        }
+      },
+      "texto": {
+        "$description": "Cores de texto.",
+        "primario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.900}",
+          "$description": "Texto principal. Contraste medido: fundo.aplicacao = 13.63:1 (minimo 4.5); fundo.superficie = 14.26:1 (minimo 4.5); fundo.sutil = 12.70:1 (minimo 4.5)."
+        },
+        "secundario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.700}",
+          "$description": "Texto de apoio: descricao, rotulo, valor secundario. Contraste medido: fundo.superficie = 7.55:1 (minimo 4.5); fundo.aplicacao = 7.21:1 (minimo 4.5)."
+        },
+        "terciario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.600}",
+          "$description": "Texto de menor peso informativo: carimbo de tempo, contador, dica curta. Contraste medido: fundo.superficie = 5.24:1 (minimo 4.5); fundo.sutil = 4.67:1 (minimo 4.5)."
+        },
+        "desabilitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.400}",
+          "$description": "Texto de controle desabilitado. Isento do criterio 1.4.3 (elemento inativo), mas mantido legivel de proposito."
+        },
+        "inverso": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.50}",
+          "$description": "Texto sobre fundo.inverso. Contraste medido: fundo.inverso = 13.63:1 (minimo 4.5)."
+        },
+        "sobreAcao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto e icone sobre superficie de acao preenchida."
+        },
+        "link": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.700}",
+          "$description": "Link. Sublinhado e obrigatorio dentro de bloco de texto corrido: cor sozinha nao identifica link (criterio 1.4.1). Contraste medido: fundo.superficie = 7.89:1 (minimo 4.5); fundo.aplicacao = 7.54:1 (minimo 4.5)."
+        },
+        "linkVisitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.800}",
+          "$description": "Link ja visitado."
+        }
+      },
+      "borda": {
+        "$description": "Bordas, divisores e anel de foco.",
+        "sutil": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.200}",
+          "$description": "Divisor entre linhas e entre secoes. Decorativo."
+        },
+        "padrao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.300}",
+          "$description": "Borda de cartao e de painel. Decorativa."
+        },
+        "controle": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.500}",
+          "$description": "Contorno de campo, caixa de selecao, botao de radio e alternador. Portador de informacao: precisa de 3:1. Contraste medido: fundo.superficie = 3.36:1 (minimo 3.0); fundo.aplicacao = 3.21:1 (minimo 3.0)."
+        },
+        "forte": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.600}",
+          "$description": "Contorno de controle em hover ou que exige mais peso visual."
+        },
+        "foco": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.600}",
+          "$description": "Anel de foco do teclado. Contraste medido: fundo.superficie = 5.53:1 (minimo 3.0); fundo.aplicacao = 5.28:1 (minimo 3.0)."
+        }
+      },
+      "acao": {
+        "$description": "Superficies acionaveis.",
+        "primariaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.600}",
+          "$description": "Fundo da acao primaria. Contraste medido: fundo.superficie = 5.53:1 (minimo 3.0)."
+        },
+        "primariaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.700}",
+          "$description": "Fundo da acao primaria em hover."
+        },
+        "primariaFundoAtivo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.800}",
+          "$description": "Fundo da acao primaria pressionada."
+        },
+        "primariaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre a acao primaria. Contraste medido: acao.primariaFundo = 5.53:1 (minimo 4.5); acao.primariaFundoHover = 7.89:1 (minimo 4.5)."
+        },
+        "secundariaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Fundo da acao secundaria (contorno)."
+        },
+        "secundariaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.100}",
+          "$description": "Fundo da acao secundaria em hover."
+        },
+        "secundariaBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.500}",
+          "$description": "Contorno da acao secundaria. Contraste medido: fundo.superficie = 3.36:1 (minimo 3.0)."
+        },
+        "secundariaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.900}",
+          "$description": "Texto da acao secundaria. Contraste medido: acao.secundariaFundo = 14.26:1 (minimo 4.5)."
+        },
+        "sutilFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.100}",
+          "$description": "Fundo da acao terciaria e de item de menu selecionado."
+        },
+        "sutilTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.800}",
+          "$description": "Texto da acao terciaria. Contraste medido: acao.sutilFundo = 10.01:1 (minimo 4.5)."
+        },
+        "destrutivaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.600}",
+          "$description": "Fundo da acao destrutiva. Lembrete de dominio: NAO existe acao destrutiva sobre marcacao; este token serve para excluir cadastro, revogar sessao, cancelar solicitacao."
+        },
+        "destrutivaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.700}",
+          "$description": "Fundo da acao destrutiva em hover."
+        },
+        "destrutivaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre a acao destrutiva. Contraste medido: acao.destrutivaFundo = 5.78:1 (minimo 4.5)."
+        },
+        "anelFoco": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.600}",
+          "$description": "Anel de foco especifico de controle acionavel."
+        }
+      },
+      "estado": {
+        "$description": "Retorno semantico: sucesso, atencao, erro e informacao.",
+        "sucessoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.100}",
+          "$description": "Fundo do selo e do alerta de sucesso. Contraste medido: fundo.superficie = 1.11:1 (minimo 1.0)."
+        },
+        "sucessoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.600}",
+          "$description": "Borda do selo e do alerta de sucesso. Contraste medido: fundo.superficie = 4.94:1 (minimo 3.0)."
+        },
+        "sucessoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.800}",
+          "$description": "Texto sobre o fundo de sucesso. Contraste medido: estado.sucessoFundo = 9.39:1 (minimo 4.5)."
+        },
+        "sucessoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.700}",
+          "$description": "Icone sobre o fundo de sucesso. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.sucessoFundo = 6.46:1 (minimo 3.0)."
+        },
+        "sucessoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.600}",
+          "$description": "Fundo preenchido de sucesso (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 4.94:1 (minimo 3.0)."
+        },
+        "sucessoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre o fundo preenchido de sucesso. Contraste medido: estado.sucessoSolidoFundo = 4.94:1 (minimo 4.5)."
+        },
+        "atencaoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.100}",
+          "$description": "Fundo do selo e do alerta de atencao. Contraste medido: fundo.superficie = 1.12:1 (minimo 1.0)."
+        },
+        "atencaoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.600}",
+          "$description": "Borda do selo e do alerta de atencao. Contraste medido: fundo.superficie = 5.39:1 (minimo 3.0)."
+        },
+        "atencaoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.800}",
+          "$description": "Texto sobre o fundo de atencao. Contraste medido: estado.atencaoFundo = 9.78:1 (minimo 4.5)."
+        },
+        "atencaoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.700}",
+          "$description": "Icone sobre o fundo de atencao. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.atencaoFundo = 6.84:1 (minimo 3.0)."
+        },
+        "atencaoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.600}",
+          "$description": "Fundo preenchido de atencao (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 5.39:1 (minimo 3.0)."
+        },
+        "atencaoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre o fundo preenchido de atencao. Contraste medido: estado.atencaoSolidoFundo = 5.39:1 (minimo 4.5)."
+        },
+        "erroFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.100}",
+          "$description": "Fundo do selo e do alerta de erro. Contraste medido: fundo.superficie = 1.13:1 (minimo 1.0)."
+        },
+        "erroBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.600}",
+          "$description": "Borda do selo e do alerta de erro. Contraste medido: fundo.superficie = 5.78:1 (minimo 3.0)."
+        },
+        "erroTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.800}",
+          "$description": "Texto sobre o fundo de erro. Contraste medido: estado.erroFundo = 10.27:1 (minimo 4.5)."
+        },
+        "erroIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.700}",
+          "$description": "Icone sobre o fundo de erro. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.erroFundo = 7.29:1 (minimo 3.0)."
+        },
+        "erroSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.600}",
+          "$description": "Fundo preenchido de erro (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 5.78:1 (minimo 3.0)."
+        },
+        "erroSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre o fundo preenchido de erro. Contraste medido: estado.erroSolidoFundo = 5.78:1 (minimo 4.5)."
+        },
+        "infoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.100}",
+          "$description": "Fundo do selo e do alerta de info. Contraste medido: fundo.superficie = 1.11:1 (minimo 1.0)."
+        },
+        "infoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.600}",
+          "$description": "Borda do selo e do alerta de info. Contraste medido: fundo.superficie = 5.18:1 (minimo 3.0)."
+        },
+        "infoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.800}",
+          "$description": "Texto sobre o fundo de info. Contraste medido: estado.infoFundo = 9.57:1 (minimo 4.5)."
+        },
+        "infoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.700}",
+          "$description": "Icone sobre o fundo de info. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.infoFundo = 6.63:1 (minimo 3.0)."
+        },
+        "infoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.600}",
+          "$description": "Fundo preenchido de info (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 5.18:1 (minimo 3.0)."
+        },
+        "infoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.branco}",
+          "$description": "Texto sobre o fundo preenchido de info. Contraste medido: estado.infoSolidoFundo = 5.18:1 (minimo 4.5)."
+        }
+      },
+      "grafico": {
+        "$description": "Cores de visualizacao de dados.",
+        "serie1": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie1}",
+          "$description": "Serie 1 do grafico (Vermelho). Contraste medido: fundo.superficie = 10.01:1 (minimo 3.0); fundo.aplicacao = 9.57:1 (minimo 3.0)."
+        },
+        "serie2": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie2}",
+          "$description": "Serie 2 do grafico (Ambar). Contraste medido: fundo.superficie = 6.43:1 (minimo 3.0); fundo.aplicacao = 6.14:1 (minimo 3.0)."
+        },
+        "serie3": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie3}",
+          "$description": "Serie 3 do grafico (Oliva). Contraste medido: fundo.superficie = 3.16:1 (minimo 3.0); fundo.aplicacao = 3.02:1 (minimo 3.0)."
+        },
+        "serie4": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie4}",
+          "$description": "Serie 4 do grafico (Verde). Contraste medido: fundo.superficie = 4.37:1 (minimo 3.0); fundo.aplicacao = 4.18:1 (minimo 3.0)."
+        },
+        "serie5": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie5}",
+          "$description": "Serie 5 do grafico (Petroleo). Contraste medido: fundo.superficie = 7.20:1 (minimo 3.0); fundo.aplicacao = 6.88:1 (minimo 3.0)."
+        },
+        "serie6": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie6}",
+          "$description": "Serie 6 do grafico (Azul). Contraste medido: fundo.superficie = 3.32:1 (minimo 3.0); fundo.aplicacao = 3.17:1 (minimo 3.0)."
+        },
+        "serie7": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie7}",
+          "$description": "Serie 7 do grafico (Roxo). Contraste medido: fundo.superficie = 10.15:1 (minimo 3.0); fundo.aplicacao = 9.70:1 (minimo 3.0)."
+        },
+        "serie8": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.claro.serie8}",
+          "$description": "Serie 8 do grafico (Magenta). Contraste medido: fundo.superficie = 3.99:1 (minimo 3.0); fundo.aplicacao = 3.81:1 (minimo 3.0)."
+        },
+        "grade": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.200}",
+          "$description": "Linha de grade do grafico. Decorativa."
+        },
+        "eixo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.400}",
+          "$description": "Linha e marca de eixo."
+        },
+        "rotulo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.600}",
+          "$description": "Rotulo textual de eixo e de legenda. Contraste medido: fundo.superficie = 5.24:1 (minimo 4.5)."
+        }
+      },
+      "sombra": {
+        "$description": "Tres niveis de elevacao.",
+        "baixa": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#161A1E0F",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 1,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 2,
+                "unit": "px"
+              },
+              "spread": {
+                "value": 0,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#161A1E0A",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 1,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 1,
+                "unit": "px"
+              },
+              "spread": {
+                "value": 0,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 1. Elemento colado a superficie: linha de tabela em foco, campo elevado."
+        },
+        "media": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#161A1E14",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 4,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 8,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -2,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#161A1E0F",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 2,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 4,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -2,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 2. Elemento flutuante: menu suspenso, dica, popover, cartao arrastavel."
+        },
+        "alta": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#161A1E24",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 16,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 32,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -8,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#161A1E14",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 4,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 8,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -4,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 3. Elemento modal: dialogo, folha lateral, painel de comando."
+        }
+      }
+    },
+    "escuro": {
+      "$description": "Tema escuro.",
+      "fundo": {
+        "$description": "Fundos e superficies.",
+        "aplicacao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Fundo da janela inteira."
+        },
+        "superficie": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.900}",
+          "$description": "Superficie de cartao, tabela, painel e dialogo."
+        },
+        "superficieElevada": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Superficie que precisa flutuar acima de outra superficie (menu sobre cartao)."
+        },
+        "sutil": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Fundo discreto: cabecalho de tabela, listra alternada, area de codigo."
+        },
+        "enfase": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.700}",
+          "$description": "Fundo de hover e de linha selecionada."
+        },
+        "inverso": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.100}",
+          "$description": "Fundo invertido: dica de ferramenta e aviso efemero."
+        },
+        "desabilitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Fundo de controle desabilitado."
+        },
+        "sobreposicao": {
+          "$type": "color",
+          "$value": "#0A0C0EBF",
+          "$description": "Cortina atras de dialogo. Hexadecimal de 8 digitos (os 2 ultimos sao o alfa)."
+        }
+      },
+      "texto": {
+        "$description": "Cores de texto.",
+        "primario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.50}",
+          "$description": "Texto principal. Contraste medido: fundo.aplicacao = 16.71:1 (minimo 4.5); fundo.superficie = 13.63:1 (minimo 4.5); fundo.sutil = 10.34:1 (minimo 4.5)."
+        },
+        "secundario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.300}",
+          "$description": "Texto de apoio: descricao, rotulo, valor secundario. Contraste medido: fundo.superficie = 9.46:1 (minimo 4.5); fundo.aplicacao = 11.60:1 (minimo 4.5)."
+        },
+        "terciario": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.400}",
+          "$description": "Texto de menor peso informativo: carimbo de tempo, contador, dica curta. Contraste medido: fundo.superficie = 7.03:1 (minimo 4.5); fundo.sutil = 5.33:1 (minimo 4.5)."
+        },
+        "desabilitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.600}",
+          "$description": "Texto de controle desabilitado. Isento do criterio 1.4.3 (elemento inativo), mas mantido legivel de proposito."
+        },
+        "inverso": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.900}",
+          "$description": "Texto sobre fundo.inverso. Contraste medido: fundo.inverso = 12.70:1 (minimo 4.5)."
+        },
+        "sobreAcao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto e icone sobre superficie de acao preenchida."
+        },
+        "link": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.300}",
+          "$description": "Link. Sublinhado e obrigatorio dentro de bloco de texto corrido: cor sozinha nao identifica link (criterio 1.4.1). Contraste medido: fundo.superficie = 9.43:1 (minimo 4.5); fundo.aplicacao = 11.56:1 (minimo 4.5)."
+        },
+        "linkVisitado": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.200}",
+          "$description": "Link ja visitado."
+        }
+      },
+      "borda": {
+        "$description": "Bordas, divisores e anel de foco.",
+        "sutil": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Divisor entre linhas e entre secoes. Decorativo."
+        },
+        "padrao": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.700}",
+          "$description": "Borda de cartao e de painel. Decorativa."
+        },
+        "controle": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.500}",
+          "$description": "Contorno de campo, caixa de selecao, botao de radio e alternador. Portador de informacao: precisa de 3:1. Contraste medido: fundo.superficie = 4.23:1 (minimo 3.0); fundo.aplicacao = 5.19:1 (minimo 3.0)."
+        },
+        "forte": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.400}",
+          "$description": "Contorno de controle em hover ou que exige mais peso visual."
+        },
+        "foco": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.400}",
+          "$description": "Anel de foco do teclado. Contraste medido: fundo.superficie = 6.89:1 (minimo 3.0); fundo.aplicacao = 8.45:1 (minimo 3.0)."
+        }
+      },
+      "acao": {
+        "$description": "Superficies acionaveis.",
+        "primariaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.400}",
+          "$description": "Fundo da acao primaria. Contraste medido: fundo.superficie = 6.89:1 (minimo 3.0)."
+        },
+        "primariaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.300}",
+          "$description": "Fundo da acao primaria em hover."
+        },
+        "primariaFundoAtivo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.200}",
+          "$description": "Fundo da acao primaria pressionada."
+        },
+        "primariaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre a acao primaria. Contraste medido: acao.primariaFundo = 8.45:1 (minimo 4.5); acao.primariaFundoHover = 11.56:1 (minimo 4.5)."
+        },
+        "secundariaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Fundo da acao secundaria (contorno)."
+        },
+        "secundariaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.700}",
+          "$description": "Fundo da acao secundaria em hover."
+        },
+        "secundariaBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.500}",
+          "$description": "Contorno da acao secundaria. Contraste medido: fundo.superficie = 4.23:1 (minimo 3.0)."
+        },
+        "secundariaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.50}",
+          "$description": "Texto da acao secundaria. Contraste medido: acao.secundariaFundo = 10.34:1 (minimo 4.5)."
+        },
+        "sutilFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.900}",
+          "$description": "Fundo da acao terciaria e de item de menu selecionado."
+        },
+        "sutilTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.200}",
+          "$description": "Texto da acao terciaria. Contraste medido: acao.sutilFundo = 11.71:1 (minimo 4.5)."
+        },
+        "destrutivaFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.400}",
+          "$description": "Fundo da acao destrutiva. Lembrete de dominio: NAO existe acao destrutiva sobre marcacao; este token serve para excluir cadastro, revogar sessao, cancelar solicitacao."
+        },
+        "destrutivaFundoHover": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.300}",
+          "$description": "Fundo da acao destrutiva em hover."
+        },
+        "destrutivaTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre a acao destrutiva. Contraste medido: acao.destrutivaFundo = 8.11:1 (minimo 4.5)."
+        },
+        "anelFoco": {
+          "$type": "color",
+          "$value": "{primitivo.cor.marca.400}",
+          "$description": "Anel de foco especifico de controle acionavel."
+        }
+      },
+      "estado": {
+        "$description": "Retorno semantico: sucesso, atencao, erro e informacao.",
+        "sucessoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.800}",
+          "$description": "Fundo do selo e do alerta de sucesso. Contraste medido: fundo.superficie = 1.36:1 (minimo 1.0)."
+        },
+        "sucessoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.500}",
+          "$description": "Borda do selo e do alerta de sucesso. Contraste medido: fundo.superficie = 4.53:1 (minimo 3.0)."
+        },
+        "sucessoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.100}",
+          "$description": "Texto sobre o fundo de sucesso. Contraste medido: estado.sucessoFundo = 9.39:1 (minimo 4.5)."
+        },
+        "sucessoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.300}",
+          "$description": "Icone sobre o fundo de sucesso. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.sucessoFundo = 7.18:1 (minimo 3.0)."
+        },
+        "sucessoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.sucesso.400}",
+          "$description": "Fundo preenchido de sucesso (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 7.34:1 (minimo 3.0)."
+        },
+        "sucessoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre o fundo preenchido de sucesso. Contraste medido: estado.sucessoSolidoFundo = 9.00:1 (minimo 4.5)."
+        },
+        "atencaoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.800}",
+          "$description": "Fundo do selo e do alerta de atencao. Contraste medido: fundo.superficie = 1.29:1 (minimo 1.0)."
+        },
+        "atencaoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.500}",
+          "$description": "Borda do selo e do alerta de atencao. Contraste medido: fundo.superficie = 4.12:1 (minimo 3.0)."
+        },
+        "atencaoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.100}",
+          "$description": "Texto sobre o fundo de atencao. Contraste medido: estado.atencaoFundo = 9.78:1 (minimo 4.5)."
+        },
+        "atencaoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.300}",
+          "$description": "Icone sobre o fundo de atencao. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.atencaoFundo = 7.24:1 (minimo 3.0)."
+        },
+        "atencaoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.atencao.400}",
+          "$description": "Fundo preenchido de atencao (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 6.84:1 (minimo 3.0)."
+        },
+        "atencaoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre o fundo preenchido de atencao. Contraste medido: estado.atencaoSolidoFundo = 8.39:1 (minimo 4.5)."
+        },
+        "erroFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.800}",
+          "$description": "Fundo do selo e do alerta de erro. Contraste medido: fundo.superficie = 1.22:1 (minimo 1.0)."
+        },
+        "erroBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.500}",
+          "$description": "Borda do selo e do alerta de erro. Contraste medido: fundo.superficie = 3.89:1 (minimo 3.0)."
+        },
+        "erroTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.100}",
+          "$description": "Texto sobre o fundo de erro. Contraste medido: estado.erroFundo = 10.27:1 (minimo 4.5)."
+        },
+        "erroIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.300}",
+          "$description": "Icone sobre o fundo de erro. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.erroFundo = 7.53:1 (minimo 3.0)."
+        },
+        "erroSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.erro.400}",
+          "$description": "Fundo preenchido de erro (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 6.61:1 (minimo 3.0)."
+        },
+        "erroSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre o fundo preenchido de erro. Contraste medido: estado.erroSolidoFundo = 8.11:1 (minimo 4.5)."
+        },
+        "infoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.800}",
+          "$description": "Fundo do selo e do alerta de info. Contraste medido: fundo.superficie = 1.33:1 (minimo 1.0)."
+        },
+        "infoBorda": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.500}",
+          "$description": "Borda do selo e do alerta de info. Contraste medido: fundo.superficie = 4.34:1 (minimo 3.0)."
+        },
+        "infoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.100}",
+          "$description": "Texto sobre o fundo de info. Contraste medido: estado.infoFundo = 9.57:1 (minimo 4.5)."
+        },
+        "infoIcone": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.300}",
+          "$description": "Icone sobre o fundo de info. Icone e obrigatorio: o estado nunca e comunicado so pela cor. Contraste medido: estado.infoFundo = 7.18:1 (minimo 3.0)."
+        },
+        "infoSolidoFundo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.info.400}",
+          "$description": "Fundo preenchido de info (contador, marcador, botao de estado). Contraste medido: fundo.superficie = 7.16:1 (minimo 3.0)."
+        },
+        "infoSolidoTexto": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.950}",
+          "$description": "Texto sobre o fundo preenchido de info. Contraste medido: estado.infoSolidoFundo = 8.79:1 (minimo 4.5)."
+        }
+      },
+      "grafico": {
+        "$description": "Cores de visualizacao de dados.",
+        "serie1": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie1}",
+          "$description": "Serie 1 do grafico (Vermelho). Contraste medido: fundo.superficie = 4.03:1 (minimo 3.0); fundo.aplicacao = 4.94:1 (minimo 3.0)."
+        },
+        "serie2": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie2}",
+          "$description": "Serie 2 do grafico (Ambar). Contraste medido: fundo.superficie = 5.58:1 (minimo 3.0); fundo.aplicacao = 6.84:1 (minimo 3.0)."
+        },
+        "serie3": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie3}",
+          "$description": "Serie 3 do grafico (Oliva). Contraste medido: fundo.superficie = 8.61:1 (minimo 3.0); fundo.aplicacao = 10.56:1 (minimo 3.0)."
+        },
+        "serie4": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie4}",
+          "$description": "Serie 4 do grafico (Verde). Contraste medido: fundo.superficie = 8.78:1 (minimo 3.0); fundo.aplicacao = 10.77:1 (minimo 3.0)."
+        },
+        "serie5": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie5}",
+          "$description": "Serie 5 do grafico (Petroleo). Contraste medido: fundo.superficie = 5.58:1 (minimo 3.0); fundo.aplicacao = 6.85:1 (minimo 3.0)."
+        },
+        "serie6": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie6}",
+          "$description": "Serie 6 do grafico (Azul). Contraste medido: fundo.superficie = 10.60:1 (minimo 3.0); fundo.aplicacao = 13.00:1 (minimo 3.0)."
+        },
+        "serie7": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie7}",
+          "$description": "Serie 7 do grafico (Roxo). Contraste medido: fundo.superficie = 3.46:1 (minimo 3.0); fundo.aplicacao = 4.25:1 (minimo 3.0)."
+        },
+        "serie8": {
+          "$type": "color",
+          "$value": "{primitivo.cor.grafico.escuro.serie8}",
+          "$description": "Serie 8 do grafico (Magenta). Contraste medido: fundo.superficie = 3.01:1 (minimo 3.0); fundo.aplicacao = 3.69:1 (minimo 3.0)."
+        },
+        "grade": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.800}",
+          "$description": "Linha de grade do grafico. Decorativa."
+        },
+        "eixo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.600}",
+          "$description": "Linha e marca de eixo."
+        },
+        "rotulo": {
+          "$type": "color",
+          "$value": "{primitivo.cor.neutro.400}",
+          "$description": "Rotulo textual de eixo e de legenda. Contraste medido: fundo.superficie = 7.03:1 (minimo 4.5)."
+        }
+      },
+      "sombra": {
+        "$description": "Tres niveis de elevacao.",
+        "baixa": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#00000066",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 1,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 2,
+                "unit": "px"
+              },
+              "spread": {
+                "value": 0,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#00000040",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 1,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 1,
+                "unit": "px"
+              },
+              "spread": {
+                "value": 0,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 1. No tema escuro a sombra sozinha separa pouco: combine com fundo.superficieElevada."
+        },
+        "media": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#00000080",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 4,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 8,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -2,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#00000059",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 2,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 4,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -2,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 2. Elemento flutuante."
+        },
+        "alta": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": "#0000009E",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 16,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 32,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -8,
+                "unit": "px"
+              }
+            },
+            {
+              "color": "#00000073",
+              "offsetX": {
+                "value": 0,
+                "unit": "px"
+              },
+              "offsetY": {
+                "value": 4,
+                "unit": "px"
+              },
+              "blur": {
+                "value": 8,
+                "unit": "px"
+              },
+              "spread": {
+                "value": -4,
+                "unit": "px"
+              }
+            }
+          ],
+          "$description": "Nivel 3. Elemento modal."
+        }
+      }
+    }
+  }
+}

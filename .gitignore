@@ -1,0 +1,353 @@
+# =============================================================================
+# Ponto Eletronico — .gitignore
+# Regra da casa: SEGREDO NUNCA ENTRA NO GIT. Somente arquivos *.example.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. SEGREDOS E CREDENCIAIS  (bloco mais importante — nao relaxar)
+# -----------------------------------------------------------------------------
+.env
+.env.*
+*.env
+env/.env
+
+# Chaves, certificados e material criptografico
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+*.csr
+*.asc
+*.gpg
+# Assinaturas CAdES geradas (AFD/AEJ/comprovantes).
+# .gitignore NAO aceita comentario no fim da linha de padrao: o texto vira
+# parte do padrao e a regra para de funcionar em silencio.
+*.p7s
+*.p7b
+*.p7m
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Chaves JWT do projeto (geradas localmente, nunca versionadas)
+infra/keys/
+secrets/
+*.secret
+*.secrets
+credentials.json
+service-account*.json
+
+# Android / iOS
+local.properties
+key.properties
+*.mobileprovision
+GoogleService-Info.plist
+google-services.json
+
+# EXCECOES EXPLICITAS — templates versionaveis, sem valor real
+!.env.example
+!.env.*.example
+!**/.env.example
+!**/.env.*.example
+!*.example
+!docs/**/*.pem.example
+
+# -----------------------------------------------------------------------------
+# 2. BIOMETRIA E MIDIA SENSIVEL (LGPD art. 5, II) — nada disso entra no repo
+# -----------------------------------------------------------------------------
+# Fotos de captura, frames, provas de vida
+capturas/
+captures/
+faces/
+fotos/
+photos/
+enrollment/
+biometria/
+biometrics/
+**/media/biometria/
+**/media/capturas/
+**/storage/biometria/
+
+# Embeddings / templates faciais
+embeddings/
+*.embedding
+*.embeddings
+*.npy
+*.npz
+templates_faciais/
+face_templates/
+*.template
+
+# Modelos do motor facial (pesados e/ou licenciados)
+# ATENCAO: NAO usar o padrao generico "models/" — colide com
+# packages/contracts/models/ e com os modulos models/ do SQLAlchemy.
+ml-models/
+modelos-faciais/
+**/facial-svc/models/
+**/facial-svc/weights/
+*.onnx
+*.tflite
+*.pt
+*.pth
+*.pb
+*.mlmodel
+*.engine
+*.trt
+*.caffemodel
+*.weights
+
+# Arquivos fiscais gerados localmente (contem CPF de pessoa real).
+# Diretorios ancorados na raiz (barra inicial) de proposito: um "afd/" solto
+# excluiria tests/fixtures/afd/, e o git nao consegue re-incluir arquivo dentro
+# de diretorio excluido — a excecao das fixtures, abaixo, nunca funcionaria.
+/afd/
+/aej/
+/comprovantes/
+infra/afd/
+infra/aej/
+*.afd
+*.aej
+
+# EXCECAO: fixtures legais de referencia (golden dataset das fases 3, 4 e 12).
+# Sao versionadas de proposito — o motor de calculo e o gerador de AFD/AEJ sao
+# testados contra elas. OBRIGATORIO: somente dados sinteticos, nenhum CPF real.
+!tests/fixtures/**/*.afd
+!tests/fixtures/**/*.aej
+!tests/fixtures/**/*.p7s
+
+# -----------------------------------------------------------------------------
+# 3. PYTHON
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+lib64/
+
+# Virtualenvs
+.venv/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# Testes / cobertura / cache de ferramentas
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+nosetests.xml
+*.cover
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+.pyre/
+cython_debug/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# -----------------------------------------------------------------------------
+# 4. NODE / NEXT.JS / WEB
+# -----------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+.vercel/
+.turbo/
+
+# Build / bundlers
+.cache/
+.parcel-cache/
+.swc/
+storybook-static/
+*.tsbuildinfo
+
+# Testes web
+playwright-report/
+test-results/
+blob-report/
+.nyc_output/
+coverage/
+
+# -----------------------------------------------------------------------------
+# 5. FLUTTER / DART / ANDROID / IOS
+# -----------------------------------------------------------------------------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/doc/api/
+*.lock.hash
+flutter_export_environment.sh
+
+# Android
+**/android/.gradle/
+**/android/captures/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# iOS / macOS Xcode
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Runner/GeneratedPluginRegistrant.*
+*.ipa
+*.dSYM.zip
+*.xcuserstate
+xcuserdata/
+**/macos/Flutter/ephemeral/
+
+# -----------------------------------------------------------------------------
+# 6. DOCKER / INFRA / DADOS LOCAIS
+# -----------------------------------------------------------------------------
+docker-compose.override.yml
+.docker/
+# Volumes locais de dados (nunca "data/" generico: colide com pastas de codigo)
+infra/volumes/
+infra/data/
+.volumes/
+pgdata/
+minio-data/
+redis-data/
+*.pid
+*.sock
+
+# Terraform / Ansible (uso futuro)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.retry
+
+# Backups e dumps (podem conter dado pessoal)
+*.sql.gz
+*.dump
+*.bak
+backups/
+
+# -----------------------------------------------------------------------------
+# 7. IDEs E EDITORES
+# -----------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+!.vscode/launch.json.example
+*.code-workspace
+.fleet/
+.zed/
+*.sublime-project
+*.sublime-workspace
+.history/
+.claude/settings.local.json
+
+# -----------------------------------------------------------------------------
+# 8. SISTEMA OPERACIONAL
+# -----------------------------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.apdisk
+Icon?
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# -----------------------------------------------------------------------------
+# 9. LOGS E TEMPORARIOS
+# -----------------------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+.tmp/
+*.tmp
+*.swp
+*.swo

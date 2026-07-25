@@ -1,0 +1,32 @@
+# =============================================================================
+# .dockerignore de apps/web
+# =============================================================================
+# ATENCAO: o contexto de build e a RAIZ do monorepo (ver Dockerfile), e o Docker
+# le o .dockerignore da RAIZ DO CONTEXTO — nao este. Este arquivo existe para
+# quem faz `docker build apps/web` a mao e para documentar o que nunca deve
+# entrar numa imagem do web.
+# =============================================================================
+
+node_modules
+.next
+out
+build
+coverage
+.vitest
+
+.git
+.gitignore
+.turbo
+*.tsbuildinfo
+
+# Segredo nunca entra em imagem. Só o exemplo.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+
+Dockerfile
+.dockerignore
+README.md

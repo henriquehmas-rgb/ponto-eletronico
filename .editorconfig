@@ -1,0 +1,65 @@
+# EditorConfig — Ponto Eletronico
+# Desenvolvimento em Windows, execucao em Linux: LF em tudo que roda em container.
+# https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+max_line_length = 100
+
+# --- Python (ruff/black: 4 espacos, linha 100) -------------------------------
+[*.{py,pyi}]
+indent_size = 4
+max_line_length = 100
+
+[*.{cfg,ini,toml}]
+indent_size = 4
+
+# --- TypeScript / JavaScript / web -------------------------------------------
+[*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,css,scss,html}]
+indent_size = 2
+
+# --- Dart / Flutter -----------------------------------------------------------
+[*.dart]
+indent_size = 2
+max_line_length = 80
+
+# --- Dados e configuracao -----------------------------------------------------
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.sql]
+indent_size = 2
+max_line_length = 120
+
+# --- Documentacao: espaco no fim de linha e quebra significativa em Markdown --
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# --- Arquivos que exigem formato especifico ----------------------------------
+[Makefile]
+indent_style = tab
+indent_size = 4
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[*.ps1]
+end_of_line = crlf
+
+# Arquivos fiscais REP-P: CR+LF e ISO 8859-1 por exigencia da Portaria 671/2021.
+# Nao sao versionados (ver .gitignore), a regra existe para fixtures de teste.
+[*.{afd,aej}]
+end_of_line = crlf
+charset = latin1
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[.gitattributes]
+end_of_line = lf

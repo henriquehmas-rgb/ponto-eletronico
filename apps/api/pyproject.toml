@@ -1,0 +1,183 @@
+####################################################################
+# ponto-api - aplicacao FastAPI do Ponto Eletronico (REP-P)
+#
+# Fase 0 entrega CONTRATO E ANDAIME: a aplicacao sobe, responde
+# /health e /ready de verdade e expoe todas as 215 operacoes de
+# `packages/contracts/openapi.yaml` como stubs que devolvem 501 com
+# o codigo PONTO-INT-005 (ver packages/contracts/errors.yaml).
+# Nenhuma regra de negocio vive aqui ainda.
+#
+# Ambiente de desenvolvimento (a partir de apps/api/):
+#     python -m venv .venv
+#     .venv/Scripts/pip install -e .[dev]      # Windows
+#     .venv/bin/pip install -e '.[dev]'        # Linux/macOS
+#
+# Subir:
+#     uvicorn app.main:app --reload
+####################################################################
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ponto-api"
+version = "0.1.0"
+description = "API REST do Ponto Eletronico REP-P multiempresa (FastAPI)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "SEEG Servicos de Tecnologia da Informacao" }]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Natural Language :: Portuguese (Brazilian)",
+]
+
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32",
+    # O extra [email] e obrigatorio, nao opcional: `app/schemas/contrato.py` usa
+    # `EmailStr` em 16 campos, e `EmailStr` exige `email-validator` em tempo de
+    # IMPORTACAO. Sem o extra, `from app.main import app` levanta ImportError e a
+    # imagem sobe em crash loop.
+    "pydantic[email]>=2.9,<3.0",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0.30,<3.0",
+    "asyncpg>=0.29",
+    # psycopg (sincrono) e exigido pelo Alembic: migrations/env.py converte o
+    # driver assincrono da DATABASE_URL para o sincrono equivalente.
+    "psycopg[binary]>=3.1",
+    "alembic>=1.13",
+    "redis>=5.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.7.4",
+    "mypy==1.13.0",
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
+    "types-pyyaml>=6.0",
+]
+# Ferramental de geracao de codigo a partir do contrato. Nao entra na imagem.
+# Uso: python tools/gerar_do_contrato.py  (ver cabecalho do script)
+codegen = [
+    "datamodel-code-generator[http]>=0.26",
+    "pyyaml>=6.0",
+]
+
+[project.urls]
+Repositorio = "https://github.com/henriquehmas-rgb/ponto-eletronico"
+Contrato = "https://github.com/henriquehmas-rgb/ponto-eletronico/tree/main/packages/contracts"
+
+# ------------------------------------------------------------------
+# Empacotamento
+# ------------------------------------------------------------------
+[tool.setuptools]
+packages = ["app"]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.package-data]
+app = ["py.typed"]
+
+# ==================================================================
+# ruff - lint e formatacao
+# ==================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["."]
+# RFC-001 D-04: as tres isencoes de `app/schemas/gerado.py` (aqui, em
+# [[tool.mypy.overrides]] e em [tool.coverage.run]) foram removidas. O arquivo
+# nunca existiu: o gerador (tools/gerar_do_contrato.py) escreve em
+# `app/schemas/contrato.py`, que permanece deliberadamente sob ruff,
+# mypy --strict e cobertura. Nao se troca um gate verde por um mais frouxo.
+extend-exclude = [
+    ".venv",
+    "migrations/versions",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming (snake_case obrigatorio - regra da casa)
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "TID",  # tidy imports
+    "RUF",  # regras do proprio ruff
+    "ASYNC",
+    "S",    # bandit
+]
+ignore = [
+    # FastAPI usa chamada de funcao em valor padrao (Depends, Query, Path).
+    "B008",
+    # Docstrings do dominio sao escritas em portugues, com acento.
+    "RUF002",
+    "RUF003",
+    # N818 exige sufixo "Error" no nome da excecao. O dominio e escrito em
+    # portugues do Brasil (regra da casa): `ErroDeAplicacao`, nao `ApplicationError`.
+    "N818",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Routers da Fase 0: stubs longos, gerados a partir do OpenAPI.
+"app/routers/*.py" = ["E501"]
+"tests/*" = ["S101"]
+# Scripts de desenvolvimento: `assert` e legitimo e nao vira imagem de producao.
+"tools/*.py" = ["S101", "E501"]
+# `migrations/` e ownership do agente de migrations (Fase 0 / A2b). Erros reais
+# (F, B, S) continuam valendo; so o estilo cosmetico e dispensado, para o lint
+# da API nao ditar formatacao em codigo de outro dono.
+"migrations/**" = ["E501", "RUF005", "UP017", "S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ==================================================================
+# mypy - tipos
+# ==================================================================
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+strict = true
+warn_unused_configs = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+namespace_packages = true
+explicit_package_bases = true
+exclude = ["^\\.venv/", "^migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*", "redis.*"]
+ignore_missing_imports = true
+
+# ==================================================================
+# pytest
+# ==================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning:app.*"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["*/tests/*"]

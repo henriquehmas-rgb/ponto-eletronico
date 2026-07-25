@@ -1,0 +1,247 @@
+# =============================================================================
+# Ponto Eletronico — override de DESENVOLVIMENTO LOCAL
+# =============================================================================
+# Diferencas em relacao ao arquivo base:
+#   * Portas publicadas em localhost (nao ha Traefik na maquina do dev).
+#   * Traefik desabilitado em todos os servicos.
+#   * Codigo montado como bind mount + hot reload (uvicorn --reload,
+#     arq --watch, next dev).
+#   * Alvo de build `dev` no Dockerfile multi-stage (traz dependencias de dev).
+#   * Healthchecks mais rapidos, para o ciclo de feedback nao doer.
+#
+# NUNCA use este arquivo em VPS. Ele publica Postgres, Redis e MinIO no host.
+#
+# Uso (a partir de infra/):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Ou, da raiz do monorepo:
+#   make up          /  .\tasks.ps1 up
+# =============================================================================
+
+x-dev-python-env: &dev-python-env
+  AMBIENTE: dev
+  LOG_LEVEL: DEBUG
+  DEBUG: "true"
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  # Sem TLS local: o navegador fala http com a API.
+  API_BASE_URL: http://localhost:${API_PORT:-8000}
+  WEB_BASE_URL: http://localhost:${WEB_PORT:-3000}
+  DOCS_BASE_URL: http://localhost:${API_PORT:-8000}/docs
+  CORS_ORIGENS: http://localhost:${WEB_PORT:-3000},http://127.0.0.1:${WEB_PORT:-3000}
+  MINIO_SECURE: "false"
+
+# -----------------------------------------------------------------------------
+# Redes
+# -----------------------------------------------------------------------------
+# O arquivo base anexa api, device-gw e web a rede EXTERNA do Traefik da VPS.
+# Na maquina do dev essa rede nao existe e o `up` falharia. Nao da para remover
+# a rede de um servico via override, entao redefinimos a rede como local: os
+# containers continuam anexados, so que a uma bridge criada pelo proprio
+# compose, sem nenhum Traefik escutando nela.
+networks:
+  traefik:
+    external: false
+    driver: bridge
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-traefik-local
+
+services:
+
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  minio:
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  facial-svc:
+    build:
+      context: ..
+      dockerfile: apps/facial-svc/Dockerfile
+      target: dev
+    ports:
+      - "${FACIAL_PORT:-8010}:8000"
+    environment:
+      AMBIENTE: dev
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../apps/facial-svc:/app:rw
+      - facial-models:/models
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      <<: *dev-python-env
+      OTEL_SERVICE_NAME: ponto-api-dev
+    volumes:
+      # O mount das chaves JWT vem do arquivo base e e preservado na mesclagem.
+      - ../apps/api:/app:rw
+      - ../packages/contracts:/contracts:ro
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    # Em dev nao ha Traefik na maquina; o acesso e por localhost.
+    labels:
+      traefik.enable: "false"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      target: dev
+    environment:
+      <<: *dev-python-env
+      OTEL_SERVICE_NAME: ponto-worker-dev
+      ARQ_WORKER_SETTINGS: ${ARQ_WORKER_SETTINGS:-worker.main.WorkerSettings}
+    volumes:
+      - ../apps/worker:/app:rw
+      - ../packages/contracts:/contracts:ro
+    command:
+      - arq
+      - ${ARQ_WORKER_SETTINGS:-worker.main.WorkerSettings}
+      - --watch
+      - /app
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      target: dev
+    environment:
+      <<: *dev-python-env
+      OTEL_SERVICE_NAME: ponto-scheduler-dev
+      ARQ_WORKER_SETTINGS: ${ARQ_SCHEDULER_SETTINGS:-worker.scheduler.SchedulerSettings}
+    volumes:
+      - ../apps/worker:/app:rw
+      - ../packages/contracts:/contracts:ro
+    command:
+      - arq
+      - ${ARQ_SCHEDULER_SETTINGS:-worker.scheduler.SchedulerSettings}
+      - --watch
+      - /app
+    healthcheck:
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  device-gw:
+    build:
+      context: ..
+      dockerfile: apps/device-gw/Dockerfile
+      target: dev
+    ports:
+      - "${DEVICE_GW_PORT:-8001}:8000"
+    environment:
+      <<: *dev-python-env
+      OTEL_SERVICE_NAME: ponto-device-gw-dev
+      API_BASE_URL: http://api:8000
+      # Sem hardware na mesa: o simulador de terminal Control iD assume.
+      CONTROLID_SIMULADOR: "true"
+    volumes:
+      - ../apps/device-gw:/app:rw
+      - ../packages/contracts:/contracts:ro
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    labels:
+      traefik.enable: "false"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      target: dev
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      AMBIENTE: dev
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      WATCHPACK_POLLING: "true"
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+      NEXT_PUBLIC_AMBIENTE: dev
+      API_INTERNAL_URL: http://api:8000
+      NEXTAUTH_URL: http://localhost:${WEB_PORT:-3000}
+    volumes:
+      - ../apps/web:/app:rw
+      - ../packages/contracts:/contracts:ro
+      # Anonimos: preservam o que e instalado/gerado dentro da imagem.
+      - /app/node_modules
+      - /app/.next
+    command: ["pnpm", "dev"]
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    labels:
+      traefik.enable: "false"

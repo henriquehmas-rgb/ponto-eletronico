@@ -1,0 +1,521 @@
+# =============================================================================
+# Ponto Eletronico — stack de producao/homologacao
+# =============================================================================
+# Premissas (fechadas em PROJETO.md §11.2):
+#   * O Traefik JA EXISTE na VPS e e quem escuta 80/443. Este arquivo NUNCA
+#     publica essas portas nem sobe outro proxy — apenas anexa os servicos
+#     expostos a rede externa do Traefik e declara labels de roteamento.
+#   * Nenhum segredo e literal: tudo vem de variavel de ambiente. Copie
+#     infra/.env.example para infra/.env e preencha.
+#   * Todo servico tem healthcheck; as dependencias usam service_healthy.
+#
+# Uso:
+#   docker compose --env-file .env -f docker-compose.yml config
+#   docker compose --env-file .env -f docker-compose.yml up -d
+#
+# Desenvolvimento local (portas publicadas, hot reload, sem Traefik):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Blocos reutilizaveis
+# -----------------------------------------------------------------------------
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-restart: &restart
+  restart: unless-stopped
+
+# Variaveis comuns a todos os servicos Python (api, worker, scheduler, device-gw)
+x-python-env: &python-env
+  AMBIENTE: ${AMBIENTE:-prd}
+  TZ: ${TZ:-America/Sao_Paulo}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?defina POSTGRES_USER}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?defina POSTGRES_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?defina REDIS_PASSWORD}@redis:6379/${REDIS_DB:-0}
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?defina MINIO_ROOT_USER}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD}
+  MINIO_BUCKET: ${MINIO_BUCKET:-ponto}
+  MINIO_SECURE: ${MINIO_SECURE:-false}
+  JWT_PRIVATE_KEY_PATH: ${JWT_PRIVATE_KEY_PATH:-/run/secrets/jwt/private.pem}
+  JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH:-/run/secrets/jwt/public.pem}
+  FACIAL_SVC_URL: ${FACIAL_SVC_URL:-http://facial-svc:8000}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${AMBIENTE:-prd}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_SERVICE_NAMESPACE: ponto
+
+# Healthcheck HTTP para servicos Python: usa a stdlib, nao exige curl na imagem.
+x-healthcheck-http-py: &healthcheck-http-py
+  test:
+    - CMD-SHELL
+    - >-
+      python -c "import sys,urllib.request;
+      sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 40s
+
+# -----------------------------------------------------------------------------
+# Redes
+# -----------------------------------------------------------------------------
+networks:
+  # Rede privada da stack. Postgres, Redis, MinIO e facial-svc vivem SO aqui.
+  ponto-interna:
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-interna
+    driver: bridge
+    internal: false
+
+  # Rede do Traefik global ja existente na VPS. Criada fora deste compose.
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-postgres-data
+  redis-data:
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-redis-data
+  minio-data:
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-minio-data
+  # Pesos ONNX do motor facial: grandes, fora do git, montados no facial-svc.
+  facial-models:
+    name: ${COMPOSE_PROJECT_NAME:-ponto}-facial-models
+
+# =============================================================================
+# Servicos
+# =============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — banco canonico, com RLS multi-tenant (ver ADR-001)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    <<: *restart
+    logging: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB}
+      # Collation deterministica: o motor de calculo compara strings de dominio.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: ${TZ:-America/Sao_Paulo}
+      PGTZ: ${TZ:-America/Sao_Paulo}
+    command:
+      - postgres
+      - -c
+      - max_connections=${POSTGRES_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-512MB}
+      - -c
+      - timezone=${TZ:-America/Sao_Paulo}
+      # row_security nao pode ser desligado por sessao de aplicacao.
+      - -c
+      - row_security=on
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - ponto-interna
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB} -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    labels:
+      traefik.enable: "false"
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — fila do ARQ, cache e rate limiting
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    <<: *restart
+    logging: *logging
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      # Usado apenas pelo healthcheck (redis-cli -a). O servidor recebe a senha
+      # por --requirepass no command.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?defina REDIS_PASSWORD}
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-512mb}
+      # noeviction: a fila do ARQ nao pode perder job por pressao de memoria.
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis-data:/data
+    networks:
+      - ponto-interna
+    expose:
+      - "6379"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli --no-auth-warning -a "$${REDIS_PASSWORD}" ping | grep -q PONG
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    labels:
+      traefik.enable: "false"
+
+  # ---------------------------------------------------------------------------
+  # MinIO — objetos: fotos de captura, anexos, PDFs, AFD/AEJ e .p7s
+  # Console habilitado na 9001. Em producao NAO e publicado: acesso por tunel
+  # SSH (ver README). O bloco de labels do Traefik esta comentado de proposito.
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    <<: *restart
+    logging: *logging
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?defina MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?defina MINIO_ROOT_PASSWORD}
+      MINIO_BROWSER: ${MINIO_BROWSER:-on}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - minio-data:/data
+    networks:
+      - ponto-interna
+    expose:
+      - "9000"
+      - "9001"
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    labels:
+      traefik.enable: "false"
+      # Para expor o console em minio.ponto.${DOMINIO}, descomente abaixo E
+      # aponte TRAEFIK_ADMIN_MIDDLEWARES para um middleware de allowlist de IP
+      # definido no Traefik global. Sem allowlist, nao exponha.
+      # traefik.enable: "true"
+      # traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      # traefik.http.routers.ponto-minio.rule: Host(`minio.ponto.${DOMINIO}`)
+      # traefik.http.routers.ponto-minio.entrypoints: websecure
+      # traefik.http.routers.ponto-minio.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      # traefik.http.routers.ponto-minio.middlewares: ${TRAEFIK_ADMIN_MIDDLEWARES:-}
+      # traefik.http.services.ponto-minio.loadbalancer.server.port: "9001"
+
+  # ---------------------------------------------------------------------------
+  # facial-svc — motor facial self-hosted (analise-facial-edge / ArcFace ONNX)
+  # Interno por definicao: biometria nunca sai da rede privada (LGPD, D4).
+  # ---------------------------------------------------------------------------
+  facial-svc:
+    build:
+      context: ..
+      dockerfile: apps/facial-svc/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-facial-svc:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    environment:
+      AMBIENTE: ${AMBIENTE:-prd}
+      TZ: ${TZ:-America/Sao_Paulo}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      FACIAL_MODEL_DIR: ${FACIAL_MODEL_DIR:-/models}
+      FACIAL_MODEL_VERSAO: ${FACIAL_MODEL_VERSAO:-arcface-r100-v1}
+      FACIAL_LIMIAR_SIMILARIDADE: ${FACIAL_LIMIAR_SIMILARIDADE:-0.42}
+      FACIAL_MTLS_CA_PATH: ${FACIAL_MTLS_CA_PATH:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    volumes:
+      - facial-models:/models
+    networks:
+      - ponto-interna
+    expose:
+      - "8000"
+    healthcheck: *healthcheck-http-py
+    labels:
+      traefik.enable: "false"
+
+  # ---------------------------------------------------------------------------
+  # api — FastAPI. Rota publica: api.ponto.${DOMINIO}
+  # Tambem serve o portal OpenAPI em docs.ponto.${DOMINIO} (router separado).
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-api:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    environment:
+      <<: *python-env
+      OTEL_SERVICE_NAME: ponto-api
+      API_BASE_URL: https://api.ponto.${DOMINIO}
+      WEB_BASE_URL: https://ponto.${DOMINIO}
+      DOCS_BASE_URL: https://docs.ponto.${DOMINIO}
+      CORS_ORIGENS: ${CORS_ORIGENS:-https://ponto.${DOMINIO}}
+      INPI_NUMERO: ${INPI_NUMERO:-}
+      CERT_ICP_PATH: ${CERT_ICP_PATH:-}
+      CERT_ICP_SENHA: ${CERT_ICP_SENHA:-}
+      UVICORN_WORKERS: ${API_WORKERS:-4}
+    volumes:
+      # Chaves JWT geradas fora do git (make keys). Somente leitura.
+      - ${JWT_KEYS_DIR:-./keys}:/run/secrets/jwt:ro
+    networks:
+      - ponto-interna
+      - traefik
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      facial-svc:
+        condition: service_healthy
+    healthcheck: *healthcheck-http-py
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+
+      # --- API: api.ponto.${DOMINIO} ---
+      traefik.http.routers.ponto-api.rule: Host(`api.ponto.${DOMINIO}`)
+      traefik.http.routers.ponto-api.entrypoints: websecure
+      traefik.http.routers.ponto-api.tls: "true"
+      traefik.http.routers.ponto-api.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.ponto-api.service: ponto-api
+      traefik.http.routers.ponto-api.middlewares: ponto-api-headers
+
+      # --- Portal OpenAPI: docs.ponto.${DOMINIO} ---
+      # Mesmo container; a raiz do host de docs cai em /docs (Swagger UI do
+      # FastAPI). Demais caminhos (/openapi.json, /redoc) passam intactos.
+      traefik.http.routers.ponto-docs.rule: Host(`docs.ponto.${DOMINIO}`)
+      traefik.http.routers.ponto-docs.entrypoints: websecure
+      traefik.http.routers.ponto-docs.tls: "true"
+      traefik.http.routers.ponto-docs.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.ponto-docs.service: ponto-api
+      traefik.http.routers.ponto-docs.middlewares: ponto-docs-raiz,ponto-api-headers
+
+      traefik.http.middlewares.ponto-docs-raiz.replacepathregex.regex: ^/$$
+      traefik.http.middlewares.ponto-docs-raiz.replacepathregex.replacement: /docs
+
+      # --- Cabecalhos de seguranca comuns ---
+      traefik.http.middlewares.ponto-api-headers.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.ponto-api-headers.headers.stsIncludeSubdomains: "true"
+      traefik.http.middlewares.ponto-api-headers.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.ponto-api-headers.headers.frameDeny: "true"
+      traefik.http.middlewares.ponto-api-headers.headers.referrerPolicy: strict-origin-when-cross-origin
+
+      traefik.http.services.ponto-api.loadbalancer.server.port: "8000"
+      traefik.http.services.ponto-api.loadbalancer.healthcheck.path: /health
+      traefik.http.services.ponto-api.loadbalancer.healthcheck.interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # worker — ARQ. Apuracao, geracao de AFD/AEJ, relatorios, webhooks.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-worker:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    command: ["arq", "${ARQ_WORKER_SETTINGS:-worker.main.WorkerSettings}"]
+    environment:
+      <<: *python-env
+      OTEL_SERVICE_NAME: ponto-worker
+      ARQ_WORKER_SETTINGS: ${ARQ_WORKER_SETTINGS:-worker.main.WorkerSettings}
+      ARQ_MAX_JOBS: ${ARQ_MAX_JOBS:-10}
+      CERT_ICP_PATH: ${CERT_ICP_PATH:-}
+      CERT_ICP_SENHA: ${CERT_ICP_SENHA:-}
+      INPI_NUMERO: ${INPI_NUMERO:-}
+    volumes:
+      - ${JWT_KEYS_DIR:-./keys}:/run/secrets/jwt:ro
+    networks:
+      - ponto-interna
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    # `arq --check` retorna 0 quando a chave de saude no Redis esta fresca.
+    healthcheck:
+      test: ["CMD-SHELL", "arq --check $${ARQ_WORKER_SETTINGS}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    labels:
+      traefik.enable: "false"
+
+  # ---------------------------------------------------------------------------
+  # scheduler — ARQ com cron: fechamento, vencimento de banco de horas,
+  # expurgo LGPD, coleta de terminais, relatorios agendados.
+  # ---------------------------------------------------------------------------
+  scheduler:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-worker:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    command: ["arq", "${ARQ_SCHEDULER_SETTINGS:-worker.scheduler.SchedulerSettings}"]
+    environment:
+      <<: *python-env
+      OTEL_SERVICE_NAME: ponto-scheduler
+      ARQ_WORKER_SETTINGS: ${ARQ_SCHEDULER_SETTINGS:-worker.scheduler.SchedulerSettings}
+      ARQ_MAX_JOBS: ${ARQ_SCHEDULER_MAX_JOBS:-2}
+    volumes:
+      - ${JWT_KEYS_DIR:-./keys}:/run/secrets/jwt:ro
+    networks:
+      - ponto-interna
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "arq --check $${ARQ_WORKER_SETTINGS}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    labels:
+      traefik.enable: "false"
+
+  # ---------------------------------------------------------------------------
+  # device-gw — gateway Control iD (Push/Monitor). Rota: dev.ponto.${DOMINIO}
+  # Isolado da API principal de proposito: rajada de terminal nao derruba a API.
+  # ---------------------------------------------------------------------------
+  device-gw:
+    build:
+      context: ..
+      dockerfile: apps/device-gw/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-device-gw:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    environment:
+      <<: *python-env
+      OTEL_SERVICE_NAME: ponto-device-gw
+      API_BASE_URL: http://api:8000
+      CONTROLID_USUARIO: ${CONTROLID_USUARIO:-}
+      CONTROLID_SENHA: ${CONTROLID_SENHA:-}
+      CONTROLID_TIMEOUT_S: ${CONTROLID_TIMEOUT_S:-10}
+      CONTROLID_PUSH_TOKEN: ${CONTROLID_PUSH_TOKEN:-}
+      CONTROLID_SIMULADOR: ${CONTROLID_SIMULADOR:-false}
+    volumes:
+      - ${JWT_KEYS_DIR:-./keys}:/run/secrets/jwt:ro
+    networks:
+      - ponto-interna
+      - traefik
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck: *healthcheck-http-py
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.ponto-devgw.rule: Host(`dev.ponto.${DOMINIO}`)
+      traefik.http.routers.ponto-devgw.entrypoints: websecure
+      traefik.http.routers.ponto-devgw.tls: "true"
+      traefik.http.routers.ponto-devgw.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.ponto-devgw.service: ponto-devgw
+      traefik.http.services.ponto-devgw.loadbalancer.server.port: "8000"
+      traefik.http.services.ponto-devgw.loadbalancer.healthcheck.path: /health
+      traefik.http.services.ponto-devgw.loadbalancer.healthcheck.interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # web — Next.js 15 (App Router). Rota: ponto.${DOMINIO}
+  # ---------------------------------------------------------------------------
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        AMBIENTE: ${AMBIENTE:-prd}
+        NEXT_PUBLIC_API_URL: https://api.ponto.${DOMINIO}
+    image: ${REGISTRY:-ghcr.io/henriquehmas-rgb}/ponto-web:${TAG:-latest}
+    <<: *restart
+    logging: *logging
+    environment:
+      NODE_ENV: production
+      AMBIENTE: ${AMBIENTE:-prd}
+      TZ: ${TZ:-America/Sao_Paulo}
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: https://api.ponto.${DOMINIO}
+      NEXT_PUBLIC_AMBIENTE: ${AMBIENTE:-prd}
+      NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN_WEB:-}
+      # Chamada servidor->servidor fica na rede interna, sem sair pela internet.
+      API_INTERNAL_URL: http://api:8000
+      NEXTAUTH_URL: https://ponto.${DOMINIO}
+    networks:
+      - ponto-interna
+      - traefik
+    expose:
+      - "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.ponto-web.rule: Host(`ponto.${DOMINIO}`)
+      traefik.http.routers.ponto-web.entrypoints: websecure
+      traefik.http.routers.ponto-web.tls: "true"
+      traefik.http.routers.ponto-web.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.ponto-web.service: ponto-web
+      traefik.http.routers.ponto-web.middlewares: ponto-web-headers
+      traefik.http.middlewares.ponto-web-headers.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.ponto-web-headers.headers.stsIncludeSubdomains: "true"
+      traefik.http.middlewares.ponto-web-headers.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.ponto-web-headers.headers.referrerPolicy: strict-origin-when-cross-origin
+      traefik.http.services.ponto-web.loadbalancer.server.port: "3000"
+      traefik.http.services.ponto-web.loadbalancer.healthcheck.path: /api/health
+      traefik.http.services.ponto-web.loadbalancer.healthcheck.interval: 30s

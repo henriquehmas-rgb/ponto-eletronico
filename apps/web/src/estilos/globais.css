@@ -1,0 +1,65 @@
+/* ===========================================================================
+ * Folha global da aplicacao web.
+ *
+ * REGRA DA CASA: nenhum valor literal de cor, raio, sombra, espacamento ou
+ * tipografia neste arquivo. Tudo que aparece aqui e var(--...) vindo de
+ * tokens.gerado.css, que por sua vez sai de packages/contracts/design-tokens.json.
+ * Se voce precisou de um valor que nao existe la, a resposta e RFC, nao CSS.
+ * =========================================================================== */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./tokens.gerado.css";
+
+/* O Tailwind v4 descobre as classes varrendo o codigo-fonte. Explicito para
+   nao depender da heuristica de raiz de projeto. */
+@source "../";
+
+/* Faz o `dark:` do Tailwind seguir o MESMO atributo que o script anti-flash
+   escreve no <html>. Sem isto haveria duas verdades sobre "esta escuro?". */
+@custom-variant dark (&:where([data-tema="escuro"], [data-tema="escuro"] *));
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--cor-fundo-aplicacao);
+    color: var(--cor-texto-primario);
+    font-family: var(--tipografia-familia-sans);
+    font-size: var(--tipografia-tamanho-sm);
+    line-height: var(--tipografia-altura-linha-sm);
+    letter-spacing: var(--tipografia-rastreio-sm);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Foco visivel em tudo que recebe foco, com a espessura e o deslocamento
+     que o contrato define. Acessibilidade nao e opcional nem e "da F9a". */
+  :focus-visible {
+    outline: var(--dimensao-espessura-foco) solid var(--cor-borda-foco);
+    outline-offset: var(--dimensao-deslocamento-foco);
+  }
+
+  ::selection {
+    background-color: var(--cor-acao-sutil-fundo);
+    color: var(--cor-acao-sutil-texto);
+  }
+
+  /* Numero em tabela e comparado coluna a coluna: figura tabular sempre. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Respeita quem pediu menos movimento no sistema operacional. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: var(--movimento-duracao-nenhuma) !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: var(--movimento-duracao-nenhuma) !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
