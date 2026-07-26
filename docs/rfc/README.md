@@ -197,6 +197,7 @@ Proposta ──► Decidida ──► Implementada
 | [007](RFC-007-importacaocriar-sem-conteudoref.md) | `ImportacaoCriar` não declara `conteudoRef`, embora o próprio exemplo do contrato e o schema de resposta `Importacao` o usem | ✅ Decidida/Implementada | 26/07/2026 | F2, F13 |
 | [008](RFC-008-precedencia-erro-contexto-vs-formato-de-caminho.md) | Erro de contexto (tenant/autenticação) tem precedência sobre validação de formato de parâmetro de caminho em toda rota real com `SessaoDb`/`exigir_permissao` | ✅ Decidida/Implementada | 26/07/2026 | F1..F15 (todas) |
 | [009](RFC-009-fn-resolve-tenant-quebra-com-slug.md) | `fn_resolve_tenant` (RFC-004) lança erro de cast para qualquer slug não-UUID, de forma intermitente — regressão crítica que bloqueia login/resolução de tenant pelo mecanismo primário documentado | ✅ Decidida/Implementada | 26/07/2026 | F1..F15 (todas) |
+| [010](RFC-010-resolucao-de-terminal-e-tipo-sincronizacao.md) | Falta `fn_resolve_terminal` (resolução de terminal por número de série antes de existir tenant) e falta valor de enum para sincronização de terminal em `ProcessamentoAssincrono.tipo` | ✅ Decidida/Implementada | 26/07/2026 | F6 |
 
 > Ao abrir uma RFC nova, acrescente a linha aqui **no mesmo commit**. Um índice
 > desatualizado faz o próximo agente escolher um número já usado.

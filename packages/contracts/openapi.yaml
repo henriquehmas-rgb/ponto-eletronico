@@ -37674,6 +37674,7 @@ components:
           - importacao
           - exportacao_folha
           - espelho
+          - sincronizacao_terminal
           description: Natureza do trabalho.
         status:
           type: string

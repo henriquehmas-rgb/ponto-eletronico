@@ -12403,6 +12403,7 @@ class Tipo42(StrEnum):
     importacao = "importacao"
     exportacao_folha = "exportacao_folha"
     espelho = "espelho"
+    sincronizacao_terminal = "sincronizacao_terminal"
 
 
 class Status62(StrEnum):

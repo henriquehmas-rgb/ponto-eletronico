@@ -1326,6 +1326,28 @@ CREATE UNIQUE INDEX uq_terminais_dispositivo ON terminais (tenant_id, dispositiv
 CREATE INDEX ix_terminais_unidade ON terminais (tenant_id, unidade_id) WHERE status = 'ativo';
 CREATE INDEX ix_terminais_contato ON terminais (tenant_id, ultimo_contato_em) WHERE status = 'ativo';
 
+-- Resolucao de terminal por numero de serie ANTES de existir app.tenant_id
+-- (RFC-010, mesma classe de problema que fn_resolve_tenant/RFC-004/RFC-009).
+-- SECURITY DEFINER porque `terminais` esta sob RLS e, na chegada de um evento
+-- Push/Monitor do iDFace, ainda nao ha app.tenant_id. Expoe so tres colunas.
+-- numero_serie e unico POR TENANT (uq_terminais_serie), nao globalmente -- a
+-- query nunca devolve mais de uma linha por engano: LIMIT 2 e a aplicacao
+-- trata 2 linhas como ambiguidade (erro), nunca escolhe a primeira.
+CREATE OR REPLACE FUNCTION fn_resolve_terminal(p_numero_serie TEXT)
+RETURNS TABLE (id UUID, tenant_id UUID, status TEXT)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.id, t.tenant_id, t.status
+    FROM terminais t
+   WHERE t.numero_serie = p_numero_serie
+     AND t.excluido_em IS NULL
+   LIMIT 2;
+$$;
+
+COMMENT ON FUNCTION fn_resolve_terminal(TEXT) IS
+  'Unica porta de entrada para descobrir tenant_id e id de um terminal a partir do numero de serie (RFC-010), antes de app.tenant_id existir. Devolve ate 2 linhas de proposito: a aplicacao deve tratar mais de uma linha como ambiguidade (erro), nunca escolher a primeira.';
+
 
 CREATE TABLE terminal_saude (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
