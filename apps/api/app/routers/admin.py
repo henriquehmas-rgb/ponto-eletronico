@@ -1,23 +1,57 @@
-"""Rotas da tag `admin` do contrato. GERADO -- nao editar.
+"""Rotas da tag `admin` do contrato.
 
-Administracao do tenant: usuarios, perfis, catalogo de permissoes, clientes de API e healthcheck da instancia.
-
-Regra de negocio destas operacoes entra na fase F1. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Administracao do tenant: usuarios, perfis, catalogo de permissoes e clientes
+de API. Regra de negocio implementada na F1/A3 (T8) -- ver
+`app.identidade.rbac.servico`. `GET /v1/admin/saude` NAO vive aqui: e
+infraestrutura de F0, registrada em `app/routers/saude.py`.
 """
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
+from pydantic import BaseModel
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.identidade.rbac import servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["admin"])
+
+_SchemaT = TypeVar("_SchemaT", bound=BaseModel)
+
+
+def _para_schema(schema_cls: type[_SchemaT], origem: Any, **extras: Any) -> _SchemaT:
+    """Converte um objeto ORM (ou dict) no schema pydantic do contrato.
+
+    Le, para cada campo declarado no schema, o atributo homonimo do objeto
+    ORM (os models de `packages/contracts` usam os mesmos nomes de coluna dos
+    schemas gerados) e aplica `extras` por cima -- usado para os campos
+    computados que nao sao coluna (`Usuario.perfis`, `Perfil.permissoes`).
+    """
+    dados = {nome: getattr(origem, nome, None) for nome in schema_cls.model_fields}
+    dados.update(extras)
+    return schema_cls.model_validate(dados)
+
+
+async def _usuario_para_schema(sessao: SessaoDb, tenant_id: UUID, usuario: Any) -> contrato.Usuario:
+    atribuicoes = await servico.perfis_do_usuario(
+        sessao, tenant_id=tenant_id, usuario_id=usuario.id
+    )
+    perfis = [
+        _para_schema(contrato.UsuarioPerfil, atribuicao, perfil_codigo=codigo)
+        for atribuicao, codigo in atribuicoes
+    ]
+    return _para_schema(contrato.Usuario, usuario, perfis=perfis)
+
+
+async def _perfil_para_schema(sessao: SessaoDb, tenant_id: UUID, perfil: Any) -> contrato.Perfil:
+    codigos = await servico.permissoes_do_perfil(sessao, tenant_id=tenant_id, perfil_id=perfil.id)
+    return _para_schema(contrato.Perfil, perfil, permissoes=codigos)
 
 
 @roteador.get(
@@ -28,71 +62,41 @@ roteador = APIRouter(tags=["admin"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_usuarios(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
-        ),
-    ] = None,
-    status: Annotated[
-        str | None, Query(alias="status", description="Filtra pela situacao.")
-    ] = None,
-    tipo: Annotated[
-        str | None, Query(alias="tipo", description="Filtra pelo tipo de identidade.")
-    ] = None,
-    perfil_codigo: Annotated[
-        str | None,
-        Query(
-            alias="perfilCodigo", description="Lista os usuarios que possuem um perfil especifico."
-        ),
-    ] = None,
-    empresa_id: Annotated[
-        UUID | None,
-        Query(alias="empresaId", description="Filtra pelos usuarios com escopo em uma empresa."),
-    ] = None,
-    com_colaborador: Annotated[
-        bool | None,
-        Query(
-            alias="comColaborador", description="Filtra usuarios com ou sem colaborador associado."
-        ),
-    ] = None,
-    busca: Annotated[
-        str | None,
-        Query(
-            alias="busca", description="Busca textual livre sobre os campos indexados do recurso."
-        ),
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    status: Annotated[str | None, Query(alias="status")] = None,
+    tipo: Annotated[str | None, Query(alias="tipo")] = None,
+    perfil_codigo: Annotated[str | None, Query(alias="perfilCodigo")] = None,
+    empresa_id: Annotated[UUID | None, Query(alias="empresaId")] = None,
+    com_colaborador: Annotated[bool | None, Query(alias="comColaborador")] = None,
+    busca: Annotated[str | None, Query(alias="busca")] = None,
 ) -> contrato.ListaUsuario:
-    """Listar usuarios
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("listarUsuarios", fase="F1")
+    """Listar usuarios."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_usuarios(
+        sessao,
+        tenant_id=tenant_id,
+        cursor=cursor,
+        limite=limite,
+        status=status,
+        tipo=tipo,
+        empresa_id=empresa_id,
+        com_colaborador=com_colaborador,
+        busca=busca,
+    )
+    dados = [await _usuario_para_schema(sessao, tenant_id, linha) for linha in linhas]
+    if perfil_codigo:
+        dados = [
+            u for u in dados if any(p.perfil_codigo == perfil_codigo for p in (u.perfis or []))
+        ]
+    return contrato.ListaUsuario(
+        dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao)
+    )
 
 
 @roteador.post(
@@ -103,34 +107,17 @@ async def listar_usuarios(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_usuario(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
-        ),
-    ],
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.criar"))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.UsuarioCriar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Usuario:
-    """Criar usuario
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("criarUsuario", fase="F1")
+    """Criar usuario."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    usuario = await servico.criar_usuario(sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito)
+    return await _usuario_para_schema(sessao, tenant_id, usuario)
 
 
 @roteador.patch(
@@ -141,35 +128,20 @@ async def criar_usuario(
     responses=RESPOSTAS_PADRAO,
 )
 async def atualizar_usuario(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
-        ),
-    ],
-    usuario_id: Annotated[UUID, Path(alias="usuarioId", description="Identificador do usuario.")],
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.editar"))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    usuario_id: Annotated[UUID, Path(alias="usuarioId")],
     corpo: contrato.UsuarioAtualizar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Usuario:
-    """Atualizar usuario
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("atualizarUsuario", fase="F1")
+    """Atualizar usuario."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    usuario = await servico.atualizar_usuario(
+        sessao, tenant_id=tenant_id, usuario_id=usuario_id, dados=corpo, sujeito=sujeito
+    )
+    return await _usuario_para_schema(sessao, tenant_id, usuario)
 
 
 @roteador.get(
@@ -180,57 +152,30 @@ async def atualizar_usuario(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_perfis(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
-        ),
-    ] = None,
-    sistema: Annotated[
-        bool | None,
-        Query(alias="sistema", description="Filtra perfis de fabrica ou criados pelo tenant."),
-    ] = None,
-    somente_leitura: Annotated[
-        bool | None,
-        Query(
-            alias="somenteLeitura",
-            description="Filtra perfis que nunca recebem permissao de escrita.",
-        ),
-    ] = None,
-    ativo: Annotated[
-        bool | None, Query(alias="ativo", description="Filtra por perfis ativos.")
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("perfis.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    sistema: Annotated[bool | None, Query(alias="sistema")] = None,
+    somente_leitura: Annotated[bool | None, Query(alias="somenteLeitura")] = None,
+    ativo: Annotated[bool | None, Query(alias="ativo")] = None,
 ) -> contrato.ListaPerfil:
-    """Listar perfis
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("listarPerfis", fase="F1")
+    """Listar perfis."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_perfis(
+        sessao,
+        tenant_id=tenant_id,
+        cursor=cursor,
+        limite=limite,
+        sistema=sistema,
+        somente_leitura=somente_leitura,
+        ativo=ativo,
+    )
+    dados = [await _perfil_para_schema(sessao, tenant_id, linha) for linha in linhas]
+    return contrato.ListaPerfil(dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao))
 
 
 @roteador.post(
@@ -241,34 +186,17 @@ async def listar_perfis(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_perfil(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
-        ),
-    ],
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("perfis.criar"))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.PerfilCriar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Perfil:
-    """Criar perfil
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("criarPerfil", fase="F1")
+    """Criar perfil."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    perfil = await servico.criar_perfil(sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito)
+    return await _perfil_para_schema(sessao, tenant_id, perfil)
 
 
 @roteador.get(
@@ -279,56 +207,30 @@ async def criar_perfil(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_permissoes(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
-        ),
-    ] = None,
-    modulo: Annotated[
-        str | None, Query(alias="modulo", description="Filtra pelo modulo funcional.")
-    ] = None,
-    recurso: Annotated[
-        str | None, Query(alias="recurso", description="Filtra pelo recurso.")
-    ] = None,
-    sensivel: Annotated[
-        bool | None,
-        Query(
-            alias="sensivel",
-            description="Filtra permissoes que exigem registro de acesso sensivel.",
-        ),
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("permissoes.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    modulo: Annotated[str | None, Query(alias="modulo")] = None,
+    recurso: Annotated[str | None, Query(alias="recurso")] = None,
+    sensivel: Annotated[bool | None, Query(alias="sensivel")] = None,
 ) -> contrato.ListaPermissao:
-    """Listar catalogo de permissoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("listarPermissoes", fase="F1")
+    """Listar catalogo de permissoes (somente leitura -- ver `schema.sql` secao 20)."""
+    linhas, paginacao = await servico.listar_permissoes(
+        sessao,
+        cursor=cursor,
+        limite=limite,
+        modulo=modulo,
+        recurso=recurso,
+        sensivel=sensivel,
+    )
+    dados = [_para_schema(contrato.Permissao, linha) for linha in linhas]
+    return contrato.ListaPermissao(
+        dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao)
+    )
 
 
 @roteador.get(
@@ -339,52 +241,32 @@ async def listar_permissoes(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_api_clients(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
-        ),
-    ] = None,
-    ambiente: Annotated[
-        str | None, Query(alias="ambiente", description="Filtra pelo ambiente do cliente.")
-    ] = None,
-    status: Annotated[
-        str | None, Query(alias="status", description="Filtra pela situacao.")
-    ] = None,
-    tipo: Annotated[
-        str | None, Query(alias="tipo", description="Filtra pelo tipo de cliente.")
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    ambiente: Annotated[str | None, Query(alias="ambiente")] = None,
+    status: Annotated[str | None, Query(alias="status")] = None,
+    tipo: Annotated[str | None, Query(alias="tipo")] = None,
 ) -> contrato.ListaApiClient:
-    """Listar clientes de API
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("listarApiClients", fase="F1")
+    """Listar clientes de API."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_api_clients(
+        sessao,
+        tenant_id=tenant_id,
+        cursor=cursor,
+        limite=limite,
+        ambiente=ambiente,
+        status=status,
+        tipo=tipo,
+    )
+    dados = [_para_schema(contrato.ApiClient, linha) for linha in linhas]
+    return contrato.ListaApiClient(
+        dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao)
+    )
 
 
 @roteador.post(
@@ -395,31 +277,18 @@ async def listar_api_clients(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_api_client(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
-        ),
-    ],
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.criar"))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.ApiClientCriar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
-        ),
-    ] = None,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.ApiClientCriado:
-    """Criar cliente de API
-
-    Fase 0 entrega andaime: a implementacao entra na fase F1.
-    """
-    raise NaoImplementado("criarApiClient", fase="F1")
+    """Criar cliente de API. O segredo (`clientSecret`) sai uma unica vez."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    cliente, segredo = await servico.criar_api_client(
+        sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito
+    )
+    return contrato.ApiClientCriado.model_validate(
+        {"cliente": _para_schema(contrato.ApiClient, cliente), "clientSecret": segredo}
+    )

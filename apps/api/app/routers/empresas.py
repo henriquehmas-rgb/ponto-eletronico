@@ -1,11 +1,9 @@
-"""Rotas da tag `empresas` do contrato. GERADO -- nao editar.
+"""Rotas da tag `empresas` do contrato.
 
 Pessoas juridicas empregadoras.
 Matriz e filiais sao registros distintos, cada um com CNPJ proprio, REP-P proprio e arquivos fiscais proprios.
 
-Regra de negocio destas operacoes entra na fase F2. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Implementado na Fase F2 (agente A1). Regra de negocio em `app/organizacao/empresas.py`.
 """
 
 from __future__ import annotations
@@ -13,12 +11,18 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.organizacao import empresas as servico
+from app.organizacao.paginacao import paginar, resolver_pedido
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["empresas"])
+
+_ORDENACAO_PADRAO = "criado_em:desc"
 
 
 @roteador.get(
@@ -29,25 +33,27 @@ roteador = APIRouter(tags=["empresas"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_empresas(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.ler"))],
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -57,7 +63,7 @@ async def listar_empresas(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     empresa_id: Annotated[
@@ -89,11 +95,28 @@ async def listar_empresas(
         ),
     ] = None,
 ) -> contrato.ListaEmpresa:
-    """Listar empresas
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("listarEmpresas", fase="F2")
+    """Listar empresas"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    pedido = resolver_pedido(
+        cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
+    )
+    linhas = await servico.listar_empresas(
+        sessao,
+        tenant_id=tenant_id,
+        pedido=pedido,
+        empresa_id=empresa_id,
+        cnpj=cnpj,
+        tipo=tipo,
+        matriz_id=matriz_id,
+        ativo=ativo,
+        busca=busca,
+        incluir_excluidos=bool(incluir_excluidos),
+    )
+    dados, paginacao = paginar(pedido=pedido, linhas=linhas)
+    return contrato.ListaEmpresa(
+        dados=[contrato.Empresa.model_validate(linha, from_attributes=True) for linha in dados],
+        paginacao=contrato.Paginacao.model_validate(paginacao),
+    )
 
 
 @roteador.post(
@@ -104,11 +127,13 @@ async def listar_empresas(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_empresa(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.criar"))],
     idempotency_key: Annotated[
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.EmpresaCriar,
@@ -116,22 +141,48 @@ async def criar_empresa(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Empresa:
-    """Criar empresa
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("criarEmpresa", fase="F2")
+    """Criar empresa"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    empresa = await servico.criar_empresa(
+        sessao,
+        tenant_id=tenant_id,
+        usuario_id=sujeito.usuario_id,
+        matriz_id=corpo.matriz_id,
+        tipo=corpo.tipo,
+        cnpj=corpo.cnpj,
+        razao_social=corpo.razao_social,
+        nome_fantasia=corpo.nome_fantasia,
+        inscricao_estadual=corpo.inscricao_estadual,
+        inscricao_municipal=corpo.inscricao_municipal,
+        cnae_principal=corpo.cnae_principal,
+        cei_caepf=corpo.cei_caepf,
+        natureza_juridica=corpo.natureza_juridica,
+        logradouro=corpo.logradouro,
+        numero=corpo.numero,
+        complemento=corpo.complemento,
+        bairro=corpo.bairro,
+        municipio=corpo.municipio,
+        uf=corpo.uf,
+        cep=corpo.cep,
+        codigo_ibge_municipio=corpo.codigo_ibge_municipio,
+        telefone=corpo.telefone,
+        email=corpo.email,
+        fuso_horario=corpo.fuso_horario,
+        logo_ref=corpo.logo_ref,
+        ativo=corpo.ativo,
+    )
+    return contrato.Empresa.model_validate(empresa, from_attributes=True)
 
 
 @roteador.get(
@@ -142,27 +193,28 @@ async def criar_empresa(
     responses=RESPOSTAS_PADRAO,
 )
 async def obter_empresa(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.ler"))],
     empresa_id: Annotated[UUID, Path(alias="empresaId", description="Identificador da empresa.")],
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Empresa:
-    """Obter empresa
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("obterEmpresa", fase="F2")
+    """Obter empresa"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    empresa = await servico.obter_empresa(sessao, tenant_id=tenant_id, empresa_id=empresa_id)
+    return contrato.Empresa.model_validate(empresa, from_attributes=True)
 
 
 @roteador.patch(
@@ -173,11 +225,13 @@ async def obter_empresa(
     responses=RESPOSTAS_PADRAO,
 )
 async def atualizar_empresa(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.editar"))],
     idempotency_key: Annotated[
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     empresa_id: Annotated[UUID, Path(alias="empresaId", description="Identificador da empresa.")],
@@ -186,22 +240,28 @@ async def atualizar_empresa(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Empresa:
-    """Atualizar empresa
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("atualizarEmpresa", fase="F2")
+    """Atualizar empresa"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    dados = corpo.model_dump(exclude_unset=True)
+    empresa = await servico.atualizar_empresa(
+        sessao,
+        tenant_id=tenant_id,
+        empresa_id=empresa_id,
+        usuario_id=sujeito.usuario_id,
+        dados=dados,
+    )
+    return contrato.Empresa.model_validate(empresa, from_attributes=True)
 
 
 @roteador.delete(
@@ -213,11 +273,13 @@ async def atualizar_empresa(
     response_class=Response,
 )
 async def excluir_empresa(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.excluir"))],
     idempotency_key: Annotated[
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     empresa_id: Annotated[UUID, Path(alias="empresaId", description="Identificador da empresa.")],
@@ -225,19 +287,20 @@ async def excluir_empresa(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> Response:
-    """Excluir empresa
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("excluirEmpresa", fase="F2")
+    """Excluir empresa"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.excluir_empresa(
+        sessao, tenant_id=tenant_id, empresa_id=empresa_id, usuario_id=sujeito.usuario_id
+    )
+    return Response(status_code=204)

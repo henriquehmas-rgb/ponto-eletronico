@@ -189,7 +189,23 @@ jobs:
         run: ruff format --check --diff apps packages tests
 
       - name: mypy
-        run: mypy apps packages
+        # RFC-009: `mypy apps packages` (um unico comando, da raiz do repo) nunca
+        # encontra o `[tool.mypy]` de nenhum app -- mypy so descobre config
+        # subindo a partir do diretorio corrente, ao contrario do ruff (que
+        # aplica o pyproject.toml mais proximo por arquivo). Sem config, mypy
+        # roda em modo relaxado e silenciosamente deixa de aplicar `strict`,
+        # os excludes e os `ignore_missing_imports` que cada app declara. Cada
+        # app tem seu proprio `[tool.mypy]` com `files = [...]` (nenhum
+        # argumento extra necessario quando rodado de dentro do app).
+        run: |
+          set -euo pipefail
+          for dir in apps/api apps/worker apps/device-gw apps/facial-svc; do
+            if [ -f "$dir/pyproject.toml" ]; then
+              echo "::group::mypy $dir"
+              (cd "$dir" && mypy)
+              echo "::endgroup::"
+            fi
+          done
 
   # ---------------------------------------------------------------------------
   # (b) Testes Python com PostgreSQL 16 de verdade

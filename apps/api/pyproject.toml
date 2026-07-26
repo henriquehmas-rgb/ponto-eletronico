@@ -52,6 +52,21 @@ dependencies = [
     "alembic>=1.13",
     "redis>=5.0",
     "httpx>=0.27",
+    # --- F1 ---
+    # Autenticacao: hash de senha (Argon2id), JWT RS256, TOTP (MFA) e
+    # primitivas de cifra (AES-256-GCM do segredo TOTP).
+    "argon2-cffi>=23.1",
+    "pyjwt[crypto]>=2.9",
+    "pyotp>=2.9",
+    "cryptography>=43.0",
+    # --- fim F1 ---
+    # --- F2 ---
+    # `criarBiometria` cifra o vetor em AES-256-GCM (`cryptography`, ja
+    # declarada no bloco F1 acima -- nao duplicar). `arq` e para enfileirar a
+    # tarefa `importar_colaboradores` a partir do request (o processamento em
+    # si roda no worker, que ja depende de `arq` no proprio pyproject.toml).
+    "arq>=0.26",
+    # --- fim F2 ---
 ]
 
 [project.optional-dependencies]

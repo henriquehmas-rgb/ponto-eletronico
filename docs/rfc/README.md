@@ -190,6 +190,13 @@ Proposta ──► Decidida ──► Implementada
 |---|---|---|---|---|
 | [001](RFC-001-divergencias-fase-0.md) | Divergências encontradas na verificação da Fase 0 | ✅ Decidida | 25/07/2026 | F0, F1, F2, F9a, F6, F7, F8 |
 | [002](RFC-002-acoes-de-permissao-fora-do-check.md) | Quatro `x-permissao` do OpenAPI usam ações que o `CHECK` de `permissoes.acao` recusa | ✅ Decidida | 25/07/2026 | F1, F4, F5, F10 |
+| [003](RFC-003-identidade-visual-oficial.md) | Identidade visual oficial: nome "SEEG Ponto", tipografia de três vozes | ✅ Decidida | 26/07/2026 | F9a, F7, F8, F11, F12 |
+| [004](RFC-004-resolucao-de-tenant-por-uuid.md) | `fn_resolve_tenant` não resolve tenant por UUID, só por slug | ✅ Decidida | 26/07/2026 | F1 |
+| [005](RFC-005-andaime-fase0-fica-obsoleto-por-fase.md) | `tests/test_andaime.py` fica obsoleto conforme as fases implementam rotas reais | ✅ Decidida | 26/07/2026 | F1..F15 (todas) |
+| [006](RFC-006-acao-permissao-fora-do-enum-openapi.md) | O schema `Permissao.acao` do `openapi.yaml` não aceita as três ações que a RFC-002 liberou no banco | ✅ Decidida | 26/07/2026 | F1, F4, F5, F10 |
+| [007](RFC-007-importacaocriar-sem-conteudoref.md) | `ImportacaoCriar` não declara `conteudoRef`, embora o próprio exemplo do contrato e o schema de resposta `Importacao` o usem | ✅ Decidida/Implementada | 26/07/2026 | F2, F13 |
+| [008](RFC-008-precedencia-erro-contexto-vs-formato-de-caminho.md) | Erro de contexto (tenant/autenticação) tem precedência sobre validação de formato de parâmetro de caminho em toda rota real com `SessaoDb`/`exigir_permissao` | ✅ Decidida/Implementada | 26/07/2026 | F1..F15 (todas) |
+| [009](RFC-009-fn-resolve-tenant-quebra-com-slug.md) | `fn_resolve_tenant` (RFC-004) lança erro de cast para qualquer slug não-UUID, de forma intermitente — regressão crítica que bloqueia login/resolução de tenant pelo mecanismo primário documentado | ✅ Decidida/Implementada | 26/07/2026 | F1..F15 (todas) |
 
 > Ao abrir uma RFC nova, acrescente a linha aqui **no mesmo commit**. Um índice
 > desatualizado faz o próximo agente escolher um número já usado.

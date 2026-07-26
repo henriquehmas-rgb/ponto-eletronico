@@ -37,6 +37,13 @@ dependencies = [
     "pydantic-settings>=2.6",
     "sqlalchemy>=2.0.30,<3.0",
     "asyncpg>=0.29",
+    # --- F2 ---
+    # `importar_colaboradores` (worker/tarefas/importacoes.py) le planilhas
+    # XLSX de ate 5.000 linhas. `ponto-contracts` (models SQLAlchemy do
+    # contrato) ja e instalado por camada separada no Dockerfile
+    # (`COPY packages/contracts /contratos`); nao repetido aqui.
+    "openpyxl>=3.1",
+    # --- fim F2 ---
 ]
 
 [project.optional-dependencies]
@@ -49,6 +56,9 @@ dev = [
     # `arq --watch /app` (command do override de desenvolvimento) importa
     # watchfiles em tempo de execucao e falha com ImportError sem ela.
     "watchfiles>=0.24",
+    # --- F2 --- (stub de tipos para o mypy --strict de `importar_colaboradores`)
+    "types-openpyxl>=3.1",
+    # --- fim F2 ---
 ]
 
 # Descoberta automatica, nao lista estatica: uma lista manual fica

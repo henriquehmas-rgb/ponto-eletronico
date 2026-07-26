@@ -92,8 +92,13 @@ lint: ## Lint Python (ruff)
 lint-web: ## Lint do web (eslint)
 	cd $(WEB_DIR) && pnpm lint
 
-typecheck: ## Tipos: mypy (Python) e tsc (web)
-	mypy apps packages
+typecheck: ## Tipos: mypy (Python, por app -- ver RFC-009) e tsc (web)
+	for dir in apps/api apps/worker apps/device-gw apps/facial-svc; do \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			echo "== mypy: $$dir =="; \
+			(cd $$dir && mypy) || exit 1; \
+		fi; \
+	done
 	cd $(WEB_DIR) && pnpm exec tsc --noEmit
 
 fmt: ## Formata o codigo (ruff + prettier)

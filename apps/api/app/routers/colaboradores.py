@@ -1,12 +1,16 @@
-"""Rotas da tag `colaboradores` do contrato. GERADO -- nao editar.
+"""Rotas da tag `colaboradores` do contrato.
 
 Pessoas.
 Guarda dados cadastrais e pessoais; as condicoes de trabalho vivem em contratos e vinculos.
 Leitura de campo sensivel gera registro proprio de acesso, exigido pela LGPD.
 
-Regra de negocio destas operacoes entra na fase F2. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F2 (agente A2, ownership deste arquivo --
+ver `docs/fases/F02-cadastros-organizacionais-pessoas.md`, secao 5). A regra em
+si vive em `app.pessoas.colaboradores`; este modulo so traduz HTTP <-> servico.
+
+`importarColaboradores`: RFC-007 decidida (opcao a) -- `ImportacaoCriar` ganhou
+`conteudoRef` no contrato, e o handler abaixo repassa para
+`app.importadores.servico.criar_importacao_colaboradores` (ownership F2/A3).
 """
 
 from __future__ import annotations
@@ -15,9 +19,14 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.config import obter_configuracao
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.importadores import servico as importadores_servico
+from app.pessoas import colaboradores as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["colaboradores"])
@@ -31,25 +40,27 @@ roteador = APIRouter(tags=["colaboradores"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_colaboradores(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -59,7 +70,7 @@ async def listar_colaboradores(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     empresa_id: Annotated[
@@ -112,11 +123,30 @@ async def listar_colaboradores(
         ),
     ] = None,
 ) -> contrato.ListaColaborador:
-    """Listar colaboradores
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("listarColaboradores", fase="F2")
+    """Listar colaboradores"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_colaboradores(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        departamento_id=departamento_id,
+        equipe_id=equipe_id,
+        gestor_colaborador_id=gestor_colaborador_id,
+        status=status,
+        cpf=cpf,
+        matricula=matricula,
+        admitido_de=admitido_de,
+        admitido_ate=admitido_ate,
+        incluir_inativos=bool(incluir_inativos),
+        busca=busca,
+        incluir_excluidos=bool(incluir_excluidos),
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Colaborador.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaColaborador(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -131,30 +161,31 @@ async def criar_colaborador(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.ColaboradorCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Colaborador:
-    """Criar colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("criarColaborador", fase="F2")
+    """Criar colaborador"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    colaborador = await servico.criar_colaborador(sessao, tenant_id, corpo)
+    return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
 
 @roteador.get(
@@ -168,26 +199,27 @@ async def obter_colaborador(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Colaborador:
-    """Obter colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("obterColaborador", fase="F2")
+    """Obter colaborador"""
+    tenant_id_ou_erro(sujeito)  # so confirma sujeito autenticado; RLS ja restringe por tenant
+    colaborador = await servico.obter_colaborador(sessao, colaborador_id)
+    return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
 
 @roteador.patch(
@@ -202,33 +234,34 @@ async def atualizar_colaborador(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
     corpo: contrato.ColaboradorAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Colaborador:
-    """Atualizar colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("atualizarColaborador", fase="F2")
+    """Atualizar colaborador"""
+    tenant_id_ou_erro(sujeito)
+    colaborador = await servico.atualizar_colaborador(sessao, colaborador_id, corpo)
+    return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
 
 @roteador.delete(
@@ -244,32 +277,33 @@ async def excluir_colaborador(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> Response:
-    """Excluir colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("excluirColaborador", fase="F2")
+    """Excluir colaborador"""
+    tenant_id_ou_erro(sujeito)
+    await servico.excluir_colaborador(sessao, colaborador_id)
+    return Response(status_code=204)
 
 
 @roteador.get(
@@ -283,25 +317,27 @@ async def listar_gestores_colaborador(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -311,7 +347,7 @@ async def listar_gestores_colaborador(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     vigente_em: Annotated[
@@ -325,11 +361,21 @@ async def listar_gestores_colaborador(
         str | None, Query(alias="tipo", description="Filtra pelo tipo de vinculo de gestao.")
     ] = None,
 ) -> contrato.ListaColaboradorGestor:
-    """Listar gestores do colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("listarGestoresColaborador", fase="F2")
+    """Listar gestores do colaborador"""
+    tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_gestores_colaborador(
+        sessao,
+        colaborador_id,
+        vigente_em=vigente_em,
+        tipo=tipo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [
+        contrato.ColaboradorGestor.model_validate(linha, from_attributes=True) for linha in linhas
+    ]
+    return contrato.ListaColaboradorGestor(dados=dados, paginacao=paginacao)
 
 
 @roteador.put(
@@ -344,33 +390,34 @@ async def definir_gestores_colaborador(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
     corpo: contrato.ColaboradorGestorCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.ColaboradorGestor:
-    """Definir gestores do colaborador
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("definirGestoresColaborador", fase="F2")
+    """Definir gestores do colaborador"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    registro = await servico.definir_gestor_colaborador(sessao, tenant_id, colaborador_id, corpo)
+    return contrato.ColaboradorGestor.model_validate(registro, from_attributes=True)
 
 
 @roteador.post(
@@ -385,27 +432,39 @@ async def importar_colaboradores(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.ImportacaoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Importacao:
-    """Importar colaboradores em lote
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("importarColaboradores", fase="F2")
+    """Importar colaboradores em lote"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    config = obter_configuracao()
+    importacao = await importadores_servico.criar_importacao_colaboradores(
+        sessao,
+        tenant_id=tenant_id,
+        empresa_id=corpo.empresa_id,
+        nome_arquivo=corpo.nome_arquivo,
+        origem=corpo.origem,
+        conteudo_ref=corpo.conteudo_ref,
+        parametros=corpo.parametros,
+        usuario_id=sujeito.usuario_id,
+        redis_url=config.redis_url,
+    )
+    return contrato.Importacao.model_validate(importacao, from_attributes=True)

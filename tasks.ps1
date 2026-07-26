@@ -199,8 +199,18 @@ function Alvo-LintWeb {
 }
 
 function Alvo-Typecheck {
+    # RFC-009: mypy so descobre `[tool.mypy]` subindo a partir do diretorio
+    # corrente -- rodar de dentro de cada app (sem argumento, `files` do
+    # proprio pyproject.toml resolve o alvo) e a unica forma de aplicar
+    # strict/excludes/ignore_missing_imports de cada um.
     Test-Ferramenta 'mypy' 'Instale com: pip install mypy'
-    Invoke-Externo -Comando 'mypy' -Argumentos @('apps', 'packages')
+    foreach ($dir in @('apps/api', 'apps/worker', 'apps/device-gw', 'apps/facial-svc')) {
+        if (Test-Path (Join-Path $dir 'pyproject.toml')) {
+            Write-Host "== mypy: $dir =="
+            Push-Location $dir
+            try { Invoke-Externo -Comando 'mypy' } finally { Pop-Location }
+        }
+    }
     Push-Location $WebDir
     try { Invoke-Externo -Comando 'pnpm' -Argumentos @('exec', 'tsc', '--noEmit') } finally { Pop-Location }
 }

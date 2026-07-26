@@ -34,7 +34,7 @@ async def criar_webhook(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.WebhookCriar,
@@ -42,14 +42,14 @@ async def criar_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.WebhookCriado:
@@ -72,21 +72,21 @@ async def listar_webhooks(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -96,7 +96,7 @@ async def listar_webhooks(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     api_client_id: Annotated[
@@ -131,14 +131,14 @@ async def obter_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Webhook:
@@ -161,7 +161,7 @@ async def atualizar_webhook(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     webhook_id: Annotated[UUID, Path(alias="webhookId", description="Identificador do webhook.")],
@@ -170,14 +170,14 @@ async def atualizar_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Webhook:
@@ -201,7 +201,7 @@ async def excluir_webhook(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     webhook_id: Annotated[UUID, Path(alias="webhookId", description="Identificador do webhook.")],
@@ -209,14 +209,14 @@ async def excluir_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> Response:
@@ -240,21 +240,21 @@ async def listar_entregas_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -264,7 +264,7 @@ async def listar_entregas_webhook(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     status: Annotated[
@@ -299,7 +299,7 @@ async def reenviar_entrega_webhook(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     webhook_id: Annotated[UUID, Path(alias="webhookId", description="Identificador do webhook.")],
@@ -308,14 +308,14 @@ async def reenviar_entrega_webhook(
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.WebhookEntrega:

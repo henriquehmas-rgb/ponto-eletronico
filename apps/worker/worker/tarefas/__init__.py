@@ -1,8 +1,14 @@
 """Catalogo das tarefas assincronas do sistema.
 
-As oito tarefas abaixo sao o conjunto completo previsto para a v1. O nome de
-cada uma e **contrato**: a API enfileira por nome, e renomear tarefa com job em
-voo perde trabalho. Por isso os nomes ja estao definitivos no andaime.
+**Nove tarefas.** A docstring original desta fase (Fase 0) descrevia oito como
+"o conjunto completo previsto para a v1" -- divergia de
+`packages/contracts/events.yaml`, que declara `importacao.concluida` com
+`origem: worker` sem nenhuma tarefa capaz de produzi-lo. O PCF da F2 (secao 2)
+ja decidiu isso a favor do contrato congelado: esta fase acrescenta
+`importar_colaboradores`, a nona. Registrado em `docs/backlog.md` para que
+ninguem trate o acrescimo como invencao de escopo. O nome de cada tarefa
+continua **contrato**: a API enfileira por nome, e renomear tarefa com job em
+voo perde trabalho.
 
 | Tarefa | Fila | Fase que implementa | O que fara |
 |---|---|---|---|
@@ -14,6 +20,7 @@ voo perde trabalho. Por isso os nomes ja estao definitivos no andaime.
 | `enviar_webhook` | integracoes | F13 | entrega evento assinado com HMAC |
 | `sincronizar_terminal` | integracoes | F6 | sincroniza cadastro com o coletor |
 | `expurgo_lgpd` | manutencao | F14 | aplica a politica de retencao |
+| `importar_colaboradores` | integracoes | F2 | processa CSV/XLSX de colaboradores linha a linha |
 """
 
 from __future__ import annotations
@@ -23,6 +30,7 @@ from typing import Any
 
 from worker.tarefas.apuracao import apurar_dia, recalcular_periodo
 from worker.tarefas.fiscal import gerar_aej, gerar_afd
+from worker.tarefas.importacoes import importar_colaboradores
 from worker.tarefas.integracoes import enviar_webhook, sincronizar_terminal
 from worker.tarefas.lgpd import expurgo_lgpd
 from worker.tarefas.relatorios import executar_relatorio
@@ -37,6 +45,7 @@ TAREFAS: tuple[Callable[..., Any], ...] = (
     enviar_webhook,
     sincronizar_terminal,
     expurgo_lgpd,
+    importar_colaboradores,
 )
 
 NOMES_DAS_TAREFAS: tuple[str, ...] = tuple(tarefa.__name__ for tarefa in TAREFAS)
@@ -50,6 +59,7 @@ __all__ = [
     "expurgo_lgpd",
     "gerar_aej",
     "gerar_afd",
+    "importar_colaboradores",
     "recalcular_periodo",
     "sincronizar_terminal",
 ]

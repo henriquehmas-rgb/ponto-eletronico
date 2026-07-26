@@ -1,12 +1,13 @@
-"""Rotas da tag `contratos` do contrato. GERADO -- nao editar.
+"""Rotas da tag `contratos` do contrato.
 
 Contratos e vinculos.
 O VINCULO, e nao o colaborador, e a chave da apuracao: jornada vigente, escala, apuracao do dia e conta de banco de horas penduram nele.
 Um colaborador pode ter mais de um vinculo simultaneo.
 
-Regra de negocio destas operacoes entra na fase F2. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F2 (agente A2, ownership deste arquivo --
+ver `docs/fases/F02-cadastros-organizacionais-pessoas.md`, secao 5). A regra em
+si vive em `app.pessoas.contratos` (que tambem publica `colaborador.admitido` e
+`colaborador.demitido`, ver T8); este modulo so traduz HTTP <-> servico.
 """
 
 from __future__ import annotations
@@ -15,9 +16,12 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.pessoas import contratos as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["contratos"])
@@ -31,25 +35,27 @@ roteador = APIRouter(tags=["contratos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_contratos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -59,7 +65,7 @@ async def listar_contratos(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     colaborador_id: Annotated[
@@ -82,11 +88,22 @@ async def listar_contratos(
         ),
     ] = None,
 ) -> contrato.ListaContrato:
-    """Listar contratos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("listarContratos", fase="F2")
+    """Listar contratos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_contratos(
+        sessao,
+        tenant_id,
+        colaborador_id=colaborador_id,
+        empresa_id=empresa_id,
+        tipo=tipo,
+        status=status,
+        vigente_em=vigente_em,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Contrato.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaContrato(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -101,30 +118,31 @@ async def criar_contrato(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.ContratoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Contrato:
-    """Criar contrato
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("criarContrato", fase="F2")
+    """Criar contrato"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_contrato(sessao, tenant_id, corpo)
+    return contrato.Contrato.model_validate(novo, from_attributes=True)
 
 
 @roteador.get(
@@ -138,26 +156,27 @@ async def obter_contrato(
     contrato_id: Annotated[
         UUID, Path(alias="contratoId", description="Identificador do contrato.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Contrato:
-    """Obter contrato
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("obterContrato", fase="F2")
+    """Obter contrato"""
+    tenant_id_ou_erro(sujeito)
+    encontrado = await servico.obter_contrato(sessao, contrato_id)
+    return contrato.Contrato.model_validate(encontrado, from_attributes=True)
 
 
 @roteador.patch(
@@ -172,33 +191,34 @@ async def atualizar_contrato(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     contrato_id: Annotated[
         UUID, Path(alias="contratoId", description="Identificador do contrato.")
     ],
     corpo: contrato.ContratoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Contrato:
-    """Atualizar contrato
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("atualizarContrato", fase="F2")
+    """Atualizar contrato"""
+    tenant_id_ou_erro(sujeito)
+    atualizado = await servico.atualizar_contrato(sessao, contrato_id, corpo)
+    return contrato.Contrato.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.get(
@@ -209,25 +229,27 @@ async def atualizar_contrato(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_vinculos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
     cursor: Annotated[
         str | None,
         Query(
             alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parame...",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
         ),
     ] = None,
     limite: Annotated[
@@ -237,7 +259,7 @@ async def listar_vinculos(
         str | None,
         Query(
             alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada opera...",
+            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
         ),
     ] = None,
     colaborador_id: Annotated[
@@ -264,11 +286,23 @@ async def listar_vinculos(
         ),
     ] = None,
 ) -> contrato.ListaVinculo:
-    """Listar vinculos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("listarVinculos", fase="F2")
+    """Listar vinculos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_vinculos(
+        sessao,
+        tenant_id,
+        colaborador_id=colaborador_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        status=status,
+        apura_ponto=apura_ponto,
+        vigente_em=vigente_em,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Vinculo.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaVinculo(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -283,30 +317,31 @@ async def criar_vinculo(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     corpo: contrato.VinculoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Vinculo:
-    """Criar vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("criarVinculo", fase="F2")
+    """Criar vinculo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_vinculo(sessao, tenant_id, corpo)
+    return contrato.Vinculo.model_validate(novo, from_attributes=True)
 
 
 @roteador.get(
@@ -318,26 +353,27 @@ async def criar_vinculo(
 )
 async def obter_vinculo(
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Vinculo:
-    """Obter vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("obterVinculo", fase="F2")
+    """Obter vinculo"""
+    tenant_id_ou_erro(sujeito)
+    encontrado = await servico.obter_vinculo(sessao, vinculo_id)
+    return contrato.Vinculo.model_validate(encontrado, from_attributes=True)
 
 
 @roteador.post(
@@ -352,28 +388,29 @@ async def encerrar_vinculo(
         str,
         Header(
             alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devo...",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
     ],
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
     corpo: contrato.EncerramentoVinculoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
             alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subd...",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
         ),
     ] = None,
     x_request_id: Annotated[
         str | None,
         Header(
             alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de aud...",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
 ) -> contrato.Vinculo:
-    """Encerrar vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F2.
-    """
-    raise NaoImplementado("encerrarVinculo", fase="F2")
+    """Encerrar vinculo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    encerrado = await servico.encerrar_vinculo(sessao, tenant_id, vinculo_id, corpo)
+    return contrato.Vinculo.model_validate(encerrado, from_attributes=True)

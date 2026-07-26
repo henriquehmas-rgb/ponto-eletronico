@@ -1,4 +1,4 @@
-"""Modelos Pydantic v2 de `components.schemas` do contrato. GERADO -- nao editar.
+"""Modelos Pydantic v2 de `components.schemas`. GERADO -- nao editar.
 
 Regerar com `python tools/gerar_do_contrato.py` (extra `codegen` instalado).
 
@@ -10158,6 +10158,10 @@ class ImportacaoCriar(BaseModel):
     """
     Nome do arquivo enviado.
     """
+    conteudo_ref: str | None = Field(None, alias="conteudoRef")
+    """
+    Chave do arquivo no armazenamento de objetos, obtida por upload previo. Obrigatoria para origem csv/xlsx, que processam um arquivo ja enviado.
+    """
     parametros: dict[str, Any] | None = None
     """
     Parametros da execucao, por exemplo delimitador e modo de atualizacao.
@@ -11399,6 +11403,9 @@ class Acao2(StrEnum):
     executar = "executar"
     assinar = "assinar"
     administrar = "administrar"
+    configurar = "configurar"
+    reabrir = "reabrir"
+    ler_sensivel = "ler_sensivel"
 
 
 class Permissao(BaseModel):

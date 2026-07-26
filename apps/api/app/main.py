@@ -32,6 +32,7 @@ from app.core.middleware import (
     TenantMiddleware,
 )
 from app.db.sessao import encerrar_engine
+from app.identidade.tokens.middleware import AutenticacaoMiddleware
 from app.routers import registrar_routers
 
 logger = obter_logger("main")
@@ -114,7 +115,13 @@ def criar_aplicacao(config: Configuracao | None = None) -> FastAPI:
 
     # A ordem importa: o ULTIMO adicionado e o PRIMEIRO a rodar. Request-id
     # precisa ser o mais externo para que qualquer falha ja saia correlacionada.
+    # Execucao (do primeiro ao ultimo): RequestId -> Tenant -> Autenticacao ->
+    # RegistroDeAcesso. Autenticacao (F1/A1) publica `usuario_id` no contexto a
+    # partir do access token DEPOIS que o tenant foi resolvido e ANTES do
+    # registro de acesso, para que o log ja saia com usuario correlacionado
+    # (ver docs/backlog.md, item "F1 / A1").
     app.add_middleware(RegistroDeAcessoMiddleware)
+    app.add_middleware(AutenticacaoMiddleware)
     app.add_middleware(TenantMiddleware, config=config)
     app.add_middleware(RequestIdMiddleware, cabecalho=config.cabecalho_request_id)
     app.add_middleware(

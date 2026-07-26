@@ -56,11 +56,17 @@ def _atributos_declarados(classe: type) -> set[str]:
 # ---------------------------------------------------------------------------
 # Pontos de entrada
 # ---------------------------------------------------------------------------
-def test_worker_settings_registra_as_oito_tarefas_do_catalogo() -> None:
-    """`arq worker.main.WorkerSettings` enxerga exatamente as tarefas do catalogo."""
+def test_worker_settings_registra_todas_as_tarefas_do_catalogo() -> None:
+    """`arq worker.main.WorkerSettings` enxerga exatamente as tarefas do catalogo.
+
+    RFC-005 (mesmo tratamento, agora para o worker): a contagem nao fica
+    gravada em pedra porque cada fase que acrescenta uma tarefa real ao
+    catalogo (`worker.tarefas.NOMES_DAS_TAREFAS`) faria este teste quebrar sem
+    motivo -- o que importa e que `WorkerSettings` nunca perca nem duplique
+    uma tarefa do catalogo, nao um numero fixo.
+    """
     registradas = [funcao.name for funcao in WorkerSettings.functions]
     assert registradas == list(NOMES_DAS_TAREFAS)
-    assert len(registradas) == 8
 
 
 def test_toda_tarefa_registrada_tem_fila_declarada() -> None:
@@ -119,9 +125,22 @@ def test_todo_evento_com_origem_scheduler_tem_rotina_produtora() -> None:
 # ---------------------------------------------------------------------------
 # Resultado padrao do andaime
 # ---------------------------------------------------------------------------
+#: Tarefas do catalogo que ja saem do andaime (fase dona ja as implementou de
+#: verdade). RFC-005 (mesmo tratamento, agora para o worker): este teste so
+#: cobre o CONTRATO de andaime (stub que nunca levanta excecao); a tarefa real
+#: precisa de banco/Redis de verdade e e testada pela propria fase dona --
+#: `importar_colaboradores` (F2/A3) tem sua cobertura em
+#: `apps/api/tests/f2/importadores/test_worker_tarefa.py`.
+_TAREFAS_JA_IMPLEMENTADAS = frozenset({"importar_colaboradores"})
+
+
 @pytest.mark.asyncio
 async def test_toda_tarefa_devolve_nao_implementado_sem_levantar() -> None:
-    """Levantar excecao entraria no ciclo de retentativa e poluiria a fila."""
+    """Levantar excecao entraria no ciclo de retentativa e poluiria a fila.
+
+    Cobre so as tarefas que ainda sao stub de andaime -- ver
+    `_TAREFAS_JA_IMPLEMENTADAS` para as que ja saem desta regra.
+    """
     ctx: dict[str, Any] = {"job_id": "teste", "job_try": 1}
     argumentos: dict[str, dict[str, Any]] = {
         "apurar_dia": {"tenant_id": "t", "vinculo_id": "v", "data": "2026-07-25"},
@@ -153,6 +172,8 @@ async def test_toda_tarefa_devolve_nao_implementado_sem_levantar() -> None:
         "expurgo_lgpd": {"tenant_id": "t"},
     }
     for tarefa in TAREFAS:
+        if tarefa.__name__ in _TAREFAS_JA_IMPLEMENTADAS:
+            continue
         resultado = await tarefa(ctx, **argumentos[tarefa.__name__])
         assert resultado["implementado"] is False
         assert resultado["codigo"] == CODIGO_NAO_IMPLEMENTADO

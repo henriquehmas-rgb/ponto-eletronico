@@ -68,11 +68,15 @@ faces/
 fotos/
 photos/
 enrollment/
-biometria/
-biometrics/
+# ATENCAO: NAO usar os padroes genericos "biometria/" ou "biometrics/" —
+# colidem com codigo-fonte legitimo (apps/api/app/biometria/,
+# apps/api/tests/f2/biometria/), do mesmo jeito que "models/" colidiria com
+# packages/contracts/models/ (ver aviso abaixo). O runtime de midia sensivel
+# fica coberto pelos padroes ANCORADOS logo a seguir.
 **/media/biometria/
 **/media/capturas/
 **/storage/biometria/
+**/storage/biometrics/
 
 # Embeddings / templates faciais
 embeddings/

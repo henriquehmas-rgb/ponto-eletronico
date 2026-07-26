@@ -35527,6 +35527,10 @@ components:
         nomeArquivo:
           type: string
           description: Nome do arquivo enviado.
+        conteudoRef:
+          type: string
+          description: Chave do arquivo no armazenamento de objetos, obtida por upload previo. Obrigatoria
+            para origem csv/xlsx, que processam um arquivo ja enviado.
         parametros:
           type: object
           additionalProperties: true
@@ -36804,6 +36808,9 @@ components:
           - executar
           - assinar
           - administrar
+          - configurar
+          - reabrir
+          - ler_sensivel
           description: Acao permitida.
         descricao:
           type: string

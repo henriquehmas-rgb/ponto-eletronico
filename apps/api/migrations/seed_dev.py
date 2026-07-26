@@ -3,14 +3,24 @@
 
 O que entra:
 
-* 1 tenant (SEEG, cliente numero 1 e cliente de homologacao)
-* 1 empresa (matriz) e 1 unidade (sede, com geocerca e fuso)
-* o catalogo GLOBAL de permissoes (recurso + acao)
-* os 7 perfis de fabrica, com a matriz perfil x permissao de desenvolvimento
-* 1 usuario administrador, com senha vinda de variavel de ambiente
-* os tipos de tratamento de fabrica
-* os tipos de solicitacao de fabrica
-* o conjunto de feriados nacionais (fixos e moveis), ligado a unidade
+* 2 tenants: o principal (SEEG, cliente numero 1 e cliente de homologacao,
+  `--tenant-slug`) e um SEGUNDO tenant de desenvolvimento (`--segundo-tenant-slug`,
+  ligavel/desligavel por `--sem-segundo-tenant`) -- existir mais de um tenant
+  semeado por este script e o que deixa a mao (fora do pytest, que semeia os
+  seus dois tenants de teste sozinho via `tests/f1/conftest.py`) verificar
+  isolamento entre tenants manualmente contra um banco de desenvolvimento real
+  (F1/A2, T11).
+* 1 empresa (matriz) e 1 unidade (sede, com geocerca e fuso) POR TENANT
+* o catalogo GLOBAL de permissoes (recurso + acao) -- semeado uma unica vez
+* os 7 perfis de fabrica, com a matriz perfil x permissao de desenvolvimento,
+  POR TENANT (perfis nao sao globais: tem `tenant_id`)
+* 1 usuario administrador POR TENANT, com senha vinda da MESMA variavel de
+  ambiente (`PONTO_SEED_ADMIN_SENHA`) -- nao ha segredo por tenant nesta
+  semeadura de desenvolvimento, so em produção
+* os tipos de tratamento de fabrica, POR TENANT
+* os tipos de solicitacao de fabrica, POR TENANT
+* o conjunto de feriados nacionais (fixos e moveis), ligado a unidade de cada
+  tenant
 
 O que NAO entra: colaborador, vinculo, jornada, escala, marcacao, apuracao. Isso
 e massa de teste, e massa de teste pertence as fases que implementam cada
@@ -80,6 +90,17 @@ except ModuleNotFoundError:  # pragma: no cover - fallback de checkout cru
 AMBIENTES_PRODUCAO = {"prd", "prod", "producao", "production"}
 VARIAVEL_SENHA = "PONTO_SEED_ADMIN_SENHA"
 
+# --- F1/A2 (T11): segundo tenant de desenvolvimento -------------------------
+# Dados fixos (nao configuraveis por CLI, de proposito -- e um tenant de
+# desenvolvimento para VERIFICAR isolamento a mao, nao um tenant de producao).
+# CNPJ ficticio, so valida formato (14 digitos), igual ao padrao do tenant
+# principal.
+SEGUNDO_TENANT_SLUG_PADRAO = "tenant-isolamento-dev"
+SEGUNDO_TENANT_RAZAO_SOCIAL = "Tenant B de Isolamento (F1/A2, desenvolvimento)"
+SEGUNDO_TENANT_CNPJ = "00000000000191"
+SEGUNDO_TENANT_ADMIN_EMAIL = "admin@tenant-isolamento-dev.local"
+SEGUNDO_TENANT_ADMIN_NOME = "Administrador Tenant B (dev)"
+
 
 # ===========================================================================
 # Catalogo GLOBAL de permissoes
@@ -98,6 +119,11 @@ EXPORTAR = "exportar"
 EXECUTAR = "executar"
 ASSINAR = "assinar"
 ADMINISTRAR = "administrar"
+# --- F1 (A3): tres acoes liberadas pela RFC-002 (decidida) no CHECK de
+# `permissoes.acao` -- ver docs/rfc/RFC-002-acoes-de-permissao-fora-do-check.md.
+CONFIGURAR = "configurar"
+REABRIR = "reabrir"
+LER_SENSIVEL = "ler_sensivel"
 
 CRUD = (LER, CRIAR, EDITAR, EXCLUIR)
 
@@ -173,6 +199,62 @@ CATALOGO_PERMISSOES: tuple[tuple[str, str, tuple[str, ...], bool, str], ...] = (
     ("relatorio", "agendamentos", CRUD, False, "Agendamento de relatorios"),
     # --- configuracao --------------------------------------------------------
     ("configuracao", "configuracoes", (LER, EDITAR, ADMINISTRAR), False, "Configuracoes do tenant"),
+    # -------------------------------------------------------------------------
+    # --- F1 (A3): COMPLEMENTO DO CATALOGO (T8) ------------------------------
+    #
+    # As 30 linhas abaixo cobrem os codigos de `x-permissao` do openapi.yaml
+    # que as linhas ACIMA (levantadas pela Fase 0 e nao alteradas por esta
+    # fase) nao geravam -- ver docs/backlog.md ("30 nao sao semeadas") e
+    # docs/rfc/RFC-002-acoes-de-permissao-fora-do-check.md. Comando que gerou
+    # a lista exata (a partir da raiz do repositorio):
+    #
+    #   python - <<'PY'
+    #   import yaml
+    #   d = yaml.safe_load(open('packages/contracts/openapi.yaml', encoding='utf-8'))
+    #   exigidos = {op['x-permissao']
+    #               for it in d['paths'].values() for op in it.values()
+    #               if isinstance(op, dict) and op.get('x-permissao')}
+    #   gerados = {f"{r}.{a}" for _m, r, acoes, _s, _d in CATALOGO_PERMISSOES for a in acoes}
+    #   print(sorted(exigidos - gerados))
+    #   PY
+    #
+    # Seis destas linhas ACRESCENTAM uma acao nova a um recurso que ja existia
+    # acima (auditoria.executar, biometrias.aprovar, fechamentos.reabrir,
+    # marcacoes.ler_sensivel, relatorios.criar, webhooks.executar) -- nao ha
+    # colisao de (recurso, acao) com as linhas ja existentes, e
+    # `semeia_permissoes`/`semeia_perfis` (abaixo) ja lidam com um recurso
+    # aparecendo em mais de uma linha do catalogo, sem mudanca de codigo. As
+    # demais introduzem um recurso novo (o proprio "banco_horas", "fiscal",
+    # "integracoes", "lgpd", "tenants", "tipos_afastamento",
+    # "tipos_solicitacao", "tipos_tratamento" -- distintos dos recursos mais
+    # granulares ja semeados, como "bh_politicas" ou "api_clients").
+    ("auditoria", "auditoria", (EXECUTAR,), False, "Verificacao da cadeia de auditoria"),
+    ("biometria", "biometrias", (APROVAR,), True, "Credenciais biometricas"),
+    ("fechamento", "fechamentos", (REABRIR,), False, "Fechamento de periodo"),
+    ("marcacao", "marcacoes", (LER_SENSIVEL,), True, "Meta antifraude da marcacao"),
+    ("relatorio", "relatorios", (CRIAR,), False, "Relatorios gerenciais"),
+    ("integracao", "webhooks", (EXECUTAR,), False, "Webhooks"),
+    (
+        "banco_horas",
+        "banco_horas",
+        (CONFIGURAR, CRIAR, LER),
+        False,
+        "Banco de horas (visao agregada, tenants.configurar da F1)",
+    ),
+    (
+        "fiscal",
+        "fiscal",
+        (LER, CRIAR, EXECUTAR, EXPORTAR, ASSINAR),
+        False,
+        "Arquivos fiscais (visao agregada)",
+    ),
+    ("integracao", "integracoes", (CRIAR, EXECUTAR, LER), False, "Integracoes (visao agregada)"),
+    ("auditoria", "lgpd", (CRIAR, EXCLUIR, LER), True, "Operacoes de LGPD"),
+    ("tenancy", "tenants", (CONFIGURAR, CRIAR, EDITAR, LER), False, "Administracao de tenants"),
+    ("jornada", "tipos_afastamento", (CRIAR, EDITAR, LER), False, "Tipos de afastamento"),
+    ("workflow", "tipos_solicitacao", (CRIAR, LER), False, "Tipos de solicitacao"),
+    ("apuracao", "tipos_tratamento", (LER,), False, "Tipos de tratamento"),
+    # --- fim complemento F1 --------------------------------------------------
 )
 
 
@@ -234,13 +316,31 @@ PERFIS_FABRICA: tuple[tuple[str, str, str, bool, str], ...] = (
 
 #: Modulos que cada perfil enxerga por acao. `"*"` significa todos os modulos.
 #: A matriz definitiva sai na Fase 1; esta e a de desenvolvimento.
+#: F1 (A3): `super_admin` e `admin_empresa` sao os dois perfis "tudo dentro do
+#: tenant" -- o wildcard "*" precisa incluir tambem as tres acoes liberadas
+#: pela RFC-002 (`configurar`, `reabrir`, `ler_sensivel`), senao um
+#: `admin_empresa` recem-semeado nao conseguiria exercer `tenants.configurar`
+#: por exemplo. Os demais perfis (rh, gestor, colaborador, auditor,
+#: integracao) sao explicitos por modulo e nao precisam da mudanca: nenhum
+#: deles ganha uma acao nova so por causa do complemento do catalogo.
+_TODAS_AS_ACOES = (
+    LER,
+    CRIAR,
+    EDITAR,
+    EXCLUIR,
+    APROVAR,
+    EXPORTAR,
+    EXECUTAR,
+    ASSINAR,
+    ADMINISTRAR,
+    CONFIGURAR,
+    REABRIR,
+    LER_SENSIVEL,
+)
+
 MATRIZ_PERFIS: dict[str, dict[str, tuple[str, ...]]] = {
-    "super_admin": {
-        "*": (LER, CRIAR, EDITAR, EXCLUIR, APROVAR, EXPORTAR, EXECUTAR, ASSINAR, ADMINISTRAR)
-    },
-    "admin_empresa": {
-        "*": (LER, CRIAR, EDITAR, EXCLUIR, APROVAR, EXPORTAR, EXECUTAR, ASSINAR, ADMINISTRAR)
-    },
+    "super_admin": {"*": _TODAS_AS_ACOES},
+    "admin_empresa": {"*": _TODAS_AS_ACOES},
     "rh": {
         "organizacao": (LER, CRIAR, EDITAR),
         "pessoas": (LER, CRIAR, EDITAR, EXPORTAR),
@@ -985,6 +1085,20 @@ def monta_parser() -> argparse.ArgumentParser:
         help="Permite rodar mesmo quando AMBIENTE indica producao.",
     )
     parser.add_argument(
+        "--segundo-tenant-slug",
+        default=SEGUNDO_TENANT_SLUG_PADRAO,
+        help=(
+            "Slug do SEGUNDO tenant de desenvolvimento, semeado ao lado do "
+            "principal para permitir verificar isolamento entre tenants a mao "
+            "(padrao: %(default)s)."
+        ),
+    )
+    parser.add_argument(
+        "--sem-segundo-tenant",
+        action="store_true",
+        help="Semeia SOMENTE o tenant principal (--tenant-slug), sem o segundo tenant de isolamento.",
+    )
+    parser.add_argument(
         "--secar",
         action="store_true",
         help="Faz tudo e desfaz no fim (rollback). Util para validar o script.",
@@ -1024,6 +1138,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     resumo = Resumo()
     tenant_id: uuid.UUID | None = None
+    tenant_id_b: uuid.UUID | None = None
+    semeia_segundo_tenant = (
+        not args.sem_segundo_tenant and args.segundo_tenant_slug != args.tenant_slug
+    )
     try:
         with Session(engine) as sessao, sessao.begin():
             tenant_id = semeia(
@@ -1036,6 +1154,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 senha=senha,
                 resumo=resumo,
             )
+            # --- F1/A2 (T11): segundo tenant, para verificar isolamento a mao.
+            # MESMA transacao/sessao do tenant principal: `semeia()` publica
+            # `app.tenant_id` (via `set_config(..., true)`) para o UUID do
+            # tenant que esta processando ANTES do primeiro INSERT daquele
+            # tenant -- reentrante porque cada chamada troca o valor no
+            # inicio, e idempotente porque `_obter_ou_criar`/a busca por slug
+            # localizam o que ja existe em vez de duplicar.
+            if semeia_segundo_tenant:
+                tenant_id_b = semeia(
+                    sessao,
+                    slug=args.segundo_tenant_slug,
+                    razao_social=SEGUNDO_TENANT_RAZAO_SOCIAL,
+                    cnpj=SEGUNDO_TENANT_CNPJ,
+                    admin_email=SEGUNDO_TENANT_ADMIN_EMAIL,
+                    admin_nome=SEGUNDO_TENANT_ADMIN_NOME,
+                    senha=senha,
+                    resumo=resumo,
+                )
             if args.secar:
                 # Sai por excecao para que o `with` desfaca tudo: o modo secar
                 # existe justamente para provar o script sem sujar o banco.
@@ -1047,6 +1183,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"\nSeed de desenvolvimento concluido. tenant={args.tenant_slug} ({tenant_id})")
     print(f"Administrador: {args.admin_email} (senha lida de {VARIAVEL_SENHA}).")
+    if semeia_segundo_tenant:
+        print(f"Segundo tenant: {args.segundo_tenant_slug} ({tenant_id_b})")
+        print(f"Administrador do segundo tenant: {SEGUNDO_TENANT_ADMIN_EMAIL} (mesma senha).")
+    else:
+        print("Segundo tenant de isolamento NAO semeado (--sem-segundo-tenant).")
     print("A credencial nasce com trocar_no_proximo_acesso = TRUE.\n")
     print("Criado nesta execucao:")
     resumo.imprime()

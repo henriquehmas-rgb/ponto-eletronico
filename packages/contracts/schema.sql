@@ -167,6 +167,23 @@ CREATE POLICY pol_isolamento_tenant ON tenants
 -- SECURITY DEFINER porque tenants esta sob RLS e, no momento do login, ainda
 -- nao ha app.tenant_id definido. Expoe apenas quatro colunas: nao ha como
 -- enumerar a base de clientes por aqui.
+--
+-- Aceita slug OU UUID em p_slug (RFC-004, corrigida pela RFC-009): o cabecalho
+-- X-Tenant do contrato documenta os dois formatos. RFC-009: a primeira versao
+-- desta funcao decidia qual comparacao usar com um guard de AND/OR
+-- (`(regex AND t.id = p_slug::uuid) OR (NOT regex AND t.slug = p_slug)`),
+-- assumindo que o PostgreSQL avalia os operandos de AND estritamente da
+-- esquerda para a direita com curto-circuito -- o proprio manual do
+-- PostgreSQL desmente isso (secao 4.2.14, "Expression Evaluation Rules"): a
+-- ordem de avaliacao de sub-expressoes de AND/OR NAO e garantida, e o
+-- planejador pode tentar o cast `p_slug::uuid` mesmo quando o regex e falso.
+-- Isso quebrava a resolucao por slug (o caso comum) de forma intermitente,
+-- dependente do plano escolhido -- reproduzido de forma deterministica contra
+-- o Postgres 16 real assim que a tabela `tenants` tinha linhas suficientes
+-- para o planejador preferir outro plano. A unica construcao com ordem de
+-- avaliacao garantida pelo padrao SQL (e documentada como tal pelo proprio
+-- manual do PostgreSQL, mesma secao) e CASE/WHEN: o cast so roda dentro do
+-- ramo que o regex ja confirmou.
 CREATE OR REPLACE FUNCTION fn_resolve_tenant(p_slug TEXT)
 RETURNS TABLE (id UUID, slug TEXT, nome_exibicao TEXT, status TEXT)
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -174,12 +191,16 @@ SET search_path = public
 AS $$
   SELECT t.id, t.slug, t.nome_exibicao, t.status
     FROM tenants t
-   WHERE t.slug = p_slug
-     AND t.excluido_em IS NULL;
+   WHERE t.excluido_em IS NULL
+     AND CASE
+           WHEN p_slug ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+             THEN t.id = p_slug::uuid
+           ELSE t.slug = p_slug
+         END;
 $$;
 
 COMMENT ON FUNCTION fn_resolve_tenant(TEXT) IS
-  'Unica porta de entrada para descobrir o tenant a partir do subdominio antes de app.tenant_id existir.';
+  'Unica porta de entrada para descobrir o tenant a partir do subdominio ou do cabecalho X-Tenant (slug ou UUID, RFC-004) antes de app.tenant_id existir.';
 
 
 CREATE TABLE tenant_configuracoes (

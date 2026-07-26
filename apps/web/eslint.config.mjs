@@ -13,6 +13,10 @@ const config = [
       ".next/**",
       "node_modules/**",
       "next-env.d.ts",
+      // Saida de build do Storybook (`pnpm build-storybook`): artefato
+      // gerado/minificado, ja coberto por `.gitignore` — nao e codigo-fonte
+      // desta fase e nao deve ser lintado.
+      "storybook-static/**",
       // Arquivos gerados: a verificacao deles e "estar em dia com o contrato",
       // feita por `pnpm tokens:check` e `pnpm tipos:api:check`, nao por lint.
       "src/lib/api/tipos.gerado.ts",
@@ -35,6 +39,13 @@ const config = [
     // Os geradores sao ferramentas de linha de comando: a saida deles E o
     // console. Silenciar seria pedir para rodar `pnpm tokens` no escuro.
     files: ["scripts/**/*.mjs"],
+    rules: { "no-console": "off" },
+  },
+  {
+    // Mesma razao: `.storybook/testar-estatico.mjs` e a ferramenta de linha
+    // de comando que orquestra `pnpm test:storybook` (T1) — a saida dela E o
+    // console, nao um log de aplicacao.
+    files: [".storybook/*.mjs"],
     rules: { "no-console": "off" },
   },
 ];

@@ -23,7 +23,8 @@ FILA_RELATORIOS: Final[str] = "ponto:relatorios"
 FILA_INTEGRACOES: Final[str] = "ponto:integracoes"
 FILA_MANUTENCAO: Final[str] = "ponto:manutencao"
 
-#: Fila de destino planejada por tarefa. Documental na Fase 0.
+#: Fila de destino planejada por tarefa. Documental na Fase 0; a partir da F2,
+#: `importar_colaboradores` ja e implementacao real, nao mais planejamento.
 FILA_POR_TAREFA: Final[dict[str, str]] = {
     "apurar_dia": FILA_APURACAO,
     "recalcular_periodo": FILA_APURACAO,
@@ -33,6 +34,7 @@ FILA_POR_TAREFA: Final[dict[str, str]] = {
     "enviar_webhook": FILA_INTEGRACOES,
     "sincronizar_terminal": FILA_INTEGRACOES,
     "expurgo_lgpd": FILA_MANUTENCAO,
+    "importar_colaboradores": FILA_INTEGRACOES,
 }
 
 #: Fase de FASES-E-AGENTES.md que implementa cada tarefa.
@@ -45,6 +47,7 @@ FASE_POR_TAREFA: Final[dict[str, str]] = {
     "enviar_webhook": "F13",
     "sincronizar_terminal": "F6",
     "expurgo_lgpd": "F14",
+    "importar_colaboradores": "F2",
 }
 
 CODIGO_NAO_IMPLEMENTADO: Final[str] = "PONTO-INT-005"

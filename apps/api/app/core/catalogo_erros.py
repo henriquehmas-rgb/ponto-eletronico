@@ -7,6 +7,8 @@ O catalogo e a fonte da verdade das falhas da API: o backend responde com o
 Nenhum servico inventa string de erro nem codigo fora desta tabela.
 """
 
+# ruff: noqa: E501 - tabela de dados: uma entrada por linha e mais legivel
+
 from __future__ import annotations
 
 from typing import Final, NamedTuple
