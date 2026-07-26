@@ -167,11 +167,35 @@ async def test_incluir_meta_sem_permissao_sensivel_bloqueia(
 async def test_incluir_meta_com_permissao_sensivel_nao_bloqueia(
     sessao_f5: AsyncSession, contexto_f5: ContextoF5
 ) -> None:
-    await _criar_marcacoes(sessao_f5, contexto_f5, 1)
+    ids = await _criar_marcacoes(sessao_f5, contexto_f5, 1)
+    marcacao_id = ids[0]
+    linha = (
+        await sessao_f5.execute(
+            text("SELECT datahora_marcacao FROM marcacoes WHERE id = :id"),
+            {"id": marcacao_id},
+        )
+    ).first()
+    assert linha is not None
+    await sessao_f5.execute(
+        text(
+            "INSERT INTO marcacoes_meta "
+            "(id, tenant_id, marcacao_id, marcacao_datahora, dentro_geocerca, "
+            " score_confianca, classificacao_confianca, revisao_status) "
+            "VALUES (:id, :tenant_id, :marcacao_id, :marcacao_datahora, TRUE, "
+            "        100, 'alta', 'nao_requer')"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "tenant_id": contexto_f5.tenant_id,
+            "marcacao_id": marcacao_id,
+            "marcacao_datahora": linha.datahora_marcacao,
+        },
+    )
     sujeito_com_permissao = _sujeito(contexto_f5, com_ler_sensivel=True)
 
-    # RFC-011: a permissao e checada de verdade (nao levanta), mas o
-    # conteudo de MarcacaoMeta ainda nao tem onde ser embutido na resposta.
+    # RFC-011 (decidida): a permissao e checada de verdade e o conteudo de
+    # MarcacaoMeta vem embutido em `pagina.metas` (mapa marcacaoId -> MarcacaoMeta,
+    # irmao de `dados`), sem alterar o schema de `Marcacao`.
     pagina = await consulta_marcacoes.listar_marcacoes(
         sessao_f5,
         tenant_id=contexto_f5.tenant_id,
@@ -179,6 +203,25 @@ async def test_incluir_meta_com_permissao_sensivel_nao_bloqueia(
         incluir_meta=True,
     )
     assert len(pagina.dados) == 1
+    assert pagina.metas is not None
+    meta = pagina.metas[str(marcacao_id)]
+    assert meta.marcacao_id == marcacao_id
+    assert meta.dentro_geocerca is True
+    assert meta.score_confianca == 100
+
+
+async def test_listar_marcacoes_sem_incluir_meta_nao_popula_metas(
+    sessao_f5: AsyncSession, contexto_f5: ContextoF5
+) -> None:
+    await _criar_marcacoes(sessao_f5, contexto_f5, 1)
+    sujeito_sem_pedir_meta = _sujeito(contexto_f5, com_ler_sensivel=True)
+
+    pagina = await consulta_marcacoes.listar_marcacoes(
+        sessao_f5,
+        tenant_id=contexto_f5.tenant_id,
+        sujeito=sujeito_sem_pedir_meta,
+    )
+    assert pagina.metas is None
 
 
 async def test_obter_marcacao_devolve_registro_gravado(

@@ -130,8 +130,14 @@ def test_todo_evento_com_origem_scheduler_tem_rotina_produtora() -> None:
 #: cobre o CONTRATO de andaime (stub que nunca levanta excecao); a tarefa real
 #: precisa de banco/Redis de verdade e e testada pela propria fase dona --
 #: `importar_colaboradores` (F2/A3) tem sua cobertura em
-#: `apps/api/tests/f2/importadores/test_worker_tarefa.py`.
-_TAREFAS_JA_IMPLEMENTADAS = frozenset({"importar_colaboradores"})
+#: `apps/api/tests/f2/importadores/test_worker_tarefa.py`;
+#: `sincronizar_terminal` (F6/A2) em `apps/device-gw/tests/f6/provisionamento/
+#: test_sincronizar_terminal.py`.
+_TAREFAS_JA_IMPLEMENTADAS = frozenset({"importar_colaboradores", "sincronizar_terminal"})
+
+#: Mesma logica, para as rotinas de cron do scheduler. `verificar_terminal_offline`
+#: (F6/A1) e real; cobertura em `apps/worker/tests/f6/test_verificar_terminal_offline.py`.
+_ROTINAS_JA_IMPLEMENTADAS = frozenset({"verificar_terminal_offline"})
 
 
 @pytest.mark.asyncio
@@ -182,9 +188,15 @@ async def test_toda_tarefa_devolve_nao_implementado_sem_levantar() -> None:
 
 @pytest.mark.asyncio
 async def test_rotinas_de_cron_devolvem_nao_implementado_com_a_fase_certa() -> None:
-    """A rotina de andaime aponta a fase que a implementa e o evento que produzira."""
+    """A rotina de andaime aponta a fase que a implementa e o evento que produzira.
+
+    Cobre so as rotinas que ainda sao stub de andaime -- ver
+    `_ROTINAS_JA_IMPLEMENTADAS` para as que ja saem desta regra.
+    """
     ctx: dict[str, Any] = {"job_id": "teste"}
     for rotina in (verificar_banco_horas_vencendo, verificar_terminal_offline):
+        if rotina.__name__ in _ROTINAS_JA_IMPLEMENTADAS:
+            continue
         resultado = await rotina(ctx)
         assert resultado["implementado"] is False
         assert resultado["codigo"] == CODIGO_NAO_IMPLEMENTADO

@@ -92,21 +92,50 @@ def test_health_nao_e_o_mesmo_endpoint_que_ready(cliente: TestClient) -> None:
 # Stubs de protocolo
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(("metodo", "caminho"), STUBS)
-def test_stub_responde_501_com_codigo_do_catalogo(
+def test_stub_ou_implementado_nunca_quebra_sem_tratamento(
     cliente: TestClient, metodo: str, caminho: str
 ) -> None:
-    """Toda operacao de protocolo existe, responde 501 e usa problem+json."""
+    """Toda operacao de protocolo existe e responde em problem+json, nunca 500.
+
+    RFC-005 (mesmo tratamento, agora para o device-gw): a Fase 0 garantia que
+    todo endpoint respondia exatamente 501/PONTO-INT-005. Isso deixa de ser
+    verdade fase a fase, de proposito -- a F6 ja implementou os 11 endpoints
+    de protocolo de verdade. O que nao pode deixar de ser verdade e que
+    nenhum devolve erro nao tratado (500): onde ainda for stub, o formato e
+    exatamente o de antes; onde ja for implementacao real, so exigimos
+    problem+json bem formado com um codigo do catalogo.
+    """
     resposta = (
         cliente.post(caminho, json={}) if metodo == "post" else cliente.request(metodo, caminho)
     )
-    assert resposta.status_code == 501, caminho
+    assert resposta.status_code != 500, caminho
     assert resposta.headers["content-type"].startswith(MEDIA_TYPE_PROBLEMA), caminho
     corpo = resposta.json()
-    assert corpo["codigo"] == "PONTO-INT-005"
-    assert corpo["status"] == 501
+    assert corpo["codigo"] in CATALOGO, caminho
     assert corpo["instance"] == caminho
-    # `PONTO-INT-005` tem `expoe_regra: true`: o detalhe diz qual fase implementa.
-    assert "F6" in corpo["detail"]
+    if corpo["codigo"] == "PONTO-INT-005":
+        assert resposta.status_code == 501, caminho
+        # `PONTO-INT-005` tem `expoe_regra: true`: o detalhe diz qual fase implementa.
+        assert "F6" in corpo["detail"]
+
+
+def test_nenhum_stub_de_protocolo_restante() -> None:
+    """Registro informativo: quantos dos 11 endpoints de protocolo ja saem do andaime.
+
+    Nao falha em nenhuma direcao -- so documenta o avanco, no mesmo espirito
+    do `[andaime]` impresso por `apps/api/tests/test_andaime.py`.
+    """
+    cliente = TestClient(app, raise_server_exceptions=False)
+    stubs = implementados = 0
+    for metodo, caminho in STUBS:
+        resposta = (
+            cliente.post(caminho, json={}) if metodo == "post" else cliente.request(metodo, caminho)
+        )
+        if resposta.status_code == 501 and resposta.json().get("codigo") == "PONTO-INT-005":
+            stubs += 1
+        else:
+            implementados += 1
+    print(f"\n[andaime device-gw] {stubs} ainda em stub, {implementados} ja implementados.")
 
 
 def test_os_tres_modos_de_comunicacao_estao_montados() -> None:
@@ -179,16 +208,20 @@ def test_todos_os_codigos_de_terminal_estao_no_recorte() -> None:
 # ---------------------------------------------------------------------------
 # Simulador
 # ---------------------------------------------------------------------------
-def test_simulador_cobre_os_tres_fcgi_do_aceite_da_f6() -> None:
-    """Sem estes tres, o simulador da F6 nao consegue nem abrir sessao."""
+def test_simulador_cobre_pelo_menos_os_tres_fcgi_do_aceite_da_f6() -> None:
+    """Sem estes tres, o simulador da F6 nao consegue nem abrir sessao.
+
+    RFC-005 (mesmo tratamento): a F6 entregou o simulador real, cobrindo mais
+    que os tres `*.fcgi` originais do esqueleto da Fase 0 (T1 do PCF estendeu
+    para os sete que o protocolo Control iD exige). Este teste so garante que
+    os tres mínimos continuam cobertos -- nao that o simulador ainda seja o
+    esqueleto.
+    """
     descricao = descrever_simulador()
-    assert descricao["implementado"] is False
     assert descricao["fase"] == "F6"
-    assert set(descricao["endpointsCobertos"]) == {
-        "login.fcgi",
-        "load_objects.fcgi",
-        "execute_actions.fcgi",
-    }
+    assert {"login.fcgi", "load_objects.fcgi", "execute_actions.fcgi"} <= set(
+        descricao["endpointsCobertos"]
+    )
     assert "access_logs" in descricao["tabelas"]
 
 

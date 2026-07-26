@@ -15,11 +15,11 @@ declaram relacionamento algum -- ver `packages/contracts/models/marcacao.py`).
 `incluirMeta=true` em `listarMarcacoes` exige de verdade a permissao sensivel
 `marcacoes.ler_sensivel` (chamando o mesmo verificador de
 `app.core.seguranca.exigir_permissao` que `obterMetaMarcacao` usa, o que
-tambem registra o acesso sensivel via LGPD) -- mas **RFC-011** documenta que
-nem `Marcacao` nem `ListaMarcacao` tem hoje um campo para embutir o resultado
-nesta listagem; ate a decisao, a permissao e checada e o acesso e registrado,
-mas o conteudo de `MarcacaoMeta` continua so acessivel por
-`obterMetaMarcacao`, linha a linha.
+tambem registra o acesso sensivel via LGPD). **RFC-011** decidiu que o
+resultado nao fica embutido em cada `Marcacao` (que continua estavel em todo
+consumidor, inclusive dentro de `MarcacaoCriada`): fica em `ListaMarcacao.metas`,
+um mapa `marcacaoId -> MarcacaoMeta` irmao de `dados`, presente so quando
+`incluirMeta=true` e a permissao esta presente.
 """
 
 from __future__ import annotations
@@ -105,6 +105,22 @@ async def _mapa_comprovante_por_marcacao(
         )
     )
     return dict(resultado.tuples().all())
+
+
+async def _mapa_meta_por_marcacao(
+    sessao: AsyncSession, tenant_id: UUID, marcacao_ids: Sequence[UUID]
+) -> dict[UUID, contrato.MarcacaoMeta]:
+    """`{marcacaoId: MarcacaoMeta}` para as marcacoes pedidas, numa unica
+    consulta -- RFC-011 (`ListaMarcacao.metas`), nunca uma consulta por linha."""
+    if not marcacao_ids:
+        return {}
+    resultado = await sessao.execute(
+        sa.select(MarcacaoMetaOrm).where(
+            MarcacaoMetaOrm.tenant_id == tenant_id,
+            MarcacaoMetaOrm.marcacao_id.in_(marcacao_ids),
+        )
+    )
+    return {linha.marcacao_id: _serializar_meta(linha) for linha in resultado.scalars()}
 
 
 def _serializar_marcacao(linha: MarcacaoOrm, *, comprovante_id: UUID | None) -> contrato.Marcacao:
@@ -276,6 +292,13 @@ async def listar_marcacoes(
         for linha in linhas
     ]
 
+    metas: dict[str, contrato.MarcacaoMeta] | None = None
+    if incluir_meta:
+        mapa_metas = await _mapa_meta_por_marcacao(
+            sessao, tenant_id, [linha.id for linha in linhas]
+        )
+        metas = {str(marcacao_id): meta for marcacao_id, meta in mapa_metas.items()}
+
     proximo_cursor = None
     if tem_mais and linhas:
         ultima = linhas[-1]
@@ -285,7 +308,7 @@ async def listar_marcacoes(
     paginacao = montar_paginacao(
         proximo_cursor=proximo_cursor, tem_mais=tem_mais, limite=limite_normalizado
     )
-    return contrato.ListaMarcacao(dados=dados, paginacao=paginacao)
+    return contrato.ListaMarcacao(dados=dados, paginacao=paginacao, metas=metas)
 
 
 async def obter_marcacao(
