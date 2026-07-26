@@ -52,6 +52,14 @@ class Configuracao(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://ponto:ponto@localhost:5432/ponto"
     redis_url: str = "redis://localhost:6379/0"
+    #: Segunda credencial de banco, SO leitura, com BYPASSRLS -- role
+    #: `ponto_suporte` (`packages/contracts/schema.sql`, secao 20). Usada
+    #: exclusivamente por `verificar_terminal_offline` (F6/T9) para enumerar
+    #: terminais de TODOS os tenants antes de saber qual `app.tenant_id`
+    #: aplicar -- ver RFC-013 (interino, opcao a, enquanto a RFC nao decide).
+    #: Vazio cai para `database_url` (conveniencia de dev/teste apenas; em
+    #: producao as duas credenciais precisam ser DIFERENTES).
+    database_url_suporte: str = ""
 
     minio_endpoint: str = "localhost:9000"
     minio_access_key: SecretStr = SecretStr("")
@@ -60,6 +68,18 @@ class Configuracao(BaseSettings):
     minio_secure: bool = False
 
     api_base_url: str = "http://api:8000"
+
+    #: URL interna do gateway Control iD (F6). `sincronizar_terminal`
+    #: (`worker/tarefas/integracoes.py`) nao fala com o terminal
+    #: diretamente: entrega o comando ao device-gw via
+    #: `POST /interno/terminais/{numeroSerie}/comandos`, que enfileira para o
+    #: proximo ciclo de Push. Mesmo default de hostname/porta interna que
+    #: `api_base_url` usa para `api` -- o nome do servico no compose e
+    #: `device-gw`, ouvindo 8000 dentro do container
+    #: (`infra/docker-compose.yml`; `DEVICE_GW_PORT` so publica a porta
+    #: externa, 8001, que este processo nunca usa).
+    device_gw_base_url: str = "http://device-gw:8000"
+    device_gw_timeout_s: float = 10.0
 
     #: Jobs simultaneos por processo. O compose entrega `ARQ_MAX_JOBS`.
     arq_max_jobs: int = 10

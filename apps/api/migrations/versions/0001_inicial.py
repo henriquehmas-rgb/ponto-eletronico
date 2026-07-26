@@ -171,6 +171,7 @@ $$
 FUNCOES_PARA_REMOVER: tuple[str, ...] = (
     "fn_bh_lancamento_imutavel()",
     "fn_cria_particao_marcacoes(DATE)",
+    "fn_terminais_para_verificacao_saude()",
     "fn_resolve_terminal(TEXT)",
     "fn_resolve_tenant(TEXT)",
     "fn_registro_imutavel()",
@@ -290,6 +291,41 @@ $$
         "existir. Devolve ate 2 linhas de proposito: a aplicacao deve tratar "
         "mais de uma linha como ambiguidade (erro), nunca escolher a "
         "primeira.'"
+    ),
+)
+
+# RFC-013: enumeracao cross-tenant de terminais ativos para o cron
+# verificar_terminal_offline, que roda sem app.tenant_id. ponto_app nao tem
+# BYPASSRLS (ADR-001); SECURITY DEFINER expondo so as colunas necessarias.
+SQL_TERMINAIS_VERIFICACAO_SAUDE: tuple[str, ...] = (
+    r"""
+CREATE OR REPLACE FUNCTION fn_terminais_para_verificacao_saude()
+RETURNS TABLE (
+    id UUID,
+    tenant_id UUID,
+    numero_serie TEXT,
+    empresa_id UUID,
+    unidade_id UUID,
+    modo_comunicacao TEXT,
+    intervalo_push_segundos INTEGER,
+    ultimo_contato_em TIMESTAMPTZ
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.id, t.tenant_id, t.numero_serie, t.empresa_id, t.unidade_id,
+         t.modo_comunicacao, t.intervalo_push_segundos, t.ultimo_contato_em
+    FROM terminais t
+   WHERE t.status = 'ativo'
+     AND t.excluido_em IS NULL;
+$$
+""",
+    (
+        "COMMENT ON FUNCTION fn_terminais_para_verificacao_saude() IS "
+        "'Enumeracao cross-tenant de terminais ativos para o cron "
+        "verificar_terminal_offline (RFC-013), chamada pela role comum "
+        "ponto_app sem app.tenant_id publicado. Expoe so as colunas "
+        "necessarias a rotina, nunca a tabela inteira.'"
     ),
 )
 
@@ -805,6 +841,8 @@ def upgrade() -> None:
     for instrucao in SQL_RESOLVE_TENANT:
         op.execute(instrucao)
     for instrucao in SQL_RESOLVE_TERMINAL:
+        op.execute(instrucao)
+    for instrucao in SQL_TERMINAIS_VERIFICACAO_SAUDE:
         op.execute(instrucao)
 
     # --- 7. particionamento de marcacoes -----------------------------------

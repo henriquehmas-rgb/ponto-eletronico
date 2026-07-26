@@ -13913,6 +13913,10 @@ class ListaMarcacao(BaseModel):
     Itens da pagina, na ordem pedida em ordenar.
     """
     paginacao: Paginacao
+    metas: dict[str, MarcacaoMeta] | None = None
+    """
+    Presente apenas quando incluirMeta=true e o chamador tem marcacoes.ler_sensivel. Mapa do id de cada Marcacao de dados para o seu MarcacaoMeta correspondente.
+    """
 
 
 class ListaComprovante(BaseModel):

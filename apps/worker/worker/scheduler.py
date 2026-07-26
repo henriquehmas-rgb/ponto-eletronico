@@ -61,6 +61,14 @@ from worker.log import configurar_log, obter_logger
 # construido no import de `main` — sao apenas objetos em memoria, sem I/O e sem
 # nada registrado: o scheduler continua sem conhecer as oito tarefas pesadas.
 from worker.main import montar_redis
+from worker.terminais_saude import (
+    TerminalAtivo,
+    gravar_amostra_saude,
+    ja_esta_marcado_offline,
+    limite_offline_minutos,
+    listar_terminais_ativos_cross_tenant,
+    publicar_terminal_offline,
+)
 
 logger = obter_logger("scheduler")
 
@@ -123,23 +131,88 @@ async def verificar_banco_horas_vencendo(ctx: dict[Any, Any]) -> dict[str, Any]:
 
 
 async def verificar_terminal_offline(ctx: dict[Any, Any]) -> dict[str, Any]:
-    """Detecta coletor sem sinal ha mais tempo que o tolerado. Implementacao na F6.
+    """Detecta coletor sem sinal ha mais tempo que o tolerado (F6/T9).
 
-    O que a F6 fara aqui: comparar `ultimo_contato_em` de cada terminal ativo
-    com o limite configurado para o **modo de comunicacao** do equipamento (o
-    limite de um terminal em modo Push e diferente do de um em Monitor) e
-    publicar `terminal.offline` na transicao — uma vez por queda, e nao a cada
-    varredura, sob pena de transformar alerta em ruido.
+    Compara `ultimo_contato_em` de cada terminal `ativo`, de TODOS os
+    tenants, com o limite do **modo de comunicacao** do equipamento
+    (`worker.terminais_saude.limite_offline_minutos` — Push, Monitor e
+    polling/direto toleram folgas diferentes, documentado la). Grava uma
+    amostra em `terminal_saude` a cada verificacao (append-only) e publica
+    `terminal.offline` **so na transicao** para offline — nunca a cada
+    varredura — usando a ultima amostra conhecida como marca de "ja
+    avisado" (`ja_esta_marcado_offline`).
+
+    A enumeracao cross-tenant usa uma segunda credencial de banco
+    (`database_url_suporte`, RFC-013, interino) porque este e um cron
+    global, sem `tenant_id` de entrada — ver docstring de
+    `worker/terminais_saude.py`.
 
     Roda a cada cinco minutos porque marcacao nao se perde quando o terminal
     cai (o equipamento guarda localmente e o catch-up recupera), mas o RH
     precisa saber cedo que a catraca da portaria parou de responder.
     """
+    config = obter_configuracao()
+    agora = dt.datetime.now(tz=dt.UTC)
+    terminais = await listar_terminais_ativos_cross_tenant(config)
+    verificados = 0
+    alertados = 0
+
+    for terminal in terminais:
+        online, minutos_sem_contato = _classificar(terminal, agora)
+        if not online:
+            estava_offline = await ja_esta_marcado_offline(config, terminal.tenant_id, terminal.id)
+        else:
+            estava_offline = False
+
+        await gravar_amostra_saude(
+            config, tenant_id=terminal.tenant_id, terminal_id=terminal.id, online=online
+        )
+        verificados += 1
+
+        if not online and not estava_offline:
+            publicar_terminal_offline(
+                tenant_id=terminal.tenant_id,
+                terminal_id=terminal.id,
+                empresa_id=terminal.empresa_id,
+                numero_serie=terminal.numero_serie,
+                fabricante=terminal.fabricante,
+                ultimo_contato_em=terminal.ultimo_contato_em,
+                minutos_sem_contato=minutos_sem_contato,
+                unidade_id=terminal.unidade_id,
+            )
+            alertados += 1
+
     logger.info(
-        "rotina verificar_terminal_offline disparada",
-        extra={"jobId": ctx.get("job_id"), "evento": "terminal.offline"},
+        "rotina verificar_terminal_offline concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "evento": "terminal.offline",
+            "terminaisVerificados": verificados,
+            "alertasPublicados": alertados,
+        },
     )
-    return _resultado_rotina("verificar_terminal_offline")
+    return {
+        "implementado": True,
+        "rotina": "verificar_terminal_offline",
+        "terminaisVerificados": verificados,
+        "alertasPublicados": alertados,
+        "executadoEm": agora.isoformat(),
+    }
+
+
+def _classificar(terminal: TerminalAtivo, agora: dt.datetime) -> tuple[bool, int]:
+    """Devolve `(online, minutos_sem_contato)`. Terminal que nunca fez
+    contato conta como offline, com `minutos_sem_contato` medido como um
+    numero grande (nunca `None`, para o payload do evento continuar um
+    inteiro valido)."""
+    if terminal.ultimo_contato_em is None:
+        return False, 10**6
+    ultimo = terminal.ultimo_contato_em
+    if ultimo.tzinfo is None:
+        ultimo = ultimo.replace(tzinfo=dt.UTC)
+    minutos_sem_contato = int((agora - ultimo).total_seconds() // 60)
+    limite = limite_offline_minutos(terminal.modo_comunicacao, terminal.intervalo_push_segundos)
+    return minutos_sem_contato <= limite, minutos_sem_contato
 
 
 def montar_cron() -> list[CronJob]:

@@ -1,11 +1,14 @@
-"""Rotas da tag `jornadas` do contrato. GERADO -- nao editar.
+"""Rotas da tag `jornadas` do contrato.
 
 Horarios e jornadas: cargas, tolerancias, tratamento do periodo noturno, limites de hora extra e politica de intervalo.
 A jornada e versionada por vigencia, o que permite trocar a regra no meio do mes sem reescrever o passado apurado.
 
-Regra de negocio destas operacoes entra na fase F3. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Arquivo COMPARTILHADO entre A1 e A3 (F3, PCF secao 5): A1 implementa as 10
+operacoes de horarios/jornadas/vinculo-jornada (`listarHorarios` ate
+`atribuirJornadaVinculo`), reuso de `app.jornada.modelagem.*`. `resolverJornadaDoDia`
+fica como stub `501` ate A3 preencher (T7, chamando
+`app.jornada.resolvedor.servico.resolver_jornada_do_dia`) -- ninguem edita a
+parte do outro depois de entregue.
 """
 
 from __future__ import annotations
@@ -14,12 +17,27 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
+from ponto_contracts import Jornada
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.jornada.modelagem import horarios as servico_horarios
+from app.jornada.modelagem import jornadas as servico_jornadas
+from app.jornada.modelagem import vinculo_jornadas as servico_vinculo_jornadas
+from app.jornada.resolvedor import servico as servico_resolvedor
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["jornadas"])
+
+
+async def _montar_jornada(sessao: AsyncSession, jornada: Jornada) -> contrato.Jornada:
+    dias = await servico_jornadas.listar_dias_da_jornada(sessao, jornada.id)
+    resposta = contrato.Jornada.model_validate(jornada, from_attributes=True)
+    resposta.dias = [contrato.JornadaDia.model_validate(d, from_attributes=True) for d in dias]
+    return resposta
 
 
 @roteador.get(
@@ -30,6 +48,8 @@ roteador = APIRouter(tags=["jornadas"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_horarios(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -71,11 +91,20 @@ async def listar_horarios(
         bool | None, Query(alias="ativo", description="Filtra por horarios ativos.")
     ] = None,
 ) -> contrato.ListaHorario:
-    """Listar horarios
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarHorarios", fase="F3")
+    """Listar horarios"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico_horarios.listar_horarios(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        cruza_meia_noite=cruza_meia_noite,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Horario.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaHorario(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -94,6 +123,8 @@ async def criar_horario(
         ),
     ],
     corpo: contrato.HorarioCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -109,11 +140,10 @@ async def criar_horario(
         ),
     ] = None,
 ) -> contrato.Horario:
-    """Criar horario
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarHorario", fase="F3")
+    """Criar horario"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico_horarios.criar_horario(sessao, tenant_id, corpo)
+    return contrato.Horario.model_validate(novo, from_attributes=True)
 
 
 @roteador.patch(
@@ -133,6 +163,8 @@ async def atualizar_horario(
     ],
     horario_id: Annotated[UUID, Path(alias="horarioId", description="Identificador do horario.")],
     corpo: contrato.HorarioAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -148,11 +180,10 @@ async def atualizar_horario(
         ),
     ] = None,
 ) -> contrato.Horario:
-    """Atualizar horario
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarHorario", fase="F3")
+    """Atualizar horario"""
+    tenant_id_ou_erro(sujeito)
+    atualizado = await servico_horarios.atualizar_horario(sessao, horario_id, corpo)
+    return contrato.Horario.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.get(
@@ -163,6 +194,8 @@ async def atualizar_horario(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_jornadas(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -210,11 +243,21 @@ async def listar_jornadas(
         bool | None, Query(alias="ativo", description="Filtra por jornadas ativas.")
     ] = None,
 ) -> contrato.ListaJornada:
-    """Listar jornadas
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarJornadas", fase="F3")
+    """Listar jornadas"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico_jornadas.listar_jornadas(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        tipo=tipo,
+        vigente_em=vigente_em,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [await _montar_jornada(sessao, linha) for linha in linhas]
+    return contrato.ListaJornada(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -233,6 +276,8 @@ async def criar_jornada(
         ),
     ],
     corpo: contrato.JornadaCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -248,11 +293,10 @@ async def criar_jornada(
         ),
     ] = None,
 ) -> contrato.Jornada:
-    """Criar jornada
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarJornada", fase="F3")
+    """Criar jornada"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await servico_jornadas.criar_jornada(sessao, tenant_id, corpo)
+    return await _montar_jornada(sessao, nova)
 
 
 @roteador.get(
@@ -264,6 +308,8 @@ async def criar_jornada(
 )
 async def obter_jornada(
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -279,11 +325,10 @@ async def obter_jornada(
         ),
     ] = None,
 ) -> contrato.Jornada:
-    """Obter jornada
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("obterJornada", fase="F3")
+    """Obter jornada"""
+    tenant_id_ou_erro(sujeito)
+    encontrada = await servico_jornadas.obter_jornada(sessao, jornada_id)
+    return await _montar_jornada(sessao, encontrada)
 
 
 @roteador.patch(
@@ -303,6 +348,8 @@ async def atualizar_jornada(
     ],
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
     corpo: contrato.JornadaAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -318,11 +365,10 @@ async def atualizar_jornada(
         ),
     ] = None,
 ) -> contrato.Jornada:
-    """Atualizar jornada
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarJornada", fase="F3")
+    """Atualizar jornada"""
+    tenant_id_ou_erro(sujeito)
+    atualizada = await servico_jornadas.atualizar_jornada(sessao, jornada_id, corpo)
+    return await _montar_jornada(sessao, atualizada)
 
 
 @roteador.delete(
@@ -342,6 +388,8 @@ async def excluir_jornada(
         ),
     ],
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -357,11 +405,10 @@ async def excluir_jornada(
         ),
     ] = None,
 ) -> Response:
-    """Excluir jornada
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("excluirJornada", fase="F3")
+    """Excluir jornada"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico_jornadas.excluir_jornada(sessao, tenant_id, jornada_id)
+    return Response(status_code=204)
 
 
 @roteador.get(
@@ -373,6 +420,8 @@ async def excluir_jornada(
 )
 async def listar_jornadas_vinculo(
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -412,11 +461,21 @@ async def listar_jornadas_vinculo(
         ),
     ] = None,
 ) -> contrato.ListaVinculoJornada:
-    """Listar jornadas do vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarJornadasVinculo", fase="F3")
+    """Listar jornadas do vinculo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico_vinculo_jornadas.listar_jornadas_vinculo(
+        sessao,
+        tenant_id,
+        vinculo_id,
+        vigente_em=vigente_em,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [
+        contrato.VinculoJornada.model_validate(linha, from_attributes=True) for linha in linhas
+    ]
+    return contrato.ListaVinculoJornada(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -436,6 +495,8 @@ async def atribuir_jornada_vinculo(
     ],
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
     corpo: contrato.VinculoJornadaCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -451,11 +512,12 @@ async def atribuir_jornada_vinculo(
         ),
     ] = None,
 ) -> contrato.VinculoJornada:
-    """Atribuir jornada ao vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atribuirJornadaVinculo", fase="F3")
+    """Atribuir jornada ao vinculo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await servico_vinculo_jornadas.atribuir_jornada_vinculo(
+        sessao, tenant_id, vinculo_id, corpo
+    )
+    return contrato.VinculoJornada.model_validate(nova, from_attributes=True)
 
 
 @roteador.get(
@@ -468,6 +530,8 @@ async def atribuir_jornada_vinculo(
 async def resolver_jornada_do_dia(
     vinculo_id: Annotated[UUID, Query(alias="vinculoId", description="Vinculo a resolver.")],
     data: Annotated[date, Query(alias="data", description="Data a resolver.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -485,6 +549,8 @@ async def resolver_jornada_do_dia(
 ) -> contrato.ResolucaoJornada:
     """Resolver jornada de um dia
 
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
+    Ownership de A3 (F3, T7). A1 (dono deste arquivo para as demais 10
+    operacoes) nao mexe neste handler.
     """
-    raise NaoImplementado("resolverJornadaDoDia", fase="F3")
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await servico_resolvedor.resolver_jornada_do_dia(sessao, tenant_id, vinculo_id, data)

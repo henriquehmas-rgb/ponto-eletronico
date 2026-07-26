@@ -1,11 +1,12 @@
-"""Rotas da tag `comprovantes` do contrato. GERADO -- nao editar.
+"""Rotas da tag `comprovantes` do contrato.
 
 Comprovantes de registro.
 A impressao no momento da marcacao e dispensada porque o sistema garante acesso eletronico permanente e a extracao das ultimas 48 horas em aplicativo e navegador, conforme a Portaria MTP 671/2021.
 
-Regra de negocio destas operacoes entra na fase F5. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Implementado na fase F5 (agente A3, T11). `obterComprovante` aceita
+`Accept: text/plain` (devolve `conteudoTexto` cru) e `application/json`
+(devolve o schema `Comprovante` completo), conforme a descricao da operacao
+no contrato.
 """
 
 from __future__ import annotations
@@ -14,9 +15,13 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi.responses import PlainTextResponse
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.marcacao.comprovantes import consulta as consulta_comprovantes
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["comprovantes"])
@@ -30,6 +35,8 @@ roteador = APIRouter(tags=["comprovantes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_comprovantes(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -80,11 +87,20 @@ async def listar_comprovantes(
         datetime | None, Query(alias="ate", description="Comprovantes emitidos ate este instante.")
     ] = None,
 ) -> contrato.ListaComprovante:
-    """Listar comprovantes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("listarComprovantes", fase="F5")
+    """Listar comprovantes."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await consulta_comprovantes.listar_comprovantes(
+        sessao,
+        tenant_id=tenant_id,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+        colaborador_id=colaborador_id,
+        marcacao_id=marcacao_id,
+        cpf=cpf,
+        de=de,
+        ate=ate,
+    )
 
 
 @roteador.get(
@@ -93,11 +109,26 @@ async def listar_comprovantes(
     operation_id="obterComprovante",
     summary="Obter comprovante",
     responses=RESPOSTAS_PADRAO,
+    # `response_model=None`: o retorno alterna entre `contrato.Comprovante` e
+    # `PlainTextResponse` conforme `Accept` (ver docstring da funcao) -- a
+    # uniao dos dois nao e um tipo Pydantic valido para o FastAPI inferir
+    # `response_model` automaticamente do retorno anotado.
+    response_model=None,
 )
 async def obter_comprovante(
     comprovante_id: Annotated[
         UUID, Path(alias="comprovanteId", description="Identificador do comprovante.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    sessao: SessaoDb,
+    accept: Annotated[
+        str | None,
+        Header(
+            alias="Accept",
+            description="text/plain devolve o corpo textual congelado do comprovante; "
+            "application/json (padrao) devolve o schema completo.",
+        ),
+    ] = None,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -112,12 +143,17 @@ async def obter_comprovante(
             description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
         ),
     ] = None,
-) -> contrato.Comprovante:
-    """Obter comprovante
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("obterComprovante", fase="F5")
+) -> contrato.Comprovante | PlainTextResponse:
+    """Obter comprovante. `Accept: text/plain` devolve `conteudoTexto` cru;
+    `application/json` (ou ausencia do cabecalho) devolve o schema completo."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    comprovante = await consulta_comprovantes.obter_comprovante(
+        sessao, tenant_id=tenant_id, comprovante_id=comprovante_id
+    )
+    quer_texto = accept is not None and "text/plain" in accept and "application/json" not in accept
+    if quer_texto:
+        return PlainTextResponse(comprovante.conteudo_texto or "")
+    return comprovante
 
 
 @roteador.get(
@@ -131,6 +167,8 @@ async def listar_comprovantes_recentes(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -170,8 +208,17 @@ async def listar_comprovantes_recentes(
         ),
     ] = None,
 ) -> contrato.ListaComprovante:
-    """Listar comprovantes das ultimas 48 horas
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("listarComprovantesRecentes", fase="F5")
+    """Listar comprovantes das ultimas 48 horas. O proprio colaborador sempre
+    acessa os seus; gestor e RH dependem do alcance hierarquico
+    (`PONTO-PERM-002` fora dele)."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await consulta_comprovantes.listar_comprovantes_recentes(
+        sessao,
+        tenant_id=tenant_id,
+        sujeito=sujeito,
+        colaborador_id=colaborador_id,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+        horas=horas,
+    )

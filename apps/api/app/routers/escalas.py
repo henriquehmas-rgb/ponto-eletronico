@@ -1,11 +1,12 @@
-"""Rotas da tag `escalas` do contrato. GERADO -- nao editar.
+"""Rotas da tag `escalas` do contrato.
 
 Escalas ciclicas e turnos: 5x2, 6x1, 4x2, 12x36, espanhola e rotativas de N dias.
 O ciclo se repete a partir de uma data ancora e qualquer data e resolvida por aritmetica modular, sem materializar calendario.
 
-Regra de negocio destas operacoes entra na fase F3. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F3 (agente A1, ownership deste arquivo
+-- ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
+`app.jornada.modelagem.escalas` e `app.jornada.modelagem.turnos`; este
+modulo so traduz HTTP <-> servico.
 """
 
 from __future__ import annotations
@@ -13,12 +14,32 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
+from ponto_contracts import Escala
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.jornada.modelagem import (
+    escala_atribuicoes,
+)
+from app.jornada.modelagem import (
+    escalas as servico_escalas,
+)
+from app.jornada.modelagem import (
+    turnos as servico_turnos,
+)
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["escalas"])
+
+
+async def _montar_escala(sessao: AsyncSession, escala: Escala) -> contrato.Escala:
+    ciclos = await servico_escalas.listar_ciclos_da_escala(sessao, escala.id)
+    resposta = contrato.Escala.model_validate(escala, from_attributes=True)
+    resposta.ciclos = [contrato.EscalaCiclo.model_validate(c, from_attributes=True) for c in ciclos]
+    return resposta
 
 
 @roteador.get(
@@ -29,6 +50,8 @@ roteador = APIRouter(tags=["escalas"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_escalas(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -68,11 +91,20 @@ async def listar_escalas(
         bool | None, Query(alias="ativo", description="Filtra por escalas ativas.")
     ] = None,
 ) -> contrato.ListaEscala:
-    """Listar escalas
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarEscalas", fase="F3")
+    """Listar escalas"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico_escalas.listar_escalas(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        tipo=tipo,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [await _montar_escala(sessao, linha) for linha in linhas]
+    return contrato.ListaEscala(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -91,6 +123,8 @@ async def criar_escala(
         ),
     ],
     corpo: contrato.EscalaCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -106,11 +140,10 @@ async def criar_escala(
         ),
     ] = None,
 ) -> contrato.Escala:
-    """Criar escala
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarEscala", fase="F3")
+    """Criar escala"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await servico_escalas.criar_escala(sessao, tenant_id, corpo)
+    return await _montar_escala(sessao, nova)
 
 
 @roteador.get(
@@ -122,6 +155,8 @@ async def criar_escala(
 )
 async def obter_escala(
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -137,11 +172,10 @@ async def obter_escala(
         ),
     ] = None,
 ) -> contrato.Escala:
-    """Obter escala
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("obterEscala", fase="F3")
+    """Obter escala"""
+    tenant_id_ou_erro(sujeito)
+    encontrada = await servico_escalas.obter_escala(sessao, escala_id)
+    return await _montar_escala(sessao, encontrada)
 
 
 @roteador.patch(
@@ -161,6 +195,8 @@ async def atualizar_escala(
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
     corpo: contrato.EscalaAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -176,11 +212,10 @@ async def atualizar_escala(
         ),
     ] = None,
 ) -> contrato.Escala:
-    """Atualizar escala
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarEscala", fase="F3")
+    """Atualizar escala"""
+    tenant_id_ou_erro(sujeito)
+    atualizada = await servico_escalas.atualizar_escala(sessao, escala_id, corpo)
+    return await _montar_escala(sessao, atualizada)
 
 
 @roteador.delete(
@@ -200,6 +235,8 @@ async def excluir_escala(
         ),
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -215,11 +252,10 @@ async def excluir_escala(
         ),
     ] = None,
 ) -> Response:
-    """Excluir escala
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("excluirEscala", fase="F3")
+    """Excluir escala"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico_escalas.excluir_escala(sessao, tenant_id, escala_id)
+    return Response(status_code=204)
 
 
 @roteador.post(
@@ -239,6 +275,8 @@ async def atribuir_escala_vinculo(
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
     corpo: contrato.EscalaAtribuicaoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -254,11 +292,10 @@ async def atribuir_escala_vinculo(
         ),
     ] = None,
 ) -> contrato.EscalaAtribuicao:
-    """Atribuir escala a vinculo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atribuirEscalaVinculo", fase="F3")
+    """Atribuir escala a vinculo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await escala_atribuicoes.atribuir_escala_vinculo(sessao, tenant_id, escala_id, corpo)
+    return contrato.EscalaAtribuicao.model_validate(nova, from_attributes=True)
 
 
 @roteador.get(
@@ -269,6 +306,8 @@ async def atribuir_escala_vinculo(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_turnos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -308,11 +347,20 @@ async def listar_turnos(
         bool | None, Query(alias="ativo", description="Filtra por turnos ativos.")
     ] = None,
 ) -> contrato.ListaTurno:
-    """Listar turnos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarTurnos", fase="F3")
+    """Listar turnos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico_turnos.listar_turnos(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        tipo=tipo,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Turno.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaTurno(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -331,6 +379,8 @@ async def criar_turno(
         ),
     ],
     corpo: contrato.TurnoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -346,11 +396,10 @@ async def criar_turno(
         ),
     ] = None,
 ) -> contrato.Turno:
-    """Criar turno
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarTurno", fase="F3")
+    """Criar turno"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico_turnos.criar_turno(sessao, tenant_id, corpo)
+    return contrato.Turno.model_validate(novo, from_attributes=True)
 
 
 @roteador.patch(
@@ -370,6 +419,8 @@ async def atualizar_turno(
     ],
     turno_id: Annotated[UUID, Path(alias="turnoId", description="Identificador do turno.")],
     corpo: contrato.TurnoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -385,8 +436,7 @@ async def atualizar_turno(
         ),
     ] = None,
 ) -> contrato.Turno:
-    """Atualizar turno
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarTurno", fase="F3")
+    """Atualizar turno"""
+    tenant_id_ou_erro(sujeito)
+    atualizado = await servico_turnos.atualizar_turno(sessao, turno_id, corpo)
+    return contrato.Turno.model_validate(atualizado, from_attributes=True)

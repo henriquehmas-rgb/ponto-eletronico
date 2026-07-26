@@ -38978,6 +38978,12 @@ components:
             $ref: '#/components/schemas/Marcacao'
         paginacao:
           $ref: '#/components/schemas/Paginacao'
+        metas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/MarcacaoMeta'
+          description: Presente apenas quando incluirMeta=true e o chamador tem marcacoes.ler_sensivel.
+            Mapa do id de cada Marcacao de dados para o seu MarcacaoMeta correspondente.
     ListaComprovante:
       type: object
       description: Pagina de resultados de Comprovante.

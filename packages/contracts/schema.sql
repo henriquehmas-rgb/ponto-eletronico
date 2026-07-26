@@ -1348,6 +1348,37 @@ $$;
 COMMENT ON FUNCTION fn_resolve_terminal(TEXT) IS
   'Unica porta de entrada para descobrir tenant_id e id de um terminal a partir do numero de serie (RFC-010), antes de app.tenant_id existir. Devolve ate 2 linhas de proposito: a aplicacao deve tratar mais de uma linha como ambiguidade (erro), nunca escolher a primeira.';
 
+-- Enumeracao cross-tenant para rotinas de manutencao (RFC-013): o scheduler
+-- roda um cron global (verificar_terminal_offline), sem app.tenant_id, e
+-- precisa varrer terminais ATIVOS de TODOS os tenants a cada varredura.
+-- ponto_app nao tem BYPASSRLS (ADR-001) -- SELECT * FROM terminais devolveria
+-- sempre zero linhas sem tenant publicado. SECURITY DEFINER expondo so as
+-- colunas que a rotina precisa (nunca a tabela inteira), mesmo padrao de
+-- fn_resolve_tenant/fn_resolve_terminal.
+CREATE OR REPLACE FUNCTION fn_terminais_para_verificacao_saude()
+RETURNS TABLE (
+    id UUID,
+    tenant_id UUID,
+    numero_serie TEXT,
+    empresa_id UUID,
+    unidade_id UUID,
+    modo_comunicacao TEXT,
+    intervalo_push_segundos INTEGER,
+    ultimo_contato_em TIMESTAMPTZ
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.id, t.tenant_id, t.numero_serie, t.empresa_id, t.unidade_id,
+         t.modo_comunicacao, t.intervalo_push_segundos, t.ultimo_contato_em
+    FROM terminais t
+   WHERE t.status = 'ativo'
+     AND t.excluido_em IS NULL;
+$$;
+
+COMMENT ON FUNCTION fn_terminais_para_verificacao_saude() IS
+  'Enumeracao cross-tenant de terminais ativos para o cron verificar_terminal_offline (RFC-013), chamada pela role comum ponto_app sem app.tenant_id publicado. Expoe so as colunas necessarias a rotina, nunca a tabela inteira.';
+
 
 CREATE TABLE terminal_saude (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),

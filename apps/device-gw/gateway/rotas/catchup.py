@@ -1,72 +1,67 @@
-"""**Catch-up**: recuperacao de `access_logs` por marca d'agua.
+"""**Catch-up**: recuperacao de `access_logs` por marca d'agua (T5).
 
 O problema que isto resolve
----------------------------
+----------------------------
 
-Push e Monitor sao entrega de melhor esforco. A rede do cliente cai, o switch e
-reiniciado, o servidor e atualizado, o certificado expira — e durante esse
-tempo o terminal continua identificando gente e gravando `access_logs`
-localmente (PROJETO.md secao 3.1: "se a rede cair, o iDFace armazena
-localmente"). Quando a comunicacao volta, alguem precisa ir buscar o que ficou
-para tras. Esse alguem e o catch-up.
-
-Sem ele, uma queda de rede de dez minutos vira **marcacao perdida**, e marcacao
-perdida num REP-P nao e um numero a menos num grafico: e um dia de jornada que
-ninguem consegue provar, com o onus recaindo sobre o empregador.
+Push e Monitor sao entrega de melhor esforco. A rede do cliente cai, o switch
+e reiniciado, o servidor e atualizado -- e durante esse tempo o terminal
+continua identificando gente e gravando `access_logs` localmente. Quando a
+comunicacao volta, alguem precisa ir buscar o que ficou para tras. Esse
+alguem e o catch-up.
 
 Como funciona
 -------------
 
-Marca d'agua: guardamos, por terminal, o **maior `access_logs.id` ja coletado**.
-A coleta pede ao equipamento tudo com `id` maior que essa marca, em paginas
-ordenadas por `id`, e avanca a marca conforme grava::
+Marca d'agua: guardamos, por terminal, o maior `access_logs.id` ja coletado
+(`terminais.ultimo_log_externo_id`). A coleta pede ao equipamento tudo com
+`id` maior que essa marca, em paginas ordenadas por `id`, via
+`gateway.cliente_controlid` (T1) -- nunca fala HTTP com o terminal por conta
+propria.
 
-    POST /load_objects.fcgi?session=<sessao>
-    {
-      "object": "access_logs",
-      "where": {"access_logs": {"id": {">": 41207}}},
-      "order": ["id"],
-      "limit": 1000
-    }
+Tres propriedades que fazem isso ser seguro (secao 2 do PCF):
 
-Tres propriedades que fazem isso ser seguro:
-
-1. **O `id` do equipamento e monotonico crescente**, o que torna "maior que a
-   marca" um filtro completo — nao ha registro antigo aparecendo depois.
-2. **Idempotencia por `numero_serie + access_log_id`.** Rodar o catch-up duas
-   vezes, ou rodar catch-up e receber a mesma batida pelo Monitor, nao duplica
-   nada. E o que permite ser agressivo na recuperacao sem medo.
-3. **A marca so avanca depois da gravacao confirmada.** Avancar antes trocaria
-   duplicacao (inofensiva, porque a chave de idempotencia trata) por perda
-   (irreversivel). Entre os dois erros possiveis, escolhemos sempre o que nao
-   perde marcacao.
-
-Sessao no equipamento
----------------------
-
-Toda chamada `*.fcgi` exige sessao obtida em `login.fcgi` com
-`CONTROLID_USUARIO` / `CONTROLID_SENHA`, e a sessao vai na query string
-(`?session=<token>`). A sessao expira e pode ser invalidada por reinicio do
-equipamento: a F6 precisa renovar de forma transparente e **nunca** registrar o
-token em log — ele da acesso administrativo ao terminal.
+1. **`id` monotonico crescente**: "maior que a marca" e um filtro completo.
+2. **Idempotencia por `numero_serie + access_log_id`**: rodar o catch-up duas
+   vezes, ou catch-up e Monitor entregando o mesmo registro, nao duplica.
+3. **A marca so avanca depois da gravacao confirmada de cada pagina.** Entre
+   duplicar (inofensivo) e perder (irreversivel), a escolha e sempre nao
+   perder -- inverter isso e o erro classico desta fase (proibicao 9).
 
 Estas rotas nao sao chamadas pelo terminal
-------------------------------------------
+--------------------------------------------
 
 Diferente de `push.py` e `monitor.py`, aqui quem chama somos nos: a tarefa
-`sincronizar_terminal` do worker (F6) e a rotina `verificar_terminal_offline` do
-scheduler, que dispara a recuperacao quando o equipamento volta a dar sinal. Os
-caminhos, portanto, sao **nossos** — nao dependem de firmware e nao precisam de
-confirmacao contra hardware.
+`sincronizar_terminal` do worker e a rotina `verificar_terminal_offline` do
+scheduler (T9), que dispara a recuperacao quando o equipamento volta a dar
+sinal.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Annotated, Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Path, Query, status
 
-from gateway.erros import RESPOSTAS_PADRAO, NaoImplementado
+from gateway.config import Configuracao, obter_configuracao
+from gateway.dominio import cliente_api
+from gateway.dominio.bd import sessao_com_tenant
+from gateway.dominio.conversao import (
+    TerminalParaConversao,
+    converter_access_log,
+    montar_idempotency_key,
+)
+from gateway.dominio.fila import obter_redis
+from gateway.dominio.resolucao import TerminalResolvido, resolver_terminal
+from gateway.dominio.terminais import (
+    TerminalCarregado,
+    avancar_marca_dagua,
+    carregar_terminal,
+    obter_cliente_do_terminal,
+)
+from gateway.dominio.usuarios import resolver_matricula
+from gateway.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
 from gateway.log import obter_logger
 
 logger = obter_logger("catchup")
@@ -87,29 +82,32 @@ SerieTerminal = Annotated[
 
 @roteador.get(
     "/{numero_serie}/marca-dagua",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    status_code=status.HTTP_200_OK,
     operation_id="obterMarcaDagua",
     summary="Ultimo access_log_id coletado deste terminal",
 )
 async def obter_marca_dagua(numero_serie: SerieTerminal) -> dict[str, Any]:
-    """Devolve a marca d'agua atual e o estado da ultima coleta.
-
-    **Resposta prevista.** `numeroSerie`, `ultimoIdColetado`, `coletadoEm`,
-    `ultimoContatoEm` e uma estimativa de pendencia. E o dado que o painel de
-    operacao mostra e que o evento `terminal.offline` de `events.yaml` carrega
-    no campo `logsPendentesEstimados`.
-
-    Endpoint de leitura pura: nao fala com o equipamento, so consulta o estado
-    que o gateway ja mantem. Serve para diagnostico ("de onde ele vai retomar?")
-    sem custo nenhum para o terminal.
-    """
-    logger.info("catch-up: consulta de marca d'agua", extra={"numeroSerie": numero_serie})
-    raise NaoImplementado("obterMarcaDagua")
+    """Leitura pura: nao fala com o equipamento, so consulta o estado que o
+    banco ja mantem (`terminais.ultimo_log_externo_id`/`ultima_sincronizacao_em`/
+    `ultimo_contato_em`)."""
+    config = obter_configuracao()
+    resolvido = await resolver_terminal(numero_serie, config=config)
+    async with sessao_com_tenant(str(resolvido.tenant_id), config=config) as sessao:
+        terminal = await carregar_terminal(sessao, resolvido.id)
+    if terminal is None:
+        raise ErroDeAplicacao("PONTO-REC-001", detalhe="Terminal nao encontrado.")
+    return {
+        "numeroSerie": terminal.numero_serie,
+        "ultimoIdColetado": terminal.ultimo_log_externo_id,
+        "ultimoContatoEm": terminal.ultimo_contato_em.isoformat()
+        if terminal.ultimo_contato_em
+        else None,
+    }
 
 
 @roteador.post(
     "/{numero_serie}/catch-up",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    status_code=status.HTTP_200_OK,
     operation_id="executarCatchUp",
     summary="Coleta os access_logs pendentes a partir da marca d'agua",
 )
@@ -134,38 +132,148 @@ async def executar_catch_up(
 ) -> dict[str, Any]:
     """Executa a recuperacao por marca d'agua e entrega o que achar a API.
 
-    **O que a F6 fara aqui**, na ordem, e a razao de cada passo:
-
-    1. `login.fcgi` para abrir sessao. Falha de credencial e `PONTO-TERM-003`;
-       equipamento inalcancavel e `PONTO-TERM-001`; prazo estourado e
-       `PONTO-TERM-002`. Os tres sao codigos do catalogo — nenhum e inventado.
-    2. `load_objects.fcgi` sobre `access_logs` com `id > marca`, ordenado por
-       `id`, em paginas de `CATCHUP_TAMANHO_PAGINA`. Pedir tudo de uma vez em um
-       terminal com trinta dias de *backlog* estoura a memoria do equipamento —
-       nao a nossa.
-    3. Converter cada registro em marcacao canonica e entregar a API, que
-       atribui NSR e grava. O gateway nao atribui NSR.
-    4. Avancar a marca d'agua **depois** da confirmacao de gravacao, pagina a
-       pagina. Ver a propriedade 3 no cabecalho do modulo.
-    5. Publicar `terminal.online` (`events.yaml`, `origem: worker`) com quantos
-       registros foram recuperados — e assim que o consumidor de webhook fica
-       sabendo que houve reposicao retroativa de marcacao.
-
-    `paginas_maximas` existe para que uma recuperacao gigantesca nao segure um
-    slot do worker por uma hora: a execucao devolve "ainda ha pendencia" e o
-    proximo ciclo continua de onde parou. Retomar e barato justamente porque a
-    marca d'agua e persistida.
-
-    **Resposta prevista.** Quantos registros foram lidos, quantos viraram
-    marcacao, quantos foram descartados por idempotencia, a nova marca d'agua e
-    se restou pendencia.
+    1. Abre sessao no terminal via `gateway.cliente_controlid.obter_cliente`
+       (T1) -- `PONTO-TERM-001/002/003` sao os codigos de falha de conexao,
+       ja tratados dentro de `cliente_controlid.py`.
+    2. `load_objects` sobre `access_logs` com `id > marca`, ordenado por
+       `id`, em paginas de ate `paginas_maximas` x tamanho de pagina do
+       equipamento.
+    3. Converte cada registro (T6) e entrega a API (`coletadaOffline=true`).
+    4. Avanca a marca d'agua **so depois** da confirmacao de gravacao da
+       pagina inteira.
+    5. Publica `terminal.online` quando a ultima amostra de saude conhecida
+       classificava o terminal como offline.
     """
+    config = obter_configuracao()
+    resolvido = await resolver_terminal(numero_serie, config=config)
+
+    async with sessao_com_tenant(str(resolvido.tenant_id), config=config) as sessao:
+        terminal = await carregar_terminal(sessao, resolvido.id)
+    if terminal is None:
+        raise ErroDeAplicacao("PONTO-REC-001", detalhe="Terminal nao encontrado.")
+
+    marca = desde_id if desde_id is not None else terminal.ultimo_log_externo_id
+    cliente = obter_cliente_do_terminal(terminal, config=config)
+    redis = obter_redis(config)
+    cache_local: dict[int, str] = {}
+    request_id = str(uuid4())
+    terminal_conversao = TerminalParaConversao(
+        id=terminal.id,
+        dispositivo_id=terminal.dispositivo_id,
+        empresa_id=terminal.empresa_id,
+        unidade_id=terminal.unidade_id,
+        numero_serie=terminal.numero_serie,
+    )
+
+    registros_lidos = 0
+    marcacoes_criadas = 0
+    duplicadas = 0
+    paginas = 0
+    pendencia = False
+
+    while paginas < paginas_maximas:
+        pagina = await cliente.load_objects(
+            "access_logs",
+            onde=[{"field": "id", "operator": ">", "value": marca}],
+            ordenar=["id"],
+            limite=config.catchup_tamanho_pagina,
+        )
+        if not pagina:
+            break
+        pagina = sorted(pagina, key=lambda registro: int(registro["id"]))
+        maior_id_da_pagina = marca
+        for access_log in pagina:
+            matricula = await resolver_matricula(
+                redis=redis,
+                numero_serie=numero_serie,
+                user_id=int(access_log["user_id"]),
+                cliente=cliente,
+                cache_local=cache_local,
+            )
+            marcacao_criar = converter_access_log(
+                access_log, terminal=terminal_conversao, matricula=matricula, coletada_offline=True
+            )
+            chave = montar_idempotency_key(numero_serie, int(access_log["id"]))
+            try:
+                resultado = await cliente_api.enviar_marcacao(
+                    config,
+                    tenant_id=resolvido.tenant_id,
+                    corpo=marcacao_criar,
+                    idempotency_key=chave,
+                    request_id=request_id,
+                )
+                marcacoes_criadas += 1
+                if resultado.get("duplicada"):
+                    duplicadas += 1
+            except cliente_api.MarcacaoAindaNaoDisponivel:
+                logger.info(
+                    "catch-up: marcacao adiada, POST /v1/marcacoes ainda 501 (F5 em andamento)",
+                    extra={"numeroSerie": numero_serie, "logExternoId": access_log["id"]},
+                )
+            registros_lidos += 1
+            maior_id_da_pagina = max(maior_id_da_pagina, int(access_log["id"]))
+
+        # A marca so avanca DEPOIS que a pagina inteira foi entregue -- nunca
+        # antes (proibicao 9 do PCF).
+        async with sessao_com_tenant(str(resolvido.tenant_id), config=config) as sessao:
+            await avancar_marca_dagua(sessao, terminal.id, maior_id_da_pagina)
+        marca = maior_id_da_pagina
+        paginas += 1
+        if len(pagina) < config.catchup_tamanho_pagina:
+            break
+    else:
+        pendencia = True
+
+    if not pendencia:
+        await _publicar_online_se_estava_offline(
+            config=config, resolvido=resolvido, terminal=terminal
+        )
+
     logger.info(
-        "catch-up: execucao solicitada",
+        "catch-up: execucao concluida",
         extra={
             "numeroSerie": numero_serie,
-            "desdeId": desde_id,
-            "paginasMaximas": paginas_maximas,
+            "registrosLidos": registros_lidos,
+            "marcacoesCriadas": marcacoes_criadas,
+            "novaMarcaDagua": marca,
+            "pendencia": pendencia,
         },
     )
-    raise NaoImplementado("executarCatchUp")
+    return {
+        "numeroSerie": numero_serie,
+        "registrosLidos": registros_lidos,
+        "marcacoesCriadas": marcacoes_criadas,
+        "descartadasPorIdempotencia": duplicadas,
+        "novaMarcaDagua": marca,
+        "pendencia": pendencia,
+    }
+
+
+async def _publicar_online_se_estava_offline(
+    *, config: Configuracao, resolvido: TerminalResolvido, terminal: TerminalCarregado
+) -> None:
+    """Publica `terminal.online` (`events.yaml`, origem worker) se a ultima
+    amostra de `terminal_saude` classificava o terminal como offline."""
+    from sqlalchemy import text
+
+    from gateway.dominio.eventos import publicar_terminal_online
+
+    async with sessao_com_tenant(str(resolvido.tenant_id), config=config) as sessao:
+        ultima = (
+            await sessao.execute(
+                text(
+                    "SELECT online FROM terminal_saude WHERE terminal_id = :id "
+                    "ORDER BY verificado_em DESC LIMIT 1"
+                ),
+                {"id": str(terminal.id)},
+            )
+        ).first()
+    if ultima is not None and ultima.online is False:
+        publicar_terminal_online(
+            tenant_id=resolvido.tenant_id,
+            terminal_id=terminal.id,
+            empresa_id=terminal.empresa_id,
+            numero_serie=terminal.numero_serie,
+            unidade_id=terminal.unidade_id,
+            retorno_em=dt.datetime.now(tz=dt.UTC),
+        )

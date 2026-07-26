@@ -1,11 +1,11 @@
-"""Rotas da tag `afastamentos` do contrato. GERADO -- nao editar.
+"""Rotas da tag `afastamentos` do contrato.
 
 Tipos e periodos de ausencia legitima.
 O afastamento entra na apuracao como insumo, NUNCA como marcacao, e e exportado no bloco de ausencias do AEJ.
 
-Regra de negocio destas operacoes entra na fase F3. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F3 (agente A2, ownership deste arquivo --
+ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
+`app.jornada.calendario.afastamentos`; este modulo so traduz HTTP <-> servico.
 """
 
 from __future__ import annotations
@@ -14,9 +14,12 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.jornada.calendario import afastamentos as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["afastamentos"])
@@ -30,6 +33,8 @@ roteador = APIRouter(tags=["afastamentos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_afastamento(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -68,11 +73,21 @@ async def listar_tipos_afastamento(
         bool | None, Query(alias="ativo", description="Filtra por tipos ativos.")
     ] = None,
 ) -> contrato.ListaTipoAfastamento:
-    """Listar tipos de afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarTiposAfastamento", fase="F3")
+    """Listar tipos de afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_tipos_afastamento(
+        sessao,
+        tenant_id,
+        categoria=categoria,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [
+        contrato.TipoAfastamento.model_validate(linha, from_attributes=True) for linha in linhas
+    ]
+    return contrato.ListaTipoAfastamento(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -91,6 +106,8 @@ async def criar_tipo_afastamento(
         ),
     ],
     corpo: contrato.TipoAfastamentoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -106,11 +123,10 @@ async def criar_tipo_afastamento(
         ),
     ] = None,
 ) -> contrato.TipoAfastamento:
-    """Criar tipo de afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarTipoAfastamento", fase="F3")
+    """Criar tipo de afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_tipo_afastamento(sessao, tenant_id, corpo)
+    return contrato.TipoAfastamento.model_validate(novo, from_attributes=True)
 
 
 @roteador.patch(
@@ -130,6 +146,8 @@ async def atualizar_tipo_afastamento(
     ],
     tipo_id: Annotated[UUID, Path(alias="tipoId", description="Identificador do tipo.")],
     corpo: contrato.TipoAfastamentoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -145,11 +163,10 @@ async def atualizar_tipo_afastamento(
         ),
     ] = None,
 ) -> contrato.TipoAfastamento:
-    """Atualizar tipo de afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarTipoAfastamento", fase="F3")
+    """Atualizar tipo de afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    atualizado = await servico.atualizar_tipo_afastamento(sessao, tenant_id, tipo_id, corpo)
+    return contrato.TipoAfastamento.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.get(
@@ -160,6 +177,8 @@ async def atualizar_tipo_afastamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_afastamentos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -217,11 +236,24 @@ async def listar_afastamentos(
         date | None, Query(alias="ate", description="Afastamentos que alcancam esta data ou antes.")
     ] = None,
 ) -> contrato.ListaAfastamento:
-    """Listar afastamentos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarAfastamentos", fase="F3")
+    """Listar afastamentos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_afastamentos(
+        sessao,
+        tenant_id,
+        colaborador_id=colaborador_id,
+        vinculo_id=vinculo_id,
+        empresa_id=empresa_id,
+        tipo_afastamento_id=tipo_afastamento_id,
+        status=status,
+        de=de,
+        ate=ate,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Afastamento.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaAfastamento(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -240,6 +272,8 @@ async def criar_afastamento(
         ),
     ],
     corpo: contrato.AfastamentoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -255,11 +289,10 @@ async def criar_afastamento(
         ),
     ] = None,
 ) -> contrato.Afastamento:
-    """Criar afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarAfastamento", fase="F3")
+    """Criar afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_afastamento(sessao, tenant_id, corpo)
+    return contrato.Afastamento.model_validate(novo, from_attributes=True)
 
 
 @roteador.get(
@@ -273,6 +306,8 @@ async def obter_afastamento(
     afastamento_id: Annotated[
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -288,11 +323,10 @@ async def obter_afastamento(
         ),
     ] = None,
 ) -> contrato.Afastamento:
-    """Obter afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("obterAfastamento", fase="F3")
+    """Obter afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    encontrado = await servico.obter_afastamento(sessao, tenant_id, afastamento_id)
+    return contrato.Afastamento.model_validate(encontrado, from_attributes=True)
 
 
 @roteador.patch(
@@ -314,6 +348,8 @@ async def atualizar_afastamento(
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
     corpo: contrato.AfastamentoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -329,11 +365,10 @@ async def atualizar_afastamento(
         ),
     ] = None,
 ) -> contrato.Afastamento:
-    """Atualizar afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarAfastamento", fase="F3")
+    """Atualizar afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    atualizado = await servico.atualizar_afastamento(sessao, tenant_id, afastamento_id, corpo)
+    return contrato.Afastamento.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.delete(
@@ -355,6 +390,8 @@ async def excluir_afastamento(
     afastamento_id: Annotated[
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -370,8 +407,7 @@ async def excluir_afastamento(
         ),
     ] = None,
 ) -> Response:
-    """Excluir afastamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("excluirAfastamento", fase="F3")
+    """Excluir afastamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.excluir_afastamento(sessao, tenant_id, afastamento_id)
+    return Response(status_code=204)

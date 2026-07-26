@@ -88,6 +88,15 @@ class Configuracao(BaseSettings):
     #: valor final e por terminal e por modo de comunicacao (F6); este e o piso.
     terminal_offline_minutos: int = 15
 
+    # --- Credencial de servico para POST /v1/marcacoes (F6/A1, T3) ------------
+    #: Chave de API (`X-API-Key`, `apiKeyAuth` do contrato) que o device-gw
+    #: apresenta a si mesmo -- nao e credencial de um usuario humano, e a
+    #: "conta tecnica de integracao" (`api_clients.tipo = 'maquina'`) que
+    #: `apps/api/app/terminais/servico.py` documenta. O mesmo valor precisa
+    #: estar semeado (hash SHA-256) em `api_keys.hash` para cada tenant que
+    #: tiver terminal Control iD -- ver nota em `docs/backlog.md`.
+    api_key_marcacoes: SecretStr = SecretStr("")
+
     # --- Observabilidade -------------------------------------------------------
     sentry_dsn: str = ""
     otel_exporter_otlp_endpoint: str = ""

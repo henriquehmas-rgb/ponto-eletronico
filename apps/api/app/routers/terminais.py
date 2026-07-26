@@ -1,12 +1,13 @@
-"""Rotas da tag `terminais` do contrato. GERADO -- nao editar.
+"""Rotas da tag `terminais` do contrato.
 
 Coletores fisicos, tipicamente Control iD iDFace.
 IMPORTANTE: o terminal NAO e o REP-P.
 Ele identifica a pessoa e produz um registro de acesso; quem atribui o NSR e grava no AFD e o nosso software.
 
-Regra de negocio destas operacoes entra na fase F6. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F6 (agente A1, ownership deste arquivo --
+ver `docs/fases/F06-integracao-control-id.md`, secao 5). A regra em si vive em
+`app.terminais.servico`; este modulo so traduz HTTP <-> servico, no mesmo
+padrao estrutural de `app/routers/colaboradores.py` (F2).
 """
 
 from __future__ import annotations
@@ -15,10 +16,14 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.config import obter_configuracao
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
+from app.terminais import servico
 
 roteador = APIRouter(tags=["terminais"])
 
@@ -31,6 +36,8 @@ roteador = APIRouter(tags=["terminais"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_terminais(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -81,11 +88,22 @@ async def listar_terminais(
         ),
     ] = None,
 ) -> contrato.ListaTerminal:
-    """Listar terminais
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("listarTerminais", fase="F6")
+    """Listar terminais"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_terminais(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        fabricante=fabricante,
+        status=status,
+        online=online,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [servico.montar_resposta_terminal(linha) for linha in linhas]
+    return contrato.ListaTerminal(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -104,6 +122,8 @@ async def criar_terminal(
         ),
     ],
     corpo: contrato.TerminalCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -119,11 +139,10 @@ async def criar_terminal(
         ),
     ] = None,
 ) -> contrato.Terminal:
-    """Criar terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("criarTerminal", fase="F6")
+    """Criar terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    terminal = await servico.criar_terminal(sessao, tenant_id, corpo, sujeito.usuario_id)
+    return servico.montar_resposta_terminal(terminal)
 
 
 @roteador.get(
@@ -137,6 +156,8 @@ async def obter_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -152,11 +173,10 @@ async def obter_terminal(
         ),
     ] = None,
 ) -> contrato.Terminal:
-    """Obter terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("obterTerminal", fase="F6")
+    """Obter terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    terminal = await servico.obter_terminal(sessao, tenant_id, terminal_id)
+    return servico.montar_resposta_terminal(terminal)
 
 
 @roteador.patch(
@@ -178,6 +198,8 @@ async def atualizar_terminal(
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
     corpo: contrato.TerminalAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -193,11 +215,12 @@ async def atualizar_terminal(
         ),
     ] = None,
 ) -> contrato.Terminal:
-    """Atualizar terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("atualizarTerminal", fase="F6")
+    """Atualizar terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    terminal = await servico.atualizar_terminal(
+        sessao, tenant_id, terminal_id, corpo, sujeito.usuario_id
+    )
+    return servico.montar_resposta_terminal(terminal)
 
 
 @roteador.delete(
@@ -219,6 +242,8 @@ async def excluir_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -234,11 +259,10 @@ async def excluir_terminal(
         ),
     ] = None,
 ) -> Response:
-    """Excluir terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("excluirTerminal", fase="F6")
+    """Excluir terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.excluir_terminal(sessao, tenant_id, terminal_id, sujeito.usuario_id)
+    return Response(status_code=204)
 
 
 @roteador.get(
@@ -252,6 +276,8 @@ async def listar_saude_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -295,11 +321,20 @@ async def listar_saude_terminal(
         ),
     ] = None,
 ) -> contrato.ListaTerminalSaude:
-    """Consultar saude do terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("listarSaudeTerminal", fase="F6")
+    """Consultar saude do terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_saude_terminal(
+        sessao,
+        tenant_id,
+        terminal_id,
+        desde=desde,
+        somente_offline=somente_offline,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.TerminalSaude.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaTerminalSaude(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -321,6 +356,8 @@ async def sincronizar_terminal(
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
     corpo: contrato.SincronizacaoTerminalRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.executar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -336,8 +373,14 @@ async def sincronizar_terminal(
         ),
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
-    """Sincronizar terminal
-
-    Fase 0 entrega andaime: a implementacao entra na fase F6.
-    """
-    raise NaoImplementado("sincronizarTerminal", fase="F6")
+    """Sincronizar terminal"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    config = obter_configuracao()
+    return await servico.sincronizar_terminal(
+        sessao,
+        tenant_id,
+        terminal_id,
+        corpo,
+        usuario_id=sujeito.usuario_id,
+        redis_url=config.redis_url,
+    )

@@ -1,11 +1,11 @@
-"""Rotas da tag `feriados` do contrato. GERADO -- nao editar.
+"""Rotas da tag `feriados` do contrato.
 
 Calendario de feriados por abrangencia nacional, estadual, municipal, de empresa e de unidade.
 Feriados moveis nao guardam data: sao calculados por regra a partir da Pascoa do ano de referencia.
 
-Regra de negocio destas operacoes entra na fase F3. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F3 (agente A2, ownership deste arquivo --
+ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
+`app.jornada.calendario.feriados`; este modulo so traduz HTTP <-> servico.
 """
 
 from __future__ import annotations
@@ -14,9 +14,12 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.jornada.calendario import feriados as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["feriados"])
@@ -30,6 +33,8 @@ roteador = APIRouter(tags=["feriados"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_feriado_conjuntos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -75,11 +80,23 @@ async def listar_feriado_conjuntos(
         bool | None, Query(alias="ativo", description="Filtra por conjuntos ativos.")
     ] = None,
 ) -> contrato.ListaFeriadoConjunto:
-    """Listar conjuntos de feriados
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarFeriadoConjuntos", fase="F3")
+    """Listar conjuntos de feriados"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_feriado_conjuntos(
+        sessao,
+        tenant_id,
+        abrangencia=abrangencia,
+        uf=uf,
+        unidade_id=unidade_id,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [
+        contrato.FeriadoConjunto.model_validate(linha, from_attributes=True) for linha in linhas
+    ]
+    return contrato.ListaFeriadoConjunto(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -98,6 +115,8 @@ async def criar_feriado_conjunto(
         ),
     ],
     corpo: contrato.FeriadoConjuntoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -113,11 +132,10 @@ async def criar_feriado_conjunto(
         ),
     ] = None,
 ) -> contrato.FeriadoConjunto:
-    """Criar conjunto de feriados
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarFeriadoConjunto", fase="F3")
+    """Criar conjunto de feriados"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_feriado_conjunto(sessao, tenant_id, corpo)
+    return contrato.FeriadoConjunto.model_validate(novo, from_attributes=True)
 
 
 @roteador.patch(
@@ -139,6 +157,8 @@ async def atualizar_feriado_conjunto(
         UUID, Path(alias="conjuntoId", description="Identificador do conjunto.")
     ],
     corpo: contrato.FeriadoConjuntoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -154,11 +174,10 @@ async def atualizar_feriado_conjunto(
         ),
     ] = None,
 ) -> contrato.FeriadoConjunto:
-    """Atualizar conjunto de feriados
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("atualizarFeriadoConjunto", fase="F3")
+    """Atualizar conjunto de feriados"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    atualizado = await servico.atualizar_feriado_conjunto(sessao, tenant_id, conjunto_id, corpo)
+    return contrato.FeriadoConjunto.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.delete(
@@ -180,6 +199,8 @@ async def excluir_feriado_conjunto(
     conjunto_id: Annotated[
         UUID, Path(alias="conjuntoId", description="Identificador do conjunto.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -195,11 +216,10 @@ async def excluir_feriado_conjunto(
         ),
     ] = None,
 ) -> Response:
-    """Excluir conjunto de feriados
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("excluirFeriadoConjunto", fase="F3")
+    """Excluir conjunto de feriados"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.excluir_feriado_conjunto(sessao, tenant_id, conjunto_id)
+    return Response(status_code=204)
 
 
 @roteador.get(
@@ -210,6 +230,8 @@ async def excluir_feriado_conjunto(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_feriados(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -264,11 +286,23 @@ async def listar_feriados(
     ] = None,
     tipo: Annotated[str | None, Query(alias="tipo", description="Filtra pelo tipo.")] = None,
 ) -> contrato.ListaFeriado:
-    """Listar feriados
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("listarFeriados", fase="F3")
+    """Listar feriados"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_feriados(
+        sessao,
+        tenant_id,
+        feriado_conjunto_id=feriado_conjunto_id,
+        unidade_id=unidade_id,
+        ano=ano,
+        de=de,
+        ate=ate,
+        tipo=tipo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Feriado.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaFeriado(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -287,6 +321,8 @@ async def criar_feriado(
         ),
     ],
     corpo: contrato.FeriadoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -302,11 +338,10 @@ async def criar_feriado(
         ),
     ] = None,
 ) -> contrato.Feriado:
-    """Criar feriado
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("criarFeriado", fase="F3")
+    """Criar feriado"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_feriado(sessao, tenant_id, corpo)
+    return contrato.Feriado.model_validate(novo, from_attributes=True)
 
 
 @roteador.delete(
@@ -326,6 +361,8 @@ async def excluir_feriado(
         ),
     ],
     feriado_id: Annotated[UUID, Path(alias="feriadoId", description="Identificador do feriado.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -341,8 +378,7 @@ async def excluir_feriado(
         ),
     ] = None,
 ) -> Response:
-    """Excluir feriado
-
-    Fase 0 entrega andaime: a implementacao entra na fase F3.
-    """
-    raise NaoImplementado("excluirFeriado", fase="F3")
+    """Excluir feriado"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.excluir_feriado(sessao, tenant_id, feriado_id)
+    return Response(status_code=204)

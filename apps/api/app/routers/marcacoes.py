@@ -15,9 +15,14 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.marcacao.consulta import marcacoes as consulta_marcacoes
+from app.marcacao.dominio import verificacao_nsr
+from app.marcacao.pipeline import ingestao, offline
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["marcacoes"])
@@ -31,14 +36,18 @@ roteador = APIRouter(tags=["marcacoes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_marcacao(
+    corpo: contrato.MarcacaoCriar,
+    request: Request,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.criar"))],
+    response: Response,
     idempotency_key: Annotated[
-        str,
+        str | None,
         Header(
             alias="Idempotency-Key",
             description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
-    ],
-    corpo: contrato.MarcacaoCriar,
+    ] = None,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -54,11 +63,28 @@ async def criar_marcacao(
         ),
     ] = None,
 ) -> contrato.MarcacaoCriada:
-    """Registrar marcacao de ponto
+    """Registrar marcacao de ponto.
 
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
+    `Idempotency-Key` fica opcional na assinatura (o contrato a declara
+    obrigatoria) so para que a ausencia responda `PONTO-IDEM-001`
+    especificamente -- o `errors.yaml` e explicito (`PONTO-VAL-011`: "Para
+    Idempotency-Key veja PONTO-IDEM-001") de que o cabecalho generico
+    ausente NAO e o codigo certo aqui.
     """
-    raise NaoImplementado("criarMarcacao", fase="F5")
+    tenant_id = tenant_id_ou_erro(sujeito)
+    resultado = await ingestao.registrar_marcacao(
+        sessao,
+        tenant_id=tenant_id,
+        corpo=corpo,
+        idempotency_key=idempotency_key,
+        sujeito=sujeito,
+        ip_origem=request.client.host if request.client else None,
+    )
+    if resultado.replay:
+        response.headers["Idempotency-Replayed"] = "true"
+    if resultado.resposta.marcacao is not None:
+        response.headers["Location"] = f"/v1/marcacoes/{resultado.resposta.marcacao.id}"
+    return resultado.resposta
 
 
 @roteador.get(
@@ -69,6 +95,8 @@ async def criar_marcacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_marcacoes(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -150,11 +178,30 @@ async def listar_marcacoes(
         ),
     ] = None,
 ) -> contrato.ListaMarcacao:
-    """Listar marcacoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("listarMarcacoes", fase="F5")
+    """Listar marcacoes. Somente leitura -- ver `x-vedacao-legal` da tag no
+    contrato: nunca havera `PUT`/`PATCH`/`DELETE` aqui."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await consulta_marcacoes.listar_marcacoes(
+        sessao,
+        tenant_id=tenant_id,
+        sujeito=sujeito,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+        colaborador_id=colaborador_id,
+        vinculo_id=vinculo_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        rep_p_id=rep_p_id,
+        cpf=cpf,
+        canal=canal,
+        de=de,
+        ate=ate,
+        nsr_de=nsr_de,
+        nsr_ate=nsr_ate,
+        coletada_offline=coletada_offline,
+        incluir_meta=incluir_meta,
+    )
 
 
 @roteador.get(
@@ -168,6 +215,8 @@ async def obter_marcacao(
     marcacao_id: Annotated[
         UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -183,11 +232,12 @@ async def obter_marcacao(
         ),
     ] = None,
 ) -> contrato.Marcacao:
-    """Obter marcacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("obterMarcacao", fase="F5")
+    """Obter marcacao. `PONTO-REC-001` quando o id nao existe no tenant
+    corrente (inclusive marcacao de outro tenant -- 404 por isolamento)."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await consulta_marcacoes.obter_marcacao(
+        sessao, tenant_id=tenant_id, marcacao_id=marcacao_id
+    )
 
 
 @roteador.get(
@@ -201,6 +251,8 @@ async def obter_meta_marcacao(
     marcacao_id: Annotated[
         UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler_sensivel"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -216,11 +268,13 @@ async def obter_meta_marcacao(
         ),
     ] = None,
 ) -> contrato.MarcacaoMeta:
-    """Obter contexto antifraude da marcacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("obterMetaMarcacao", fase="F5")
+    """Obter contexto antifraude da marcacao. Dado sensivel: a permissao
+    `marcacoes.ler_sensivel` (`Depends(exigir_permissao(...))` acima) ja
+    registra o acesso em `acessos_dados_sensiveis` antes do corpo rodar."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await consulta_marcacoes.obter_meta_marcacao(
+        sessao, tenant_id=tenant_id, marcacao_id=marcacao_id
+    )
 
 
 @roteador.post(
@@ -231,14 +285,18 @@ async def obter_meta_marcacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def sincronizar_marcacoes_offline(
+    corpo: contrato.SincronizacaoOfflineRequisicao,
+    request: Request,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.criar"))],
+    response: Response,
     idempotency_key: Annotated[
-        str,
+        str | None,
         Header(
             alias="Idempotency-Key",
             description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
         ),
-    ],
-    corpo: contrato.SincronizacaoOfflineRequisicao,
+    ] = None,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -254,11 +312,18 @@ async def sincronizar_marcacoes_offline(
         ),
     ] = None,
 ) -> contrato.SincronizacaoOfflineResposta:
-    """Sincronizar fila offline
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("sincronizarMarcacoesOffline", fase="F5")
+    """Sincronizar fila offline. Ver `criarMarcacao` sobre `Idempotency-Key`
+    opcional na assinatura (so para responder `PONTO-IDEM-001` certo)."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    resposta = await offline.sincronizar_lote(
+        sessao,
+        tenant_id=tenant_id,
+        corpo=corpo,
+        idempotency_key=idempotency_key,
+        sujeito=sujeito,
+        ip_origem=request.client.host if request.client else None,
+    )
+    return resposta
 
 
 @roteador.get(
@@ -270,6 +335,8 @@ async def sincronizar_marcacoes_offline(
 )
 async def verificar_sequencia_nsr(
     rep_p_id: Annotated[UUID, Query(alias="repPId", description="REP-P a verificar.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -299,8 +366,14 @@ async def verificar_sequencia_nsr(
         ),
     ] = None,
 ) -> contrato.VerificacaoNsr:
-    """Verificar continuidade do NSR
-
-    Fase 0 entrega andaime: a implementacao entra na fase F5.
-    """
-    raise NaoImplementado("verificarSequenciaNsr", fase="F5")
+    """Verificar continuidade do NSR"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    resultado = await verificacao_nsr.verificar_sequencia_nsr(
+        sessao,
+        tenant_id=tenant_id,
+        rep_p_id=rep_p_id,
+        nsr_de=nsr_de,
+        nsr_ate=nsr_ate,
+        verificar_cadeia_hash=bool(verificar_cadeia_hash),
+    )
+    return contrato.VerificacaoNsr.model_validate(resultado, from_attributes=True)
