@@ -52,15 +52,6 @@ class Configuracao(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://ponto:ponto@localhost:5432/ponto"
     redis_url: str = "redis://localhost:6379/0"
-    #: Segunda credencial de banco, SO leitura, com BYPASSRLS -- role
-    #: `ponto_suporte` (`packages/contracts/schema.sql`, secao 20). Usada
-    #: exclusivamente por `verificar_terminal_offline` (F6/T9) para enumerar
-    #: terminais de TODOS os tenants antes de saber qual `app.tenant_id`
-    #: aplicar -- ver RFC-013 (interino, opcao a, enquanto a RFC nao decide).
-    #: Vazio cai para `database_url` (conveniencia de dev/teste apenas; em
-    #: producao as duas credenciais precisam ser DIFERENTES).
-    database_url_suporte: str = ""
-
     minio_endpoint: str = "localhost:9000"
     minio_access_key: SecretStr = SecretStr("")
     minio_secret_key: SecretStr = SecretStr("")

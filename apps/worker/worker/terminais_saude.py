@@ -6,8 +6,8 @@ corpo da funcao que e minha (a tabela de ownership da F6 so me da
 `verificar_terminal_offline` e a entrada em `montar_cron()` naquele arquivo
 compartilhado com F4).
 
-Duas credenciais de banco (RFC-013, interino -- opcao a)
------------------------------------------------------------
+Enumeracao cross-tenant via SECURITY DEFINER (RFC-013, decidida)
+------------------------------------------------------------------
 
 `verificar_terminal_offline` roda **antes** de saber qual tenant verificar: e
 um cron global, nao uma tarefa enfileirada por requisicao. A role de
@@ -15,19 +15,14 @@ aplicacao (`ponto_app`) nao tem `BYPASSRLS` (ADR-001) e toda tabela de
 dominio esta sob `FORCE ROW LEVEL SECURITY` -- sem `app.tenant_id`,
 `SELECT * FROM terminais` devolve zero linhas, sempre.
 
-Por isso este modulo usa DUAS conexoes:
-
-* `database_url_suporte` (`worker/config.py`) -- role com `BYPASSRLS`
-  (`ponto_suporte`, ja existe em `packages/contracts/schema.sql` secao 20),
-  **somente leitura**, usada so para enumerar terminais de todos os tenants.
-* `database_url` comum (`ponto_app`) -- usada com `SET LOCAL app.tenant_id`
-  para toda escrita (`terminal_saude`), assim que o `tenant_id` de cada linha
-  ja e conhecido.
-
-RFC-013 propoe substituir a enumeracao por uma funcao `SECURITY DEFINER`
-dedicada (mesmo padrao de `fn_resolve_tenant`/`fn_resolve_terminal`), o que
-eliminaria a necessidade da segunda credencial. Ate a decisao, este e o
-caminho interino.
+RFC-013 decidiu (opcao b) a funcao `fn_terminais_para_verificacao_saude()`
+(`packages/contracts/schema.sql`, `SECURITY DEFINER`, mesmo padrao de
+`fn_resolve_tenant`/`fn_resolve_terminal`): ela roda com os privilegios de
+quem a definiu, entao enumera terminais de TODOS os tenants numa unica
+chamada pela role comum `ponto_app`, sem `app.tenant_id` publicado e sem
+segunda credencial de banco. Toda escrita (`terminal_saude`) continua usando
+a mesma conexao, com `SET LOCAL app.tenant_id` assim que o `tenant_id` de
+cada linha ja e conhecido.
 """
 
 from __future__ import annotations
@@ -54,10 +49,8 @@ VERSAO_TERMINAL_OFFLINE = 1
 #: teste ate a F13 substituir por fila de verdade.
 BARRAMENTO_INTERNO: list[dict[str, Any]] = []
 
-_engine_suporte: AsyncEngine | None = None
-_engine_app: AsyncEngine | None = None
-_loop_suporte: asyncio.AbstractEventLoop | None = None
-_loop_app: asyncio.AbstractEventLoop | None = None
+_engine: AsyncEngine | None = None
+_loop: asyncio.AbstractEventLoop | None = None
 
 
 def limpar_barramento() -> None:
@@ -77,79 +70,57 @@ def _loop_mudou(loop_guardado: asyncio.AbstractEventLoop | None) -> bool:
         return False
 
 
-def _engine_de_suporte(config: Configuracao) -> AsyncEngine:
-    global _engine_suporte, _loop_suporte
-    if _engine_suporte is not None and _loop_mudou(_loop_suporte):
-        _engine_suporte = None
-        _loop_suporte = None
-    if _engine_suporte is None:
-        url = config.database_url_suporte or config.database_url
-        _engine_suporte = create_async_engine(url, pool_pre_ping=True, pool_size=2)
+def _obter_engine(config: Configuracao) -> AsyncEngine:
+    global _engine, _loop
+    if _engine is not None and _loop_mudou(_loop):
+        _engine = None
+        _loop = None
+    if _engine is None:
+        _engine = create_async_engine(config.database_url, pool_pre_ping=True, pool_size=5)
         try:
-            _loop_suporte = asyncio.get_running_loop()
+            _loop = asyncio.get_running_loop()
         except RuntimeError:
-            _loop_suporte = None
-    return _engine_suporte
-
-
-def _engine_de_aplicacao(config: Configuracao) -> AsyncEngine:
-    global _engine_app, _loop_app
-    if _engine_app is not None and _loop_mudou(_loop_app):
-        _engine_app = None
-        _loop_app = None
-    if _engine_app is None:
-        _engine_app = create_async_engine(config.database_url, pool_pre_ping=True, pool_size=5)
-        try:
-            _loop_app = asyncio.get_running_loop()
-        except RuntimeError:
-            _loop_app = None
-    return _engine_app
+            _loop = None
+    return _engine
 
 
 async def reiniciar_engines_para_teste() -> None:
-    """Uso exclusivo de teste: descarta as engines entre casos/loops. Nao
-    tenta fechar graciosamente uma engine presa a um loop ja encerrado --
-    so descarta a referencia (mesmo raciocinio de
+    """Uso exclusivo de teste: descarta a engine entre casos/loops. Nao tenta
+    fechar graciosamente uma engine presa a um loop ja encerrado -- so
+    descarta a referencia (mesmo raciocinio de
     `gateway.dominio.bd.encerrar_engine`)."""
-    global _engine_suporte, _engine_app, _loop_suporte, _loop_app
-    if _engine_suporte is not None and not _loop_mudou(_loop_suporte):
-        await _engine_suporte.dispose()
-    if _engine_app is not None and not _loop_mudou(_loop_app):
-        await _engine_app.dispose()
-    _engine_suporte = None
-    _engine_app = None
-    _loop_suporte = None
-    _loop_app = None
+    global _engine, _loop
+    if _engine is not None and not _loop_mudou(_loop):
+        await _engine.dispose()
+    _engine = None
+    _loop = None
 
 
 @dataclass(frozen=True, slots=True)
 class TerminalAtivo:
     """Recorte de `terminais` que a rotina de saude precisa, de TODOS os
-    tenants (por isso vem da conexao com `BYPASSRLS`, so leitura)."""
+    tenants (por isso vem de `fn_terminais_para_verificacao_saude()`,
+    SECURITY DEFINER -- RFC-013)."""
 
     id: UUID
     tenant_id: UUID
     numero_serie: str
     empresa_id: UUID
     unidade_id: UUID | None
-    fabricante: str
     modo_comunicacao: str
     intervalo_push_segundos: int
     ultimo_contato_em: dt.datetime | None
-    ultimo_log_externo_id: int
 
 
 async def listar_terminais_ativos_cross_tenant(config: Configuracao) -> list[TerminalAtivo]:
-    """Enumera terminais `ativo` de TODOS os tenants (RFC-013, interino)."""
-    engine = _engine_de_suporte(config)
+    """Enumera terminais `ativo` de TODOS os tenants via
+    `fn_terminais_para_verificacao_saude()` (RFC-013): a propria role comum
+    `ponto_app`, sem `app.tenant_id` publicado -- a funcao roda com os
+    privilegios de quem a definiu, nao os da conexao chamadora."""
+    engine = _obter_engine(config)
     async with engine.connect() as conexao:
         resultado = await conexao.execute(
-            text(
-                "SELECT id, tenant_id, numero_serie, empresa_id, unidade_id, fabricante, "
-                "modo_comunicacao, intervalo_push_segundos, ultimo_contato_em, "
-                "ultimo_log_externo_id "
-                "FROM terminais WHERE status = 'ativo' AND excluido_em IS NULL"
-            )
+            text("SELECT * FROM fn_terminais_para_verificacao_saude()")
         )
         linhas = resultado.all()
     return [
@@ -159,11 +130,9 @@ async def listar_terminais_ativos_cross_tenant(config: Configuracao) -> list[Ter
             numero_serie=linha.numero_serie,
             empresa_id=linha.empresa_id,
             unidade_id=linha.unidade_id,
-            fabricante=linha.fabricante,
             modo_comunicacao=linha.modo_comunicacao,
             intervalo_push_segundos=linha.intervalo_push_segundos,
             ultimo_contato_em=linha.ultimo_contato_em,
-            ultimo_log_externo_id=linha.ultimo_log_externo_id,
         )
         for linha in linhas
     ]
@@ -196,7 +165,7 @@ async def ja_esta_marcado_offline(config: Configuracao, tenant_id: UUID, termina
     """A ultima amostra de `terminal_saude` deste terminal ja classificava
     como offline? Usado para publicar `terminal.offline` **uma vez por
     queda**, nao a cada varredura (T9)."""
-    engine = _engine_de_aplicacao(config)
+    engine = _obter_engine(config)
     async with engine.connect() as conexao:
         await conexao.execute(
             text("SELECT set_config('app.tenant_id', :tenant, false)"), {"tenant": str(tenant_id)}
@@ -224,7 +193,7 @@ async def gravar_amostra_saude(
     """Grava uma linha em `terminal_saude` (append-only -- so `INSERT`,
     nunca `UPDATE`/`DELETE`, `ponto_app` nem tem o privilegio para os dois
     ultimos)."""
-    engine = _engine_de_aplicacao(config)
+    engine = _obter_engine(config)
     async with engine.begin() as conexao:
         await conexao.execute(
             text("SELECT set_config('app.tenant_id', :tenant, true)"), {"tenant": str(tenant_id)}
@@ -249,7 +218,6 @@ def publicar_terminal_offline(
     terminal_id: UUID,
     empresa_id: UUID,
     numero_serie: str,
-    fabricante: str,
     ultimo_contato_em: dt.datetime | None,
     minutos_sem_contato: int,
     unidade_id: UUID | None = None,
@@ -263,7 +231,6 @@ def publicar_terminal_offline(
         "terminalId": str(terminal_id),
         "empresaId": str(empresa_id),
         "numeroSerie": numero_serie,
-        "fabricante": fabricante,
         "ultimoContatoEm": (ultimo_contato_em or agora).isoformat(),
         "minutosSemContato": minutos_sem_contato,
     }

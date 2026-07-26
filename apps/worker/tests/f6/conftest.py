@@ -1,10 +1,13 @@
 """Fixtures de banco para `verificar_terminal_offline` (T9, F6/A1).
 
-Reaproveita as DUAS roles ja provisionadas para a fase (ver RFC-013):
-`ponto_teste_f6_a1` (membro de `ponto_app`, RLS normal -- usada aqui via
-`worker.config.Configuracao.database_url`) e `ponto_teste_f6_a1_suporte`
-(BYPASSRLS, so leitura -- usada via `database_url_suporte`, a enumeracao
-cross-tenant que a rotina de cron precisa).
+Reaproveita a role ja provisionada para a fase, `ponto_teste_f6_a1` (membro de
+`ponto_app`, RLS normal -- usada via `worker.config.Configuracao.database_url`).
+A enumeracao cross-tenant que a rotina de cron precisa vem de
+`fn_terminais_para_verificacao_saude()` (RFC-013, `SECURITY DEFINER`), chamada
+pela MESMA conexao -- nao ha mais uma segunda credencial de banco (a role
+`ponto_teste_f6_a1_suporte`, BYPASSRLS, provisionada para o caminho interino
+anterior a decisao da RFC-013, fica sem uso; nao precisa ser removida do
+banco de teste, so nao e mais referenciada aqui).
 """
 
 from __future__ import annotations
@@ -25,8 +28,6 @@ URL_PADRAO = "postgresql+asyncpg://ponto:ponto@localhost:5432/ponto"
 
 PAPEL_APP = "ponto_teste_f6_a1"
 SENHA_APP = "teste-f6-a1-senha"
-PAPEL_SUPORTE = "ponto_teste_f6_a1_suporte"
-SENHA_SUPORTE = "teste-f6-a1-suporte-senha"
 
 
 def url_admin() -> str:
@@ -41,7 +42,6 @@ def _url_com_role(url: str, role: str, senha: str) -> str:
 @pytest.fixture(scope="session", autouse=True)
 def _config_worker() -> None:
     os.environ["DATABASE_URL"] = _url_com_role(url_admin(), PAPEL_APP, SENHA_APP)
-    os.environ["DATABASE_URL_SUPORTE"] = _url_com_role(url_admin(), PAPEL_SUPORTE, SENHA_SUPORTE)
     from worker.config import obter_configuracao
 
     obter_configuracao.cache_clear()

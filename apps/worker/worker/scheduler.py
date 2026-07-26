@@ -142,10 +142,10 @@ async def verificar_terminal_offline(ctx: dict[Any, Any]) -> dict[str, Any]:
     varredura — usando a ultima amostra conhecida como marca de "ja
     avisado" (`ja_esta_marcado_offline`).
 
-    A enumeracao cross-tenant usa uma segunda credencial de banco
-    (`database_url_suporte`, RFC-013, interino) porque este e um cron
-    global, sem `tenant_id` de entrada — ver docstring de
-    `worker/terminais_saude.py`.
+    A enumeracao cross-tenant usa `fn_terminais_para_verificacao_saude()`
+    (RFC-013, SECURITY DEFINER) pela role comum `ponto_app`, sem segunda
+    credencial de banco, porque este e um cron global, sem `tenant_id` de
+    entrada — ver docstring de `worker/terminais_saude.py`.
 
     Roda a cada cinco minutos porque marcacao nao se perde quando o terminal
     cai (o equipamento guarda localmente e o catch-up recupera), mas o RH
@@ -175,7 +175,6 @@ async def verificar_terminal_offline(ctx: dict[Any, Any]) -> dict[str, Any]:
                 terminal_id=terminal.id,
                 empresa_id=terminal.empresa_id,
                 numero_serie=terminal.numero_serie,
-                fabricante=terminal.fabricante,
                 ultimo_contato_em=terminal.ultimo_contato_em,
                 minutos_sem_contato=minutos_sem_contato,
                 unidade_id=terminal.unidade_id,

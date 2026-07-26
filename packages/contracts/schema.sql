@@ -2659,6 +2659,36 @@ COMMENT ON COLUMN bh_contas.ultimo_hash IS 'Hash do ultimo lancamento, elo anter
 CREATE INDEX ix_bh_contas_vinculo ON bh_contas (tenant_id, vinculo_id, status);
 CREATE INDEX ix_bh_contas_vencimento ON bh_contas (tenant_id, periodo_fim) WHERE status = 'aberta';
 
+-- Enumeracao cross-tenant para o cron verificar_banco_horas_vencendo (RFC-013,
+-- mesmo padrao ja decidido para fn_terminais_para_verificacao_saude): o
+-- scheduler roda um cron global, sem app.tenant_id, e precisa varrer contas
+-- ABERTAS de TODOS os tenants a cada varredura diaria. ponto_app nao tem
+-- BYPASSRLS (ADR-001) -- SELECT * FROM bh_contas devolveria sempre zero
+-- linhas sem tenant publicado. SECURITY DEFINER expondo so as colunas que a
+-- rotina precisa (nunca a tabela inteira nem bh_politicas por join).
+CREATE OR REPLACE FUNCTION fn_bh_contas_para_verificacao_vencimento()
+RETURNS TABLE (
+    id UUID,
+    tenant_id UUID,
+    vinculo_id UUID,
+    colaborador_id UUID,
+    codigo TEXT,
+    periodo_fim DATE,
+    saldo_atual_minutos INTEGER,
+    bh_politica_id UUID
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT c.id, c.tenant_id, c.vinculo_id, c.colaborador_id, c.codigo,
+         c.periodo_fim, c.saldo_atual_minutos, c.bh_politica_id
+    FROM bh_contas c
+   WHERE c.status = 'aberta';
+$$;
+
+COMMENT ON FUNCTION fn_bh_contas_para_verificacao_vencimento() IS
+  'Enumeracao cross-tenant de contas de banco de horas abertas para o cron verificar_banco_horas_vencendo (RFC-013), chamada pela role comum ponto_app sem app.tenant_id publicado. Expoe so as colunas necessarias a rotina, nunca a tabela inteira.';
+
 
 CREATE TABLE bh_lancamentos (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),

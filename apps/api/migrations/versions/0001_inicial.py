@@ -171,6 +171,7 @@ $$
 FUNCOES_PARA_REMOVER: tuple[str, ...] = (
     "fn_bh_lancamento_imutavel()",
     "fn_cria_particao_marcacoes(DATE)",
+    "fn_bh_contas_para_verificacao_vencimento()",
     "fn_terminais_para_verificacao_saude()",
     "fn_resolve_terminal(TEXT)",
     "fn_resolve_tenant(TEXT)",
@@ -325,6 +326,41 @@ $$
         "'Enumeracao cross-tenant de terminais ativos para o cron "
         "verificar_terminal_offline (RFC-013), chamada pela role comum "
         "ponto_app sem app.tenant_id publicado. Expoe so as colunas "
+        "necessarias a rotina, nunca a tabela inteira.'"
+    ),
+)
+
+# RFC-013 (mesmo padrao, agora para a F4): enumeracao cross-tenant de contas
+# de banco de horas abertas para o cron verificar_banco_horas_vencendo, que
+# roda sem app.tenant_id. ponto_app nao tem BYPASSRLS (ADR-001); SECURITY
+# DEFINER expondo so as colunas necessarias.
+SQL_BH_CONTAS_VERIFICACAO_VENCIMENTO: tuple[str, ...] = (
+    r"""
+CREATE OR REPLACE FUNCTION fn_bh_contas_para_verificacao_vencimento()
+RETURNS TABLE (
+    id UUID,
+    tenant_id UUID,
+    vinculo_id UUID,
+    colaborador_id UUID,
+    codigo TEXT,
+    periodo_fim DATE,
+    saldo_atual_minutos INTEGER,
+    bh_politica_id UUID
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT c.id, c.tenant_id, c.vinculo_id, c.colaborador_id, c.codigo,
+         c.periodo_fim, c.saldo_atual_minutos, c.bh_politica_id
+    FROM bh_contas c
+   WHERE c.status = 'aberta';
+$$
+""",
+    (
+        "COMMENT ON FUNCTION fn_bh_contas_para_verificacao_vencimento() IS "
+        "'Enumeracao cross-tenant de contas de banco de horas abertas para o "
+        "cron verificar_banco_horas_vencendo (RFC-013), chamada pela role "
+        "comum ponto_app sem app.tenant_id publicado. Expoe so as colunas "
         "necessarias a rotina, nunca a tabela inteira.'"
     ),
 )
@@ -843,6 +879,8 @@ def upgrade() -> None:
     for instrucao in SQL_RESOLVE_TERMINAL:
         op.execute(instrucao)
     for instrucao in SQL_TERMINAIS_VERIFICACAO_SAUDE:
+        op.execute(instrucao)
+    for instrucao in SQL_BH_CONTAS_VERIFICACAO_VENCIMENTO:
         op.execute(instrucao)
 
     # --- 7. particionamento de marcacoes -----------------------------------
