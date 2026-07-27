@@ -48,10 +48,18 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Sequence
 from typing import Any, ClassVar, Final
+from zoneinfo import ZoneInfo
 
 from arq.connections import RedisSettings
 from arq.cron import CronJob, cron
 
+from worker.banco_horas_vencimento import (
+    abrir_ocorrencia_banco_vencendo,
+    dias_ate_o_vencimento,
+    listar_contas_abertas_cross_tenant,
+    obter_politica_vencimento,
+    publicar_banco_horas_vencendo,
+)
 from worker.config import Configuracao, obter_configuracao
 from worker.filas import CODIGO_NAO_IMPLEMENTADO, FILA_MANUTENCAO
 from worker.log import configurar_log, obter_logger
@@ -112,22 +120,105 @@ def _resultado_rotina(rotina: str, **contexto: Any) -> dict[str, Any]:
 
 
 async def verificar_banco_horas_vencendo(ctx: dict[Any, Any]) -> dict[str, Any]:
-    """Projeta o vencimento das contas de banco de horas abertas. Implementacao na F4.
+    """Projeta o vencimento das contas de banco de horas abertas (F4/T7/A2).
 
-    O que a F4 fara aqui, para que o cron ja esteja no horario certo: percorrer
-    as contas abertas por tenant, comparar o vencimento de cada bloco de saldo
-    com as antecedencias da politica (padrao 30, 15 e 7 dias) e publicar
-    `banco_horas.vencendo` uma vez por antecedencia e por conta — nunca duas
-    vezes para o mesmo par, o que exige marca de "ja avisado" persistida.
+    Enumera contas `aberta` de TODOS os tenants via
+    `fn_bh_contas_para_verificacao_vencimento()` (RFC-013, SECURITY
+    DEFINER -- ver docstring de `worker/banco_horas_vencimento.py`), sem
+    segunda credencial de banco. Para cada conta, compara a antecedencia em
+    dias ate `periodo_fim` com `bh_politicas.dias_pre_aviso` (padrao
+    ``{30,15,7}``, lida sob `app.tenant_id` publicado): quando a
+    antecedencia bate EXATAMENTE um dos valores configurados, publica
+    `banco_horas.vencendo` (uma vez por antecedencia e por conta -- o
+    disparo e idempotente por construcao, ver docstring do modulo de
+    suporte, nao precisa de marca de "ja avisado") e abre
+    `ocorrencias.codigo='banco_vencendo'` (PCF secao 2: "banco_teto/
+    banco_vencendo nascem nesta fase, A2").
+
+    `minutosAVencer` e o saldo credor atual da conta (nunca negativo -- um
+    saldo devedor nao "vence", so o credor): a projecao desta rotina e por
+    CONTA (`periodo_fim`), nao por lancamento individual (essa granularidade
+    fina, "quanto vence em 30/15/7 dias", ja existe em
+    `obterSaldoBancoHoras`/`app.apuracao.banco_horas.consulta`).
 
     Roda de madrugada, depois da virada do dia e antes do expediente: o aviso
     precisa chegar ao gestor no comeco do dia util, e a projecao le muita linha.
     """
+    config = obter_configuracao()
+    # `hoje` precisa ser a data civil de `config.tz` (America/Sao_Paulo por
+    # padrao, o mesmo fuso que o container fixa via TZ e que o restante do
+    # sistema usa como referencia civil -- ADR-004), nunca UTC: como esta
+    # rotina compara `periodo_fim - N dias == hoje` por igualdade exata
+    # (nao por intervalo), usar UTC desalinha a comparacao em ate um dia
+    # inteiro durante a janela em que UTC ja virou o dia mas o Brasil
+    # (UTC-3) ainda nao -- bug real encontrado na reverificacao da F4
+    # (achado: `assert 0 == 1` em `test_scheduler_publica_vencendo_
+    # exatamente_nas_antecedencias_configuradas`, rodando as 21h de
+    # Brasilia/01h UTC).
+    hoje = dt.datetime.now(tz=ZoneInfo(config.tz)).date()
+    contas = await listar_contas_abertas_cross_tenant(config)
+    contas_verificadas = 0
+    avisos_publicados = 0
+
+    for conta in contas:
+        contas_verificadas += 1
+        restantes = dias_ate_o_vencimento(conta.periodo_fim, hoje)
+        if restantes < 0:
+            continue
+
+        politica = await obter_politica_vencimento(config, conta.tenant_id, conta.bh_politica_id)
+        if politica is None or restantes not in politica.dias_pre_aviso:
+            continue
+
+        minutos_a_vencer = max(conta.saldo_atual_minutos, 0)
+        publicar_banco_horas_vencendo(
+            tenant_id=conta.tenant_id,
+            conta_id=conta.id,
+            colaborador_id=conta.colaborador_id,
+            vinculo_id=conta.vinculo_id,
+            conta_codigo=conta.codigo,
+            minutos_a_vencer=minutos_a_vencer,
+            saldo_atual_minutos=conta.saldo_atual_minutos,
+            vence_em=conta.periodo_fim,
+            dias_restantes=restantes,
+            acao_vencimento=politica.acao_vencimento,
+        )
+        await abrir_ocorrencia_banco_vencendo(
+            config,
+            tenant_id=conta.tenant_id,
+            colaborador_id=conta.colaborador_id,
+            vinculo_id=conta.vinculo_id,
+            data=hoje,
+            descricao=(
+                f"Conta de banco de horas '{conta.codigo}' vence em "
+                f"{conta.periodo_fim.isoformat()} ({restantes} dias), saldo atual de "
+                f"{conta.saldo_atual_minutos} minutos."
+            ),
+            detalhes={
+                "contaId": str(conta.id),
+                "periodoFim": conta.periodo_fim.isoformat(),
+                "diasRestantes": restantes,
+                "saldoAtualMinutos": conta.saldo_atual_minutos,
+            },
+        )
+        avisos_publicados += 1
+
     logger.info(
-        "rotina verificar_banco_horas_vencendo disparada",
-        extra={"jobId": ctx.get("job_id"), "evento": "banco_horas.vencendo"},
+        "rotina verificar_banco_horas_vencendo concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "evento": "banco_horas.vencendo",
+            "contasVerificadas": contas_verificadas,
+            "avisosPublicados": avisos_publicados,
+        },
     )
-    return _resultado_rotina("verificar_banco_horas_vencendo")
+    return {
+        "implementado": True,
+        "rotina": "verificar_banco_horas_vencendo",
+        "contasVerificadas": contas_verificadas,
+        "avisosPublicados": avisos_publicados,
+        "executadoEm": dt.datetime.now(tz=dt.UTC).isoformat(),
+    }
 
 
 async def verificar_terminal_offline(ctx: dict[Any, Any]) -> dict[str, Any]:

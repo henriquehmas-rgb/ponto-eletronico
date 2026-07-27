@@ -41,3 +41,5 @@ Todo ADR segue a mesma estrutura, nesta ordem:
 | [006](ADR-006-criptografia-ciclo-vida-template-biometrico.md) | Criptografia e ciclo de vida do template biométrico (LGPD) | Aceito | F2, F7, F14 |
 | [007](ADR-007-offline-first-mobile-confianca-temporal.md) | Arquitetura offline-first do app mobile e confiança temporal | Aceito | F7, F5 |
 | [008](ADR-008-score-confianca-antifraude.md) | Score de confiança antifraude em vez de bloqueio binário | Aceito | F14, F7, F8 |
+| [009](ADR-009-worker-instala-apps-api-como-biblioteca.md) | Worker instala apps/api como biblioteca | Aceito | F4, F3, F10, F11 |
+| [010](ADR-010-debito-tecnico-performance-recalculo-em-lote.md) | Débito técnico aceito: performance do recálculo em lote abaixo do alvo | Aceito | F4, F3, F10, F11 |

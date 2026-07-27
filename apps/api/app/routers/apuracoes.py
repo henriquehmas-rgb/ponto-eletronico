@@ -14,9 +14,15 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.apuracao.dominio import consulta
+from app.apuracao.tratamento import ocorrencias as ocorrencias_servico
+from app.apuracao.tratamento import recalculo
+from app.core.config import obter_configuracao
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["apuracoes"])
@@ -32,6 +38,8 @@ roteador = APIRouter(tags=["apuracoes"])
 async def listar_apuracoes(
     de: Annotated[date, Query(alias="de", description="Primeiro dia do intervalo.")],
     ate: Annotated[date, Query(alias="ate", description="Ultimo dia do intervalo.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -105,11 +113,27 @@ async def listar_apuracoes(
         ),
     ] = None,
 ) -> contrato.ListaApuracaoDia:
-    """Listar apuracoes do dia
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("listarApuracoes", fase="F4")
+    """Listar apuracoes do dia"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    dados, paginacao = await consulta.listar_apuracoes(
+        sessao,
+        tenant_id,
+        de=de,
+        ate=ate,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        departamento_id=departamento_id,
+        equipe_id=equipe_id,
+        colaborador_id=colaborador_id,
+        vinculo_id=vinculo_id,
+        status=status,
+        somente_inconsistentes=somente_inconsistentes,
+        incluir_componentes=incluir_componentes,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    return contrato.ListaApuracaoDia(dados=list(dados), paginacao=paginacao)
 
 
 @roteador.get(
@@ -123,6 +147,8 @@ async def obter_apuracao(
     apuracao_id: Annotated[
         UUID, Path(alias="apuracaoId", description="Identificador da apuracao.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -138,11 +164,9 @@ async def obter_apuracao(
         ),
     ] = None,
 ) -> contrato.ApuracaoDia:
-    """Obter apuracao do dia
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("obterApuracao", fase="F4")
+    """Obter apuracao do dia"""
+    tenant_id_ou_erro(sujeito)
+    return await consulta.obter_apuracao(sessao, apuracao_id)
 
 
 @roteador.post(
@@ -161,6 +185,8 @@ async def recalcular_apuracoes(
         ),
     ],
     corpo: contrato.RecalculoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.executar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -176,11 +202,21 @@ async def recalcular_apuracoes(
         ),
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
-    """Recalcular apuracoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("recalcularApuracoes", fase="F4")
+    """Recalcular apuracoes"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    config = obter_configuracao()
+    job_id, total_vinculos = await recalculo.enfileirar_recalculo(
+        sessao, tenant_id, corpo, redis_url=config.redis_url
+    )
+    return contrato.ProcessamentoAssincrono.model_validate(
+        {
+            "id": job_id,
+            "tipo": "recalculo",
+            "status": "enfileirado",
+            "total_itens": total_vinculos,
+            "itens_processados": 0,
+        }
+    )
 
 
 @roteador.get(
@@ -191,6 +227,8 @@ async def recalcular_apuracoes(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_ocorrencias(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("ocorrencias.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -247,11 +285,24 @@ async def listar_ocorrencias(
         date | None, Query(alias="ate", description="Ocorrencias ate esta data.")
     ] = None,
 ) -> contrato.ListaOcorrencia:
-    """Listar ocorrencias
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("listarOcorrencias", fase="F4")
+    """Listar ocorrencias"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    dados, paginacao = await consulta.listar_ocorrencias(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        colaborador_id=colaborador_id,
+        codigo=codigo,
+        severidade=severidade,
+        status=status,
+        de=de,
+        ate=ate,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    return contrato.ListaOcorrencia(dados=list(dados), paginacao=paginacao)
 
 
 @roteador.patch(
@@ -273,6 +324,8 @@ async def atualizar_ocorrencia(
         UUID, Path(alias="ocorrenciaId", description="Identificador da ocorrencia.")
     ],
     corpo: contrato.OcorrenciaAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("ocorrencias.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -288,8 +341,9 @@ async def atualizar_ocorrencia(
         ),
     ] = None,
 ) -> contrato.Ocorrencia:
-    """Atualizar ocorrencia
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("atualizarOcorrencia", fase="F4")
+    """Atualizar ocorrencia"""
+    tenant_id_ou_erro(sujeito)
+    atualizada = await ocorrencias_servico.atualizar_ocorrencia(
+        sessao, ocorrencia_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return contrato.Ocorrencia.model_validate(atualizada, from_attributes=True)

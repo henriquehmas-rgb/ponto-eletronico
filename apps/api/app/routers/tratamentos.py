@@ -1,11 +1,13 @@
-"""Rotas da tag `tratamentos` do contrato. GERADO -- nao editar.
+"""Rotas da tag `tratamentos` do contrato.
 
 Camada de correcao da jornada, e a UNICA que existe.
 Inclusao manual de horario, desconsideracao de batida duplicada, ajuste de intervalo, abono e justificativa vivem aqui, sempre com autor, data, motivo e anexo, e nunca modificam a marcacao original.
 
-Regra de negocio destas operacoes entra na fase F4. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F4 (agente A3, ownership deste arquivo --
+ver `docs/fases/F04-calculo-banco-de-horas.md`, secao 5). A regra em si vive em
+`app.apuracao.tratamento.servico`/`decisao` (que tambem publicam
+`ajuste.aprovado`/`ajuste.reprovado`/`apuracao.recalculada`); este modulo so
+traduz HTTP <-> servico.
 """
 
 from __future__ import annotations
@@ -14,9 +16,12 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.apuracao.tratamento import decisao, servico
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["tratamentos"])
@@ -38,6 +43,8 @@ async def criar_tratamento(
         ),
     ],
     corpo: contrato.TratamentoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -53,11 +60,10 @@ async def criar_tratamento(
         ),
     ] = None,
 ) -> contrato.Tratamento:
-    """Criar tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("criarTratamento", fase="F4")
+    """Criar tratamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await servico.criar_tratamento(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    return contrato.Tratamento.model_validate(novo, from_attributes=True)
 
 
 @roteador.get(
@@ -68,6 +74,8 @@ async def criar_tratamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tratamentos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -128,11 +136,26 @@ async def listar_tratamentos(
         ),
     ] = None,
 ) -> contrato.ListaTratamento:
-    """Listar tratamentos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("listarTratamentos", fase="F4")
+    """Listar tratamentos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_tratamentos(
+        sessao,
+        tenant_id,
+        colaborador_id=colaborador_id,
+        vinculo_id=vinculo_id,
+        empresa_id=empresa_id,
+        tipo_tratamento_id=tipo_tratamento_id,
+        status=status,
+        origem=origem,
+        de=de,
+        ate=ate,
+        marcacao_id=marcacao_id,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Tratamento.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaTratamento(dados=dados, paginacao=paginacao)
 
 
 @roteador.get(
@@ -146,6 +169,8 @@ async def obter_tratamento(
     tratamento_id: Annotated[
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -161,11 +186,10 @@ async def obter_tratamento(
         ),
     ] = None,
 ) -> contrato.Tratamento:
-    """Obter tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("obterTratamento", fase="F4")
+    """Obter tratamento"""
+    tenant_id_ou_erro(sujeito)
+    encontrado = await servico.obter_tratamento(sessao, tratamento_id)
+    return contrato.Tratamento.model_validate(encontrado, from_attributes=True)
 
 
 @roteador.patch(
@@ -187,6 +211,8 @@ async def atualizar_tratamento(
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
     corpo: contrato.TratamentoAtualizar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -202,11 +228,12 @@ async def atualizar_tratamento(
         ),
     ] = None,
 ) -> contrato.Tratamento:
-    """Atualizar tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("atualizarTratamento", fase="F4")
+    """Atualizar tratamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    atualizado = await servico.atualizar_tratamento(
+        sessao, tenant_id, tratamento_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return contrato.Tratamento.model_validate(atualizado, from_attributes=True)
 
 
 @roteador.delete(
@@ -228,6 +255,8 @@ async def cancelar_tratamento(
     tratamento_id: Annotated[
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.excluir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -243,11 +272,12 @@ async def cancelar_tratamento(
         ),
     ] = None,
 ) -> Response:
-    """Cancelar tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("cancelarTratamento", fase="F4")
+    """Cancelar tratamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico.cancelar_tratamento(
+        sessao, tenant_id, tratamento_id, usuario_id=sujeito.usuario_id
+    )
+    return Response(status_code=204)
 
 
 @roteador.post(
@@ -269,6 +299,8 @@ async def decidir_tratamento(
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
     corpo: contrato.DecisaoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.aprovar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -284,11 +316,12 @@ async def decidir_tratamento(
         ),
     ] = None,
 ) -> contrato.Tratamento:
-    """Aprovar ou reprovar tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("decidirTratamento", fase="F4")
+    """Aprovar ou reprovar tratamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    decidido = await decisao.decidir_tratamento(
+        sessao, tenant_id, tratamento_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return contrato.Tratamento.model_validate(decidido, from_attributes=True)
 
 
 @roteador.get(
@@ -299,6 +332,8 @@ async def decidir_tratamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_tratamento(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_tratamento.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -337,8 +372,18 @@ async def listar_tipos_tratamento(
         bool | None, Query(alias="ativo", description="Filtra por tipos ativos.")
     ] = None,
 ) -> contrato.ListaTipoTratamento:
-    """Listar tipos de tratamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F4.
-    """
-    raise NaoImplementado("listarTiposTratamento", fase="F4")
+    """Listar tipos de tratamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_tipos_tratamento(
+        sessao,
+        tenant_id,
+        categoria=categoria,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [
+        contrato.TipoTratamento.model_validate(linha, from_attributes=True) for linha in linhas
+    ]
+    return contrato.ListaTipoTratamento(dados=dados, paginacao=paginacao)

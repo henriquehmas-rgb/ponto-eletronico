@@ -10,6 +10,19 @@
 # worker le e escreve pelos models do contrato, e um build com contexto em
 # `apps/worker` nao os enxerga.
 #
+# APPS/API COMO BIBLIOTECA (ADR-009). A partir da F4 o motor de calculo mora em
+# `apps/api/app/apuracao/**` (e depende transitivamente de `app.core.*` e
+# `app.jornada.*`), mas quem executa recalculo em lote e o worker, nao a API.
+# Este Dockerfile instala o pacote `apps/api` (so `app/`, sem `tests/`,
+# `migrations/` nem `tools/`) na mesma imagem, exatamente como ja faz para
+# `packages/contracts` logo abaixo. O worker NUNCA sobe `uvicorn` nem serve
+# HTTP: ele so importa modulos de `app.apuracao.*`, `app.jornada.*`,
+# `app.core.*` e `app.identidade.auditoria.*` como biblioteca de logica de
+# negocio. Decisao de Henrique (dono do produto) — ver
+# `docs/adr/ADR-009-worker-instala-apps-api-como-biblioteca.md` para o
+# contexto completo e as alternativas descartadas (pacote compartilhado novo,
+# chamada HTTP interna).
+#
 # UMA IMAGEM, DOIS PROCESSOS. Os servicos `worker` e `scheduler` do compose
 # apontam para este mesmo Dockerfile e para a mesma imagem; o que muda e o
 # `command`:
@@ -76,6 +89,19 @@ RUN mkdir -p worker/tarefas \
 # separada: muda mais que as dependencias e menos que o codigo do worker.
 COPY packages/contracts /contratos
 RUN pip install --no-cache-dir /contratos
+
+# apps/api como biblioteca (ADR-009): o motor de calculo da F4 vive em
+# `app.apuracao.*` e depende transitivamente de `app.core.*`/`app.jornada.*`,
+# entao o worker precisa do pacote `ponto-api` instalado no mesmo venv para
+# poder importar esses modulos em `worker/tarefas/apuracao.py`. So `app/` +
+# metadados de empacotamento — `tests/`, `migrations/` e `tools/` ficam de
+# fora de proposito, pelo mesmo motivo que ficam de fora da imagem da propria
+# API: nao rodam em producao e so aumentam a superficie. O `pip install .` de
+# apps/api ja traz fastapi/sqlalchemy/etc. como dependencia transitiva
+# (declaradas no pyproject.toml dele); nada e listado manualmente aqui.
+COPY apps/api/pyproject.toml apps/api/README.md /api-src/
+COPY apps/api/app /api-src/app
+RUN pip install --no-cache-dir /api-src
 
 # -----------------------------------------------------------------------------
 # dev - alvo usado por docker-compose.dev.yml (codigo vem por bind mount)
