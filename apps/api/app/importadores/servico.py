@@ -31,6 +31,7 @@ from ponto_contracts import Importacao
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.erros import ErroDeAplicacao
+from app.core.filas import FILA_PADRAO
 
 __all__ = ["criar_importacao_colaboradores"]
 
@@ -98,7 +99,7 @@ async def criar_importacao_colaboradores(
     sessao.add(importacao)
     await sessao.flush()
 
-    pool = await create_pool(RedisSettings.from_dsn(redis_url))
+    pool = await create_pool(RedisSettings.from_dsn(redis_url), default_queue_name=FILA_PADRAO)
     try:
         await pool.enqueue_job(
             NOME_TAREFA_IMPORTAR_COLABORADORES,

@@ -349,10 +349,12 @@ async def sincronizar_terminal(
     from arq import create_pool
     from arq.connections import RedisSettings
 
+    from app.core.filas import FILA_PADRAO
+
     await obter_terminal(sessao, tenant_id, terminal_id)
     escopo = _escopo_de(dados)
 
-    pool = await create_pool(RedisSettings.from_dsn(redis_url))
+    pool = await create_pool(RedisSettings.from_dsn(redis_url), default_queue_name=FILA_PADRAO)
     try:
         job = await pool.enqueue_job(
             NOME_TAREFA_SINCRONIZAR_TERMINAL,

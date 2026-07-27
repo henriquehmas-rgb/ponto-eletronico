@@ -300,6 +300,51 @@ async def criar_jornada(
 
 
 @roteador.get(
+    "/v1/jornadas/resolver",
+    status_code=200,
+    operation_id="resolverJornadaDoDia",
+    summary="Resolver jornada de um dia",
+    responses=RESPOSTAS_PADRAO,
+)
+async def resolver_jornada_do_dia(
+    vinculo_id: Annotated[UUID, Query(alias="vinculoId", description="Vinculo a resolver.")],
+    data: Annotated[date, Query(alias="data", description="Data a resolver.")],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    sessao: SessaoDb,
+    x_tenant: Annotated[
+        str | None,
+        Header(
+            alias="X-Tenant",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
+        ),
+    ] = None,
+    x_request_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Request-Id",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
+        ),
+    ] = None,
+) -> contrato.ResolucaoJornada:
+    """Resolver jornada de um dia
+
+    Ownership de A3 (F3, T7). A1 (dono deste arquivo para as demais 10
+    operacoes) nao mexe neste handler.
+
+    Registrada ANTES de `/v1/jornadas/{jornadaId}` de proposito: o FastAPI
+    casa rota por ordem de registro, nao por especificidade, e um path
+    literal (`/resolver`) registrado depois de um path parametrizado
+    (`/{jornadaId}`) no mesmo roteador nunca e alcancado -- toda chamada cai
+    no `{jornadaId}="resolver"` do handler anterior e falha com
+    `PONTO-VAL-005` (UUID invalido). Achado real da F9b/A4 (verificacao
+    contra API real), corrigido pelo orquestrador reordenando so a posicao
+    deste bloco no arquivo -- nenhuma linha de logica mudou.
+    """
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await servico_resolvedor.resolver_jornada_do_dia(sessao, tenant_id, vinculo_id, data)
+
+
+@roteador.get(
     "/v1/jornadas/{jornadaId}",
     status_code=200,
     operation_id="obterJornada",
@@ -518,39 +563,3 @@ async def atribuir_jornada_vinculo(
         sessao, tenant_id, vinculo_id, corpo
     )
     return contrato.VinculoJornada.model_validate(nova, from_attributes=True)
-
-
-@roteador.get(
-    "/v1/jornadas/resolver",
-    status_code=200,
-    operation_id="resolverJornadaDoDia",
-    summary="Resolver jornada de um dia",
-    responses=RESPOSTAS_PADRAO,
-)
-async def resolver_jornada_do_dia(
-    vinculo_id: Annotated[UUID, Query(alias="vinculoId", description="Vinculo a resolver.")],
-    data: Annotated[date, Query(alias="data", description="Data a resolver.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
-    sessao: SessaoDb,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
-) -> contrato.ResolucaoJornada:
-    """Resolver jornada de um dia
-
-    Ownership de A3 (F3, T7). A1 (dono deste arquivo para as demais 10
-    operacoes) nao mexe neste handler.
-    """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    return await servico_resolvedor.resolver_jornada_do_dia(sessao, tenant_id, vinculo_id, data)

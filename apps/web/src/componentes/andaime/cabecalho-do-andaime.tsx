@@ -6,7 +6,10 @@ import { AMBIENTE } from "@/lib/api";
 
 const ROTAS = [
   { href: "/", rotulo: "Entrar", fase: "F1" },
-  { href: "/painel", rotulo: "Painel", fase: "F9b" },
+  // Sem `fase`: /painel deixou de ser PlaceholderDeFase (T1, PCF F9b §5 —
+  // "remova o rótulo de fase F9b já que deixa de ser placeholder"). As
+  // entradas de `/` e `/eu` não são tocadas por esta fase (mesma regra §5).
+  { href: "/painel", rotulo: "Painel" },
   { href: "/eu", rotulo: "Eu", fase: "F8" },
 ] as const;
 
@@ -32,7 +35,9 @@ export function CabecalhoDoAndaime() {
               className="estilo-rotulo rounded-pequeno px-3 py-2 text-texto-secundario transition-colors duration-rapida ease-padrao hover:bg-fundo-sutil hover:text-texto-primario"
             >
               {rota.rotulo}
-              <span className="estilo-legenda ml-1.5 text-texto-terciario">{rota.fase}</span>
+              {"fase" in rota ? (
+                <span className="estilo-legenda ml-1.5 text-texto-terciario">{rota.fase}</span>
+              ) : null}
             </Link>
           ))}
         </nav>

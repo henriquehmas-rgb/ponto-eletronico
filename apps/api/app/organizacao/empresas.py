@@ -19,10 +19,18 @@ from app.organizacao.erros_integridade import mapear_integridade
 from app.organizacao.paginacao import PedidoDePagina
 
 CAMPOS_ORDENAVEIS: dict[str, object] = {
-    "criado_em": Empresa.criado_em,
-    "razao_social": Empresa.razao_social,
+    # Chaves em camelCase de proposito: `ordenar` e um parametro de consulta
+    # publico (contrato, `openapi.yaml` -- "Campos aceitos em ordenar:
+    # razaoSocial, cnpj, criadoEm") e `campo_e_direcao` (`app.organizacao.
+    # paginacao`) usa o valor cru do cliente como chave deste dicionario, sem
+    # nenhuma conversao de caixa. Chaves em snake_case aqui faziam qualquer
+    # `ordenar=razaoSocial:...` (o default do cliente web, `use-empresas.ts`)
+    # cair em `PONTO-VAL-005` ("Campo de ordenacao desconhecido") -- achado
+    # real da F9b (verificacao E2E), corrigido pelo orquestrador.
+    "criadoEm": Empresa.criado_em,
+    "razaoSocial": Empresa.razao_social,
     "cnpj": Empresa.cnpj,
-    "nome_fantasia": Empresa.nome_fantasia,
+    "nomeFantasia": Empresa.nome_fantasia,
 }
 
 

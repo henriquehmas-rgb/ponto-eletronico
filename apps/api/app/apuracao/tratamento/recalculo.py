@@ -63,6 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.apuracao.tratamento import eventos
 from app.apuracao.tratamento.fechamento import verificar_periodo_aberto
 from app.core.erros import ErroDeAplicacao
+from app.core.filas import FILA_PADRAO
 from app.identidade.auditoria.hash_chain import gravar_auditoria
 
 if TYPE_CHECKING:
@@ -401,7 +402,7 @@ async def enfileirar_recalculo(
     vinculos = await _resolver_vinculos_do_pedido(sessao, tenant_id, corpo)
     motivo = corpo.motivo.value if corpo.motivo is not None else "manual"
 
-    pool = await create_pool(RedisSettings.from_dsn(redis_url))
+    pool = await create_pool(RedisSettings.from_dsn(redis_url), default_queue_name=FILA_PADRAO)
     try:
         for vinc in vinculos:
             await pool.enqueue_job(

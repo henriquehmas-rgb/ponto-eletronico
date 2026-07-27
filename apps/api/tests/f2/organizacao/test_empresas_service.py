@@ -14,7 +14,10 @@ from tests.f2.conftest import ContextoOrganizacional
 
 
 def _pedido() -> PedidoDePagina:
-    return PedidoDePagina(ordenar="criado_em:desc", limite=20, deslocamento=0)
+    # camelCase de proposito -- `empresas.CAMPOS_ORDENAVEIS` usa as mesmas
+    # chaves do contrato (`ordenar`), nao os nomes de coluna do banco (achado
+    # real da F9b, corrigido pelo orquestrador; ver comentario no dicionario).
+    return PedidoDePagina(ordenar="criadoEm:desc", limite=20, deslocamento=0)
 
 
 @pytest.mark.asyncio

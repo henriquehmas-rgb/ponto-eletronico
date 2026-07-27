@@ -9122,6 +9122,8 @@ export interface components {
         };
         /** @description Dados aceitos na criacao de Importacao. */
         ImportacaoCriar: {
+            /** @description Chave do arquivo no armazenamento de objetos, obtida por upload previo. Obrigatoria para origem csv/xlsx, que processam um arquivo ja enviado. */
+            conteudoRef?: string;
             /**
              * Format: uuid
              * @description Empresa alvo da carga.
@@ -9866,6 +9868,10 @@ export interface components {
         ListaMarcacao: {
             /** @description Itens da pagina, na ordem pedida em ordenar. */
             dados: components["schemas"]["Marcacao"][];
+            /** @description Presente apenas quando incluirMeta=true e o chamador tem marcacoes.ler_sensivel. Mapa do id de cada Marcacao de dados para o seu MarcacaoMeta correspondente. */
+            metas?: {
+                [key: string]: components["schemas"]["MarcacaoMeta"];
+            };
             paginacao: components["schemas"]["Paginacao"];
         };
         /** @description Pagina de resultados de Ocorrencia. */
@@ -10863,7 +10869,7 @@ export interface components {
              * @description Acao permitida.
              * @enum {string}
              */
-            acao?: "ler" | "criar" | "editar" | "excluir" | "aprovar" | "exportar" | "executar" | "assinar" | "administrar";
+            acao?: "ler" | "criar" | "editar" | "excluir" | "aprovar" | "exportar" | "executar" | "assinar" | "administrar" | "configurar" | "reabrir" | "ler_sensivel";
             /** @description Identificador estavel usado no codigo e no OpenAPI, por exemplo marcacoes.ler. */
             codigo?: string;
             /** @description Descricao da permissao. */
@@ -10963,7 +10969,7 @@ export interface components {
              * @description Natureza do trabalho.
              * @enum {string}
              */
-            tipo?: "recalculo" | "afd" | "aej" | "relatorio" | "importacao" | "exportacao_folha" | "espelho";
+            tipo?: "recalculo" | "afd" | "aej" | "relatorio" | "importacao" | "exportacao_folha" | "espelho" | "sincronizacao_terminal";
             /**
              * Format: int64
              * @description Total de itens a processar.

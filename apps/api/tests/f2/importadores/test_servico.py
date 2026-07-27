@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.erros import ErroDeAplicacao
+from app.core.filas import FILA_PADRAO
 from app.importadores.servico import (
     NOME_TAREFA_IMPORTAR_COLABORADORES,
     criar_importacao_colaboradores,
@@ -52,7 +53,15 @@ async def test_cria_importacao_e_enfileira_job_de_verdade(
     ).scalar_one()
     assert linha.empresa_id == contexto_organizacional.empresa_matriz_id
 
-    pool = await create_pool(RedisSettings.from_dsn(redis_teste_url))
+    # `default_queue_name=FILA_PADRAO` e' o que prova o achado real da F9b/A3:
+    # sem isto, este teste leria da fila embutida do ARQ ("arq:queue"), que
+    # nenhum worker real escuta (`worker.main.WorkerSettings.queue_name` e'
+    # `FILA_PADRAO`) -- passaria mesmo se `criar_importacao_colaboradores`
+    # enfileirasse na fila errada, porque as duas pools comparariam a mesma
+    # fila errada entre si.
+    pool = await create_pool(
+        RedisSettings.from_dsn(redis_teste_url), default_queue_name=FILA_PADRAO
+    )
     try:
         job_ids = await pool.queued_jobs()
         nomes = {job.function for job in job_ids}
