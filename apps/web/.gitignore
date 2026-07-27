@@ -11,6 +11,20 @@ next-env.d.ts
 coverage/
 .vitest/
 
+# Service worker gerado a cada build (F8/T5, `@serwist/next` a partir de
+# `src/app/sw.ts`) — artefato, nunca fonte.
+/public/sw.js
+/public/sw.js.map
+
+# Relatorios locais do Lighthouse (F8/T5, §8 do PCF) — evidencia de
+# verificacao gerada sob demanda, nunca fonte. Ficavam sem regra de
+# `.gitignore` nem `.prettierignore`: `git status` os listava como
+# untracked igual a lixo de build de verdade, o que levou a uma limpeza
+# acidental durante a F8 (achado da verificacao final). Padrao aqui evita
+# a mesma confusao de novo.
+lighthouse-*.json
+debug-storybook.log
+
 # Ambiente local — nunca versionar segredo.
 .env
 .env.*

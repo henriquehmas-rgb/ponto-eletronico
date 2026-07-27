@@ -22,6 +22,27 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+/**
+ * O jsdom não implementa a Pointer Events API (`hasPointerCapture`,
+ * `setPointerCapture`, `releasePointerCapture`) nem `scrollIntoView`. O
+ * `Selecao` (`@radix-ui/react-select`, F9a) depende dessas chamadas mesmo em
+ * navegação por teclado/clique — sem este stub, qualquer teste que interaja
+ * com um `<Selecao>` via `@testing-library/user-event` quebra por falta de
+ * API do navegador, não por defeito do componente (F8, T4).
+ */
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => undefined;
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => undefined;
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => undefined;
+}
+
 afterEach(() => {
   cleanup();
 });

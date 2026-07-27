@@ -21,6 +21,17 @@ const config = [
       // feita por `pnpm tokens:check` e `pnpm tipos:api:check`, nao por lint.
       "src/lib/api/tipos.gerado.ts",
       "src/estilos/tokens.gerado.css",
+      // Ativos de terceiros auto-hospedados (F8/T7): o fileset WASM do
+      // MediaPipe Tasks Vision e' glue code minificado de outro projeto,
+      // servido estatico em `public/`, nunca escrito nem revisado por este
+      // time — lintar contra as regras deste repositorio nao faz sentido
+      // (e sem isto `pnpm lint` reprova com milhares de erros alheios).
+      "public/mediapipe/**",
+      // Service worker gerado a cada `pnpm build` (F8/T5, `@serwist/next` a
+      // partir de `src/app/sw.ts`): bundle minificado, artefato e nao fonte
+      // (mesmo tratamento de `storybook-static/**` acima) — ja ignorado em
+      // `.gitignore`.
+      "public/sw.js",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript", "prettier"),

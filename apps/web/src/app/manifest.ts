@@ -12,6 +12,10 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Prova justa da jornada — registro de ponto REP-P multiempresa.",
     start_url: "/",
     display: "standalone",
+    // "business"/"productivity" são as categorias reconhecidas mais próximas
+    // de um sistema de ponto eletrônico corporativo (W3C Manifest, lista de
+    // categorias conhecidas usada por lojas de app) — F8/T5.
+    categories: ["business", "productivity"],
     background_color: "#F7F8FB",
     theme_color: "#4C5FCA",
     icons: [

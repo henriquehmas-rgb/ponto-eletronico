@@ -6,3 +6,22 @@ next-env.d.ts
 # Gerados a partir de packages/contracts/ — a formatacao e do gerador.
 src/lib/api/tipos.gerado.ts
 src/estilos/tokens.gerado.css
+
+# Ativos de terceiros auto-hospedados (F8/T7): o fileset WASM do MediaPipe
+# Tasks Vision e' glue code minificado de outro projeto, servido estatico em
+# `public/`, nunca escrito nem revisado por este time — mesmo tratamento
+# aplicado em `eslint.config.mjs`.
+public/mediapipe/**
+
+# Artefatos de build/teste (ja no .gitignore da raiz — nao sao codigo-fonte,
+# ver comentario no topo de `.gitignore` deste diretorio): saida do
+# `pnpm build-storybook` e resultados do `pnpm test:e2e` (Playwright). Mesmo
+# motivo do `storybook-static/**` ja excluido em `eslint.config.mjs`.
+storybook-static/**
+test-results/**
+playwright-report/**
+
+# Relatorios locais do Lighthouse (§8 do PCF) — saida gerada sob demanda,
+# nunca fonte (ver `.gitignore` deste diretorio para o achado completo).
+lighthouse-*.json
+debug-storybook.log

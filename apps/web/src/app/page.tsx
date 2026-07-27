@@ -1,25 +1,21 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { PlaceholderDeFase } from "@/componentes/andaime/placeholder-de-fase";
+import { PaginaDeLogin } from "@/componentes/sessao/pagina-de-login";
 
 export const metadata: Metadata = { title: "Entrar" };
 
-export default function PaginaDeLogin() {
+/**
+ * Login real (T1) — substitui o `PlaceholderDeFase` da Fase 0.
+ *
+ * `<Suspense>` é exigido pelo Next.js: `PaginaDeLogin` (Client Component) usa
+ * `useSearchParams()` para ler `?returnTo=`, e isso precisa de um limite de
+ * suspensão para não forçar a rota inteira a renderização dinâmica sem aviso.
+ */
+export default function Pagina() {
   return (
-    <PlaceholderDeFase
-      rota="/ — Entrar"
-      fase="F1"
-      tituloDaFase="Identidade, Multi-tenant e RBAC"
-      destinatario="Todo mundo: colaborador, gestor, RH e administrador."
-      descricao="Porta de entrada do sistema. Nesta fase existe so a rota: nao ha formulario, nao ha sessao e nenhuma chamada de autenticacao sai daqui."
-      dependeDe={["F0 — Fundacao e Contratos"]}
-      entregas={[
-        "Login com senha (Argon2id) e JWT RS256 de vida curta.",
-        "Refresh rotativo de uso unico, com deteccao de reuso que revoga a familia inteira.",
-        "MFA opcional por TOTP e recuperacao de senha.",
-        "Resolucao de tenant por subdominio ou cabecalho X-Tenant.",
-        "Sessoes listaveis e revogaveis pelo proprio usuario.",
-      ]}
-    />
+    <Suspense fallback={null}>
+      <PaginaDeLogin />
+    </Suspense>
   );
 }

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withSerwistInit from "@serwist/next";
 
 /**
  * Configuracao do Next.js — Fase 0 (andaime).
@@ -23,4 +24,13 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
 };
 
-export default nextConfig;
+/**
+ * Unica edicao autorizada neste arquivo (F8, T5/§5 do PCF — mesmo espirito da
+ * excecao pontual que a F04 teve em `schema.sql`): envolve `nextConfig` com o
+ * plugin do Serwist para gerar o *service worker* (PWA instalavel) a partir
+ * de `src/app/sw.ts`. Nenhuma outra opcao do arquivo muda.
+ */
+export default withSerwistInit({
+  swSrc: "src/app/sw.ts",
+  swDest: "public/sw.js",
+})(nextConfig);
