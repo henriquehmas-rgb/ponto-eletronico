@@ -171,6 +171,7 @@ $$
 FUNCOES_PARA_REMOVER: tuple[str, ...] = (
     "fn_bh_lancamento_imutavel()",
     "fn_cria_particao_marcacoes(DATE)",
+    "fn_tenants_ativos()",
     "fn_bh_contas_para_verificacao_vencimento()",
     "fn_terminais_para_verificacao_saude()",
     "fn_resolve_terminal(TEXT)",
@@ -362,6 +363,35 @@ $$
         "cron verificar_banco_horas_vencendo (RFC-013), chamada pela role "
         "comum ponto_app sem app.tenant_id publicado. Expoe so as colunas "
         "necessarias a rotina, nunca a tabela inteira.'"
+    ),
+)
+
+# RFC-014 (mesmo padrao de RFC-013, generalizado para um terceiro consumidor):
+# enumeracao cross-tenant minima de tenants ativos para o cron
+# verificar_notificacoes_pendentes (F10/A3), que roda sem app.tenant_id.
+# Diferente das duas irmas acima, nao expoe coluna de dominio nenhuma -- so
+# identidade do tenant; o cron abre SET LOCAL app.tenant_id por tenant e
+# consulta ocorrencias/solicitacoes/aprovacoes sob RLS normal.
+SQL_TENANTS_ATIVOS: tuple[str, ...] = (
+    r"""
+CREATE OR REPLACE FUNCTION fn_tenants_ativos()
+RETURNS TABLE (
+    id   UUID,
+    slug TEXT
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.id, t.slug
+    FROM tenants t
+   WHERE t.status = 'ativo';
+$$
+""",
+    (
+        "COMMENT ON FUNCTION fn_tenants_ativos() IS "
+        "'Enumeracao cross-tenant minima (id, slug) de tenants ativos para "
+        "rotinas de cron que operam por tenant (F10, RFC-014). Expoe so "
+        "identidade, nunca dado de dominio.'"
     ),
 )
 
@@ -881,6 +911,8 @@ def upgrade() -> None:
     for instrucao in SQL_TERMINAIS_VERIFICACAO_SAUDE:
         op.execute(instrucao)
     for instrucao in SQL_BH_CONTAS_VERIFICACAO_VENCIMENTO:
+        op.execute(instrucao)
+    for instrucao in SQL_TENANTS_ATIVOS:
         op.execute(instrucao)
 
     # --- 7. particionamento de marcacoes -----------------------------------

@@ -201,6 +201,7 @@ Proposta ──► Decidida ──► Implementada
 | [011](RFC-011-incluirmeta-sem-campo-no-schema-marcacao.md) | `incluirMeta` de `listarMarcacoes` não tem campo no schema `Marcacao`/`ListaMarcacao` para embutir o resultado | ✅ Decidida | 26/07/2026 | F5 |
 | [012](RFC-012-fila-offline-sem-contrato-de-chave-simetrica.md) | Fila offline (`ItemFilaOffline.hmac`/AES-256-GCM) não tem contrato de material de chave simétrica no servidor | ✅ Decidida (adiada) | 26/07/2026 | F5, F6, F12, F14 |
 | [013](RFC-013-enumeracao-cross-tenant-para-rotinas-de-manutencao.md) | Rotina de cron cross-tenant (`verificar_terminal_offline`, `verificar_banco_horas_vencendo`) não tem mecanismo sancionado para enumerar tenants/terminais antes do RLS por linha | ✅ Decidida/Implementada | 26/07/2026 | F6, F4 |
+| [014](RFC-014-enumeracao-cross-tenant-para-verificar-notificacoes-pendentes.md) | Terceiro caso do mesmo problema da RFC-013 (`verificar_notificacoes_pendentes`) — estende o precedente e o pré-aprova para futuras rotinas equivalentes | ✅ Decidida/Implementada | 27/07/2026 | F10 |
 
 > Ao abrir uma RFC nova, acrescente a linha aqui **no mesmo commit**. Um índice
 > desatualizado faz o próximo agente escolher um número já usado.

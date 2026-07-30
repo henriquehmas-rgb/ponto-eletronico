@@ -1,11 +1,13 @@
-"""Rotas da tag `solicitacoes` do contrato. GERADO -- nao editar.
+"""Rotas da tag `solicitacoes` do contrato.
 
-Pedidos abertos pelo colaborador ou pelo gestor, com cadeia de aprovacao configuravel, prazos e escalonamento.
-Aprovados, materializam tratamento ou afastamento; nunca alteram marcacao diretamente.
+Pedidos abertos pelo colaborador ou pelo gestor, com cadeia de aprovação configurável, prazos e escalonamento.
+Aprovados, materializam tratamento ou afastamento; nunca alteram marcação diretamente.
 
-Regra de negocio destas operacoes entra na fase F10. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negócio implementada na fase F10 (agente A1, ownership deste
+arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
+5). A regra em si vive em `app.workflow.solicitacoes.tipos`/`servico`
+(que também publicam `ajuste.solicitado`); este módulo só traduz
+HTTP <-> serviço, mesmo padrão de `app/routers/tratamentos.py` (F4).
 """
 
 from __future__ import annotations
@@ -14,10 +16,14 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
+from app.workflow.solicitacoes import servico, tipos
+from app.workflow.solicitacoes.servico import listar_aprovacoes_da_solicitacao
 
 roteador = APIRouter(tags=["solicitacoes"])
 
@@ -30,6 +36,8 @@ roteador = APIRouter(tags=["solicitacoes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_solicitacoes(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -90,11 +98,26 @@ async def listar_solicitacoes(
     ] = None,
     ate: Annotated[date | None, Query(alias="ate", description="Data de referencia ate.")] = None,
 ) -> contrato.ListaSolicitacao:
-    """Listar solicitacoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarSolicitacoes", fase="F10")
+    """Listar solicitacoes"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_solicitacoes(
+        sessao,
+        tenant_id,
+        colaborador_id=colaborador_id,
+        empresa_id=empresa_id,
+        tipo_solicitacao_id=tipo_solicitacao_id,
+        categoria=categoria,
+        status=status,
+        minhas=minhas,
+        usuario_atual_id=sujeito.usuario_id,
+        de=de,
+        ate=ate,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Solicitacao.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaSolicitacao(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -113,6 +136,8 @@ async def criar_solicitacao(
         ),
     ],
     corpo: contrato.SolicitacaoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -128,11 +153,10 @@ async def criar_solicitacao(
         ),
     ] = None,
 ) -> contrato.Solicitacao:
-    """Criar solicitacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("criarSolicitacao", fase="F10")
+    """Criar solicitacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await servico.criar_solicitacao(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    return contrato.Solicitacao.model_validate(nova, from_attributes=True)
 
 
 @roteador.get(
@@ -146,6 +170,8 @@ async def obter_solicitacao(
     solicitacao_id: Annotated[
         UUID, Path(alias="solicitacaoId", description="Identificador da solicitacao.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -163,9 +189,18 @@ async def obter_solicitacao(
 ) -> contrato.Solicitacao:
     """Obter solicitacao
 
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
+    Devolve o historico completo das etapas (`aprovacoes`), conforme a
+    descricao da operacao no contrato -- prova de quem autorizou cada
+    correcao de jornada.
     """
-    raise NaoImplementado("obterSolicitacao", fase="F10")
+    tenant_id_ou_erro(sujeito)
+    encontrada = await servico.obter_solicitacao(sessao, solicitacao_id)
+    etapas = await listar_aprovacoes_da_solicitacao(sessao, encontrada.tenant_id, encontrada.id)
+    schema = contrato.Solicitacao.model_validate(encontrada, from_attributes=True)
+    schema.aprovacoes = [
+        contrato.Aprovacao.model_validate(etapa, from_attributes=True) for etapa in etapas
+    ]
+    return schema
 
 
 @roteador.post(
@@ -187,6 +222,8 @@ async def cancelar_solicitacao(
         UUID, Path(alias="solicitacaoId", description="Identificador da solicitacao.")
     ],
     corpo: contrato.CancelamentoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.editar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -202,11 +239,12 @@ async def cancelar_solicitacao(
         ),
     ] = None,
 ) -> contrato.Solicitacao:
-    """Cancelar solicitacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("cancelarSolicitacao", fase="F10")
+    """Cancelar solicitacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    cancelada = await servico.cancelar_solicitacao(
+        sessao, tenant_id, solicitacao_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return contrato.Solicitacao.model_validate(cancelada, from_attributes=True)
 
 
 @roteador.get(
@@ -217,6 +255,8 @@ async def cancelar_solicitacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_solicitacao(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_solicitacao.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -255,11 +295,19 @@ async def listar_tipos_solicitacao(
         bool | None, Query(alias="ativo", description="Filtra por tipos ativos.")
     ] = None,
 ) -> contrato.ListaTipoSolicitacao:
-    """Listar tipos de solicitacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarTiposSolicitacao", fase="F10")
+    """Listar tipos de solicitacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await tipos.listar_tipos_solicitacao(
+        sessao,
+        tenant_id,
+        categoria=categoria,
+        ativo=ativo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [tipos.tipo_para_schema(linha) for linha in linhas]
+    return contrato.ListaTipoSolicitacao(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -278,6 +326,8 @@ async def criar_tipo_solicitacao(
         ),
     ],
     corpo: contrato.TipoSolicitacaoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_solicitacao.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -293,8 +343,9 @@ async def criar_tipo_solicitacao(
         ),
     ] = None,
 ) -> contrato.TipoSolicitacao:
-    """Criar tipo de solicitacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("criarTipoSolicitacao", fase="F10")
+    """Criar tipo de solicitacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await tipos.criar_tipo_solicitacao(
+        sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return tipos.tipo_para_schema(novo)

@@ -1,11 +1,14 @@
-"""Rotas da tag `aprovacoes` do contrato. GERADO -- nao editar.
+"""Rotas da tag `aprovacoes` do contrato (inclui as operações da tag
+`delegacoes`, mesmo arquivo -- convenção herdada da Fase 0).
 
 Fila de decisao do aprovador e delegacoes temporarias.
 Toda acao exercida por delegacao fica marcada como tal na trilha de auditoria.
 
-Regra de negocio destas operacoes entra na fase F10. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negócio implementada na fase F10 (agente A1, ownership deste
+arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
+5). A regra em si vive em `app.workflow.aprovacoes.servico`/`delegacoes`;
+este módulo só traduz HTTP <-> serviço, mesmo padrão de
+`app/routers/tratamentos.py` (F4).
 """
 
 from __future__ import annotations
@@ -14,10 +17,13 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Request
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
+from app.workflow.aprovacoes import delegacoes, servico
 
 roteador = APIRouter(tags=["aprovacoes"])
 
@@ -30,6 +36,8 @@ roteador = APIRouter(tags=["aprovacoes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_aprovacoes_pendentes(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("aprovacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -86,11 +94,24 @@ async def listar_aprovacoes_pendentes(
         ),
     ] = None,
 ) -> contrato.ListaAprovacao:
-    """Listar aprovacoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarAprovacoesPendentes", fase="F10")
+    """Listar aprovacoes"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_aprovacoes_pendentes(
+        sessao,
+        tenant_id,
+        sujeito_usuario_id=sujeito.usuario_id,
+        sujeito_perfis=frozenset(sujeito.perfis),
+        decisao=decisao,
+        papel=papel,
+        solicitacao_id=solicitacao_id,
+        atrasadas=atrasadas,
+        incluir_delegadas=incluir_delegadas,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Aprovacao.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaAprovacao(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -112,6 +133,9 @@ async def decidir_aprovacao(
         UUID, Path(alias="aprovacaoId", description="Identificador da etapa de aprovacao.")
     ],
     corpo: contrato.DecisaoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("aprovacoes.aprovar"))],
+    sessao: SessaoDb,
+    requisicao: Request,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -127,11 +151,20 @@ async def decidir_aprovacao(
         ),
     ] = None,
 ) -> contrato.Aprovacao:
-    """Decidir etapa de aprovacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("decidirAprovacao", fase="F10")
+    """Aprovar ou reprovar etapa de aprovacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    ip = requisicao.client.host if requisicao.client else None
+    user_agent = requisicao.headers.get("user-agent")
+    decidida = await servico.decidir_aprovacao(
+        sessao,
+        tenant_id,
+        aprovacao_id,
+        corpo,
+        usuario_id=sujeito.usuario_id,
+        ip=ip,
+        user_agent=user_agent,
+    )
+    return contrato.Aprovacao.model_validate(decidida, from_attributes=True)
 
 
 @roteador.get(
@@ -142,6 +175,8 @@ async def decidir_aprovacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_delegacoes(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("delegacoes.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -198,11 +233,21 @@ async def listar_delegacoes(
         ),
     ] = None,
 ) -> contrato.ListaDelegacao:
-    """Listar delegacoes
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarDelegacoes", fase="F10")
+    """Listar delegacoes"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await delegacoes.listar_delegacoes(
+        sessao,
+        tenant_id,
+        delegante_usuario_id=delegante_usuario_id,
+        delegado_usuario_id=delegado_usuario_id,
+        status=status,
+        vigente_em=vigente_em,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Delegacao.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaDelegacao(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -221,6 +266,8 @@ async def criar_delegacao(
         ),
     ],
     corpo: contrato.DelegacaoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("delegacoes.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -236,8 +283,7 @@ async def criar_delegacao(
         ),
     ] = None,
 ) -> contrato.Delegacao:
-    """Criar delegacao
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("criarDelegacao", fase="F10")
+    """Criar delegacao"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    nova = await delegacoes.criar_delegacao(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    return contrato.Delegacao.model_validate(nova, from_attributes=True)

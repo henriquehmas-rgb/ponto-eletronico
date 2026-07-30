@@ -1,11 +1,13 @@
-"""Rotas da tag `fechamentos` do contrato. GERADO -- nao editar.
+"""Rotas da tag `fechamentos` do contrato (T5/T6, F10/A2).
 
-Periodos de apuracao, conferencia previa, trava do periodo e reabertura.
-Fechado, o dia nao recalcula; a reabertura e sempre nominal e justificada.
+Períodos de apuração, conferência prévia, trava do período e reabertura.
+Fechado, o dia não recalcula; a reabertura é sempre nominal e justificada.
 
-Regra de negocio destas operacoes entra na fase F10. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negócio implementada na fase F10 (agente A2, ownership deste
+arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
+5). A regra em si vive em `app.workflow.fechamento.periodos`/`servico`/
+`conferencia`; este módulo só traduz HTTP <-> serviço, mesmo padrão de
+`app/routers/tratamentos.py` (F4).
 """
 
 from __future__ import annotations
@@ -13,10 +15,14 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.config import obter_configuracao
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
 from app.schemas import contrato
+from app.workflow.fechamento import conferencia, periodos, servico
 
 roteador = APIRouter(tags=["fechamentos"])
 
@@ -29,6 +35,8 @@ roteador = APIRouter(tags=["fechamentos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_periodos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("periodos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -75,11 +83,21 @@ async def listar_periodos(
         ),
     ] = None,
 ) -> contrato.ListaPeriodo:
-    """Listar periodos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarPeriodos", fase="F10")
+    """Listar periodos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await periodos.listar_periodos(
+        sessao,
+        tenant_id,
+        empresa_id=empresa_id,
+        tipo=tipo,
+        status=status,
+        competencia_folha=competencia_folha,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Periodo.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaPeriodo(dados=dados, paginacao=paginacao)
 
 
 @roteador.post(
@@ -98,6 +116,8 @@ async def criar_periodo(
         ),
     ],
     corpo: contrato.PeriodoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("periodos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -113,11 +133,10 @@ async def criar_periodo(
         ),
     ] = None,
 ) -> contrato.Periodo:
-    """Criar periodo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("criarPeriodo", fase="F10")
+    """Criar periodo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    novo = await periodos.criar_periodo(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    return contrato.Periodo.model_validate(novo, from_attributes=True)
 
 
 @roteador.post(
@@ -136,6 +155,8 @@ async def criar_fechamento(
         ),
     ],
     corpo: contrato.FechamentoCriar,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.criar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -151,11 +172,16 @@ async def criar_fechamento(
         ),
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
-    """Fechar periodo
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("criarFechamento", fase="F10")
+    """Fechar periodo"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    config = obter_configuracao()
+    return await servico.criar_fechamento(
+        sessao,
+        tenant_id,
+        corpo,
+        usuario_id=sujeito.usuario_id,
+        redis_url=config.redis_url,
+    )
 
 
 @roteador.get(
@@ -166,6 +192,8 @@ async def criar_fechamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_fechamentos(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -215,11 +243,22 @@ async def listar_fechamentos(
         str | None, Query(alias="status", description="Filtra pela situacao.")
     ] = None,
 ) -> contrato.ListaFechamento:
-    """Listar fechamentos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("listarFechamentos", fase="F10")
+    """Listar fechamentos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await servico.listar_fechamentos(
+        sessao,
+        tenant_id,
+        periodo_id=periodo_id,
+        empresa_id=empresa_id,
+        unidade_id=unidade_id,
+        escopo=escopo,
+        status=status,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    dados = [contrato.Fechamento.model_validate(linha, from_attributes=True) for linha in linhas]
+    return contrato.ListaFechamento(dados=dados, paginacao=paginacao)
 
 
 @roteador.get(
@@ -233,6 +272,8 @@ async def obter_fechamento(
     fechamento_id: Annotated[
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.ler"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -248,11 +289,10 @@ async def obter_fechamento(
         ),
     ] = None,
 ) -> contrato.Fechamento:
-    """Obter fechamento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("obterFechamento", fase="F10")
+    """Obter fechamento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    encontrado = await servico.obter_fechamento(sessao, tenant_id, fechamento_id)
+    return contrato.Fechamento.model_validate(encontrado, from_attributes=True)
 
 
 @roteador.post(
@@ -273,6 +313,8 @@ async def conferir_fechamento(
     fechamento_id: Annotated[
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.executar"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -288,11 +330,11 @@ async def conferir_fechamento(
         ),
     ] = None,
 ) -> contrato.ConferenciaResposta:
-    """Conferir periodo antes de fechar
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("conferirFechamento", fase="F10")
+    """Conferir periodo antes de fechar"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    return await conferencia.conferir_fechamento(
+        sessao, tenant_id, fechamento_id, usuario_id=sujeito.usuario_id
+    )
 
 
 @roteador.post(
@@ -314,6 +356,8 @@ async def reabrir_fechamento(
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
     corpo: contrato.ReaberturaRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.reabrir"))],
+    sessao: SessaoDb,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -329,8 +373,9 @@ async def reabrir_fechamento(
         ),
     ] = None,
 ) -> contrato.Fechamento:
-    """Reabrir periodo fechado
-
-    Fase 0 entrega andaime: a implementacao entra na fase F10.
-    """
-    raise NaoImplementado("reabrirFechamento", fase="F10")
+    """Reabrir periodo fechado"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    reaberto = await servico.reabrir_fechamento(
+        sessao, tenant_id, fechamento_id, corpo, usuario_id=sujeito.usuario_id
+    )
+    return contrato.Fechamento.model_validate(reaberto, from_attributes=True)

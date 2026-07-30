@@ -67,6 +67,22 @@ dependencies = [
     # si roda no worker, que ja depende de `arq` no proprio pyproject.toml).
     "arq>=0.26",
     # --- fim F2 ---
+    # --- F10 ---
+    # Geracao do PDF do espelho de ponto (`app.workflow.fechamento.espelho`,
+    # T7/A2). `reportlab` escolhido em vez de `weasyprint`: puro Python
+    # (nenhuma dependencia de sistema como GTK/Pango/Cairo), o que mantem a
+    # imagem `runtime` da API leve e o ambiente de desenvolvimento no Windows
+    # sem instalacao de biblioteca nativa extra -- o layout exigido nesta fase
+    # e funcional/legal (PCF F10 secao 2.5), nao "de designer", entao a API de
+    # desenho de baixo nivel do reportlab basta.
+    "reportlab>=4.2",
+    # Cliente do MinIO (`app.comum.armazenamento`, T7/A2), primeira integracao
+    # real de `apps/api` com o armazenamento de objetos. Escolhido `minio`
+    # (SDK oficial, compativel com S3) em vez de `boto3`: dependencia bem
+    # menor (sem o SDK inteiro da AWS) para o uso estreito desta fase
+    # (`put_object`/`presigned_get_object`).
+    "minio>=7.2",
+    # --- fim F10 ---
 ]
 
 [project.optional-dependencies]
@@ -77,6 +93,10 @@ dev = [
     "pytest-asyncio==0.24.0",
     "pytest-cov==6.0.0",
     "types-pyyaml>=6.0",
+    # F10/A2: extrai texto do PDF do espelho em teste, para provar que o
+    # conteudo minimo exigido (nome, periodo, totais) esta mesmo no arquivo,
+    # nao so "gerou bytes". Nunca usado em codigo de producao.
+    "pypdf>=5.0",
 ]
 # Ferramental de geracao de codigo a partir do contrato. Nao entra na imagem.
 # Uso: python tools/gerar_do_contrato.py  (ver cabecalho do script)
@@ -189,6 +209,13 @@ exclude = ["^\\.venv/", "^migrations/"]
 
 [[tool.mypy.overrides]]
 module = ["asyncpg.*", "redis.*"]
+ignore_missing_imports = true
+
+# F10/A2: reportlab (geracao do PDF do espelho) e minio (armazenamento de
+# objetos) nao publicam stubs nem py.typed -- mesmo tratamento que
+# asyncpg/redis acima recebem por identico motivo.
+[[tool.mypy.overrides]]
+module = ["reportlab.*", "minio.*"]
 ignore_missing_imports = true
 
 # ==================================================================

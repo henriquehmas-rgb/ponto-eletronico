@@ -202,6 +202,30 @@ $$;
 COMMENT ON FUNCTION fn_resolve_tenant(TEXT) IS
   'Unica porta de entrada para descobrir o tenant a partir do subdominio ou do cabecalho X-Tenant (slug ou UUID, RFC-004) antes de app.tenant_id existir.';
 
+-- Enumeracao cross-tenant minima para rotinas de cron que precisam apenas
+-- saber "quais tenants existem" antes de abrir uma sessao por tenant (mesmo
+-- padrao de RFC-013, aqui generalizado por RFC-014: em vez de expor colunas
+-- de UM dominio especifico como as funcoes irmas ja fazem
+-- (fn_terminais_para_verificacao_saude, fn_bh_contas_para_verificacao_
+-- vencimento), esta expoe so a identidade do tenant -- o cron entao publica
+-- SET LOCAL app.tenant_id por tenant e faz consultas comuns, sob RLS, no
+-- dominio que precisar. Usada por verificar_notificacoes_pendentes (F10/A3).
+CREATE OR REPLACE FUNCTION fn_tenants_ativos()
+RETURNS TABLE (
+    id   UUID,
+    slug TEXT
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT t.id, t.slug
+    FROM tenants t
+   WHERE t.status = 'ativo';
+$$;
+
+COMMENT ON FUNCTION fn_tenants_ativos() IS
+  'Enumeracao cross-tenant minima (id, slug) de tenants ativos para rotinas de cron que operam por tenant (F10, RFC-014). Expoe so identidade, nunca dado de dominio.';
+
 
 CREATE TABLE tenant_configuracoes (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

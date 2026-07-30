@@ -61,7 +61,7 @@ from worker.banco_horas_vencimento import (
     publicar_banco_horas_vencendo,
 )
 from worker.config import Configuracao, obter_configuracao
-from worker.filas import CODIGO_NAO_IMPLEMENTADO, FILA_MANUTENCAO
+from worker.filas import CODIGO_NAO_IMPLEMENTADO, FILA_MANUTENCAO, FILA_PADRAO
 from worker.log import configurar_log, obter_logger
 
 # `montar_redis` vem de `worker.main` para que os dois processos leiam a mesma
@@ -69,6 +69,7 @@ from worker.log import configurar_log, obter_logger
 # construido no import de `main` — sao apenas objetos em memoria, sem I/O e sem
 # nada registrado: o scheduler continua sem conhecer as oito tarefas pesadas.
 from worker.main import montar_redis
+from worker.notificacoes_verificacao import verificar_notificacoes_pendentes_cross_tenant
 from worker.terminais_saude import (
     TerminalAtivo,
     gravar_amostra_saude,
@@ -89,9 +90,17 @@ INTERVALO_SAUDE_S: Final[int] = 20
 #: Fase de FASES-E-AGENTES.md que implementa cada rotina, e evento do catalogo
 #: que ela passara a produzir. Documental na Fase 0 — e o que impede a rotina de
 #: virar orfa: quem chegar na F4 e na F6 encontra o ponteiro pronto.
+#: `verificar_notificacoes_pendentes` (F10/A3) e' uma excecao deliberada ao
+#: padrao restrito das duas rotinas acima: ela nao publica um evento de
+#: `events.yaml` (nenhum evento do catalogo corresponde 1:1 a esta rotina --
+#: PCF F10 §2.10), so grava `notificacoes` e aciona o escalonamento de A1
+#: indiretamente (via lembrete de prazo vencido). `evento` fica vazio de
+#: proposito -- `_resultado_rotina` ja trata ausencia com `meta.get("evento",
+#: "")`, sem quebrar o andaime original.
 ROTINAS: Final[dict[str, dict[str, str]]] = {
     "verificar_banco_horas_vencendo": {"fase": "F4", "evento": "banco_horas.vencendo"},
     "verificar_terminal_offline": {"fase": "F6", "evento": "terminal.offline"},
+    "verificar_notificacoes_pendentes": {"fase": "F10", "evento": ""},
 }
 
 
@@ -305,6 +314,77 @@ def _classificar(terminal: TerminalAtivo, agora: dt.datetime) -> tuple[bool, int
     return minutos_sem_contato <= limite, minutos_sem_contato
 
 
+async def verificar_notificacoes_pendentes(ctx: dict[Any, Any]) -> dict[str, Any]:
+    """Varredura cross-tenant de sinais que nascem em domínios já
+    concluídos e precisam virar notificação (F10/T11/A3).
+
+    Dois achados por execução, os únicos citados pelo PCF §2.10:
+
+    * ocorrências recentes com código em `{jornada_excedida, sem_marcacao,
+      banco_vencendo}` (`ocorrencias`, gravadas por F4 durante a apuração)
+      sem uma `Notificacao` correspondente ainda;
+    * solicitações cuja etapa corrente está `pendente` com `prazo_em`
+      vencido (`solicitacoes`/`aprovacoes`, gravadas por A1 desta mesma
+      fase) sem o lembrete `solicitacao.pendente_prazo` ainda.
+
+    A enumeração cross-tenant usa `fn_tenants_ativos()` (RFC-014, SECURITY
+    DEFINER) pela role comum `ponto_app`, sem segunda credencial de banco --
+    ver docstring de `worker/notificacoes_verificacao.py`. Cada achado
+    materializa uma linha de `Notificacao` via `app.notificacao.motor.
+    processar_evento` (reaproveitado, nunca duplicado).
+
+    Ao final, enfileira `processar_fila_notificacoes` uma vez por tenant
+    ATIVO (não só os que tiveram achado nesta execução: notificações
+    nascidas em processo, pela chamada direta de A1/A2/A4 a `app.
+    notificacao.motor.processar_evento` durante uma requisição HTTP, também
+    esperam por este envio periódico -- ver docstring de
+    `worker/tarefas/notificacoes.py`). `_queue_name=FILA_PADRAO` é
+    EXPLÍCITO de propósito: `ctx["redis"]` aqui é o pool do SCHEDULER
+    (`default_queue_name=FILA_MANUTENCAO`, a fila do próprio scheduler, ver
+    `SchedulerSettings.queue_name`); sem o override, o job cairia numa fila
+    que o `worker` (`queue_name=FILA_PADRAO`) nunca consome -- o mesmo "job
+    órfão" que o achado real de `app/core/filas.py` (F9b/A3) já documentou
+    para o lado da API, agora evitado aqui deliberadamente.
+
+    Roda a cada 10 minutos (PCF §2.10): frequência alta o bastante para o
+    lembrete de prazo vencido chegar no mesmo turno de trabalho, sem
+    aproximar-se do custo de varrer `ocorrencias`/`solicitacoes` de todo
+    tenant a cada poucos segundos.
+    """
+    resultado = await verificar_notificacoes_pendentes_cross_tenant()
+
+    enfileiradas = 0
+    redis = ctx.get("redis")
+    if redis is not None:
+        for tenant_id in resultado.tenant_ids:
+            await redis.enqueue_job(
+                "processar_fila_notificacoes",
+                tenant_id=str(tenant_id),
+                _queue_name=FILA_PADRAO,
+            )
+            enfileiradas += 1
+
+    logger.info(
+        "rotina verificar_notificacoes_pendentes concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "tenantsVerificados": resultado.tenants_verificados,
+            "ocorrenciasNotificadas": resultado.ocorrencias_notificadas,
+            "pendenciasNotificadas": resultado.pendencias_notificadas,
+            "drenagensEnfileiradas": enfileiradas,
+        },
+    )
+    return {
+        "implementado": True,
+        "rotina": "verificar_notificacoes_pendentes",
+        "tenantsVerificados": resultado.tenants_verificados,
+        "ocorrenciasNotificadas": resultado.ocorrencias_notificadas,
+        "pendenciasNotificadas": resultado.pendencias_notificadas,
+        "drenagensEnfileiradas": enfileiradas,
+        "executadoEm": dt.datetime.now(tz=dt.UTC).isoformat(),
+    }
+
+
 def montar_cron() -> list[CronJob]:
     """Agenda das rotinas periodicas.
 
@@ -337,6 +417,15 @@ def montar_cron() -> list[CronJob]:
             minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
             second=0,
             timeout=120,
+            max_tries=1,
+        ),
+        # A cada 10 minutos (PCF F10 §2.10).
+        cron(
+            verificar_notificacoes_pendentes,
+            name="verificar_notificacoes_pendentes",
+            minute={0, 10, 20, 30, 40, 50},
+            second=0,
+            timeout=300,
             max_tries=1,
         ),
     ]
@@ -410,5 +499,6 @@ __all__ = [
     "ao_iniciar",
     "montar_cron",
     "verificar_banco_horas_vencendo",
+    "verificar_notificacoes_pendentes",
     "verificar_terminal_offline",
 ]

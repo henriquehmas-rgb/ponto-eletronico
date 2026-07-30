@@ -18,16 +18,38 @@ from typing import Any, Final
 
 FILA_PADRAO: Final[str] = "ponto:padrao"
 FILA_APURACAO: Final[str] = "ponto:apuracao"
+FILA_FECHAMENTO: Final[str] = "ponto:fechamento"
 FILA_FISCAL: Final[str] = "ponto:fiscal"
 FILA_RELATORIOS: Final[str] = "ponto:relatorios"
 FILA_INTEGRACOES: Final[str] = "ponto:integracoes"
 FILA_MANUTENCAO: Final[str] = "ponto:manutencao"
+FILA_NOTIFICACOES: Final[str] = "ponto:notificacoes"
 
 #: Fila de destino planejada por tarefa. Documental na Fase 0; a partir da F2,
 #: `importar_colaboradores` ja e implementacao real, nao mais planejamento.
+#: **Nota (F10):** o enfileiramento REAL (`apps/api/app/workflow/fechamento/
+#: servico.py`/`espelho.py`) usa `default_queue_name=FILA_PADRAO`, mesmo
+#: padrao ja em uso por `app.apuracao.tratamento.recalculo.
+#: enfileirar_recalculo` (F4) e `app.importadores.servico` (F2): o processo
+#: `worker` continua consumindo uma unica fila (`WorkerSettings.queue_name =
+#: FILA_PADRAO`, ver `worker/main.py`), entao `FILA_FECHAMENTO` aqui e' o
+#: mesmo tipo de documentacao aspiracional que `FILA_APURACAO`/
+#: `FILA_INTEGRACOES` ja eram antes desta fase -- nao uma fila de fato
+#: consumida hoje. Migrar para filas reais de verdade exige subir um
+#: processo `worker` por fila (fora do ownership desta fase).
+#: **Nota (F10/A3):** o mesmo vale para `processar_fila_notificacoes` --
+#: `worker/scheduler.py::verificar_notificacoes_pendentes` enfileira com
+#: `_queue_name=FILA_PADRAO` explicito (nao `FILA_NOTIFICACOES`), pela mesma
+#: razao: e' `ctx["redis"]` do SCHEDULER (default_queue_name=FILA_MANUTENCAO,
+#: a fila do proprio scheduler) quem enfileira, entao sem o override
+#: explicito o job cairia em `FILA_MANUTENCAO`, que o `worker` (queue_name=
+#: FILA_PADRAO) nunca consome -- o mesmo "job orfao" que o achado real de
+#: `app/core/filas.py` (F9b/A3) ja documentou para o lado da API.
 FILA_POR_TAREFA: Final[dict[str, str]] = {
     "apurar_dia": FILA_APURACAO,
     "recalcular_periodo": FILA_APURACAO,
+    "processar_fechamento": FILA_FECHAMENTO,
+    "gerar_espelhos": FILA_FECHAMENTO,
     "gerar_afd": FILA_FISCAL,
     "gerar_aej": FILA_FISCAL,
     "executar_relatorio": FILA_RELATORIOS,
@@ -35,12 +57,15 @@ FILA_POR_TAREFA: Final[dict[str, str]] = {
     "sincronizar_terminal": FILA_INTEGRACOES,
     "expurgo_lgpd": FILA_MANUTENCAO,
     "importar_colaboradores": FILA_INTEGRACOES,
+    "processar_fila_notificacoes": FILA_NOTIFICACOES,
 }
 
 #: Fase de FASES-E-AGENTES.md que implementa cada tarefa.
 FASE_POR_TAREFA: Final[dict[str, str]] = {
     "apurar_dia": "F4",
     "recalcular_periodo": "F4",
+    "processar_fechamento": "F10",
+    "gerar_espelhos": "F10",
     "gerar_afd": "F12",
     "gerar_aej": "F12",
     "executar_relatorio": "F11",
@@ -48,6 +73,7 @@ FASE_POR_TAREFA: Final[dict[str, str]] = {
     "sincronizar_terminal": "F6",
     "expurgo_lgpd": "F14",
     "importar_colaboradores": "F2",
+    "processar_fila_notificacoes": "F10",
 }
 
 CODIGO_NAO_IMPLEMENTADO: Final[str] = "PONTO-INT-005"
