@@ -317,7 +317,7 @@ Onda 0 ──► Onda 1 ──► Onda 2 ──► Onda 3 ──► Onda 4 ─�
 
 | Agente | Escopo |
 |---|---|
-| A1 | **T0 bloqueante:** conferir o leiaute campo a campo contra os anexos da Portaria 671/2021 e documentar em `docs/leiaute-afd-aej.md`. Depois: gerador de **AFD** (ASCII ISO 8859-1, separador `\|`, CR+LF, NSR sequencial, registro **tipo 7** para REP-P com NSR + tipo + data/hora + CPF + CRC-16, demais tipos, **CRC-16** por registro, **SHA-256** do arquivo, fracionamento por período) |
+| A1 | **T0 concluída em 30/07/2026:** leiaute conferido campo a campo contra os anexos oficiais da Portaria 671/2021, documentado em `docs/leiaute-afd-aej.md` (ler antes de codificar — corrige 3 premissas erradas desta linha, ver abaixo). Gerador de **AFD** (ASCII ISO 8859-1, **largura fixa por posição, sem delimitador**, CR+LF, NSR sequencial por estabelecimento, registro **tipo 7** para REP-P com NSR + tipo + data/hora + CPF + **hash SHA-256 encadeado** — não CRC-16 —, demais tipos com **CRC-16 CCITT-TRUE/KERMIT** só nos tipos 1-5, trailer, sem hash de arquivo inteiro, fracionamento por período permitido para REP-P) |
 | A2 | Gerador de **AEJ**: cabeçalho, REPs utilizados, vínculos, horário contratual, marcações, matrícula eSocial, ausências, **banco de horas**, identificação do PTRP, trailer |
 | A3 | **Assinatura CAdES** em `.p7s` destacado com certificado ICP-Brasil (e-CNPJ A1), assinatura do comprovante de registro, cofre de arquivos gerados com histórico e download, validação cruzada |
 

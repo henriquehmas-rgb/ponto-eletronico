@@ -44,3 +44,4 @@ Todo ADR segue a mesma estrutura, nesta ordem:
 | [009](ADR-009-worker-instala-apps-api-como-biblioteca.md) | Worker instala apps/api como biblioteca | Aceito | F4, F3, F10, F11 |
 | [010](ADR-010-debito-tecnico-performance-recalculo-em-lote.md) | Débito técnico aceito: performance do recálculo em lote abaixo do alvo | Aceito | F4, F3, F10, F11 |
 | [011](ADR-011-tratamento-afastamento-retroativo-sem-efeito-numerico.md) | Débito técnico aceito: `Tratamento` de categoria `afastamento` (retroativo) não altera a apuração | Aceito | F4, F10, F11, F12 |
+| [012](ADR-012-formula-hash-registro-tipo-7-afd-nao-confirmada.md) | Débito técnico aceito: fórmula de concatenação do hash SHA-256 do registro tipo "7" do AFD não confirmada contra fonte primária suficiente | Aceito | F12 |

@@ -105,6 +105,21 @@ dependencies = [
     # `openpyxl` -- registrado como achado de contrato, não escondido.
     "croniter>=2.0",
     # --- fim F11 ---
+    # --- F12 ---
+    # Assinatura CAdES (`app.fiscal.assinatura.cades`, T11/A3).
+    # `cryptography.hazmat.primitives.serialization.pkcs7` (ja dependencia,
+    # bloco F1 acima) E SUFICIENTE para PRODUZIR a assinatura CMS/PKCS#7
+    # destacada com os atributos exigidos pelo perfil CAdES-BES (confirmado
+    # por inspecao: content-type/signing-time/message-digest ja saem por
+    # padrao) -- nao precisou de dependencia nova para `assinar_cades`.
+    # `asn1crypto` (pura Python, sem binding nativo, BSD, ja usada por
+    # `certvalidator`/`oscrypto` no ecossistema de PKI Python) foi
+    # acrescentada so para `validar_cades`: a API `pkcs7` da `cryptography`
+    # constroi assinaturas mas nao expoe leitura/verificacao de uma
+    # estrutura CMS `SignedData` arbitraria, e o PCF exige uma verificacao
+    # INDEPENDENTE (nao reaproveitar estado interno de quem assinou).
+    "asn1crypto>=1.5",
+    # --- fim F12 ---
 ]
 
 [project.optional-dependencies]
