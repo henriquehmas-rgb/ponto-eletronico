@@ -11171,6 +11171,118 @@ class RelatorioAgendamentoCriar(BaseModel):
     """
 
 
+class PreferenciaColunas(BaseModel):
+    """
+    Layout de colunas salvo pelo usuario, para um relatorio do catalogo ou para uma tela (grade) da interface -- e o que faz a configuracao do espelho de jornada persistir entre sessoes. RFC-015 (decidida em 30/07/2026).
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: UUID | None = None
+    """
+    Identificador da preferencia.
+    """
+    tenant_id: UUID | None = Field(None, alias="tenantId")
+    """
+    Tenant dono do registro.
+    """
+    usuario_id: UUID | None = Field(None, alias="usuarioId")
+    """
+    Usuario dono da preferencia. Sempre o do sujeito autenticado.
+    """
+    relatorio_definicao_id: UUID | None = Field(None, alias="relatorioDefinicaoId")
+    """
+    Relatorio do catalogo ao qual a preferencia se aplica. Mutuamente exclusivo com tela.
+    """
+    tela: str | None = None
+    """
+    Tela (grade) da interface a qual a preferencia se aplica. Mutuamente exclusivo com relatorioDefinicaoId.
+    """
+    nome: str | None = None
+    """
+    Nome da preferencia, unico por usuario e alvo. O padrao e "padrao".
+    """
+    colunas: list[str] | None = None
+    """
+    Chaves de coluna selecionadas, na ordem de exibicao.
+    """
+    ordenacao: dict[str, Any] | None = None
+    """
+    Ordenacao de linhas salva junto com o layout.
+    """
+    filtros: dict[str, Any] | None = None
+    """
+    Filtros salvos junto com o layout.
+    """
+    larguras: dict[str, Any] | None = None
+    """
+    Largura de cada coluna, em pixels, por chave.
+    """
+    padrao: bool | None = None
+    """
+    Verdadeiro quando esta e a preferencia aplicada automaticamente ao abrir a tela.
+    """
+    criado_em: AwareDatetime | None = Field(None, alias="criadoEm")
+    """
+    Instante de criacao, atribuido pelo servidor.
+    """
+    criado_por: UUID | None = Field(None, alias="criadoPor")
+    """
+    Usuario que criou o registro.
+    """
+    atualizado_em: AwareDatetime | None = Field(None, alias="atualizadoEm")
+    """
+    Instante da ultima atualizacao.
+    """
+    atualizado_por: UUID | None = Field(None, alias="atualizadoPor")
+    """
+    Usuario responsavel pela ultima atualizacao.
+    """
+
+
+class PreferenciaColunasCriar(BaseModel):
+    """
+    Dados aceitos na criacao ou substituicao de PreferenciaColunas (RFC-015). Informe relatorioDefinicaoId OU tela, nunca os dois: mesma exclusividade da CHECK ck_preferencias_colunas_alvo.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    relatorio_definicao_id: UUID | None = Field(None, alias="relatorioDefinicaoId")
+    """
+    Relatorio do catalogo ao qual a preferencia se aplica. Mutuamente exclusivo com tela.
+    """
+    tela: str | None = None
+    """
+    Tela (grade) da interface a qual a preferencia se aplica. Mutuamente exclusivo com relatorioDefinicaoId.
+    """
+    nome: str = "padrao"
+    """
+    Nome da preferencia, unico por usuario e alvo.
+    """
+    colunas: list[str] = Field(..., min_length=1)
+    """
+    Chaves de coluna selecionadas, na ordem de exibicao.
+    """
+    ordenacao: dict[str, Any] | None = None
+    """
+    Ordenacao de linhas salva junto com o layout.
+    """
+    filtros: dict[str, Any] | None = None
+    """
+    Filtros salvos junto com o layout.
+    """
+    larguras: dict[str, Any] | None = None
+    """
+    Largura de cada coluna, em pixels, por chave.
+    """
+    padrao: bool = False
+    """
+    Verdadeiro para tornar esta a preferencia aplicada automaticamente ao abrir a tela.
+    """
+
+
 class Tipo37(StrEnum):
     """
     humano: pessoa. servico: conta tecnica de integracao. suporte: operador da SEEG com acesso controlado.
@@ -14123,6 +14235,21 @@ class ListaRelatorioAgendamento(BaseModel):
         populate_by_name=True,
     )
     dados: list[RelatorioAgendamento]
+    """
+    Itens da pagina, na ordem pedida em ordenar.
+    """
+    paginacao: Paginacao
+
+
+class ListaPreferenciaColunas(BaseModel):
+    """
+    Pagina de resultados de PreferenciaColunas.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    dados: list[PreferenciaColunas]
     """
     Itens da pagina, na ordem pedida em ordenar.
     """

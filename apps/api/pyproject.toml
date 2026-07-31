@@ -83,6 +83,28 @@ dependencies = [
     # (`put_object`/`presigned_get_object`).
     "minio>=7.2",
     # --- fim F10 ---
+    # --- F11 ---
+    # Exportacao XLSX (`app.relatorios.exportadores.xlsx`, T5/A3). `apps/worker`
+    # ja depende de `openpyxl` desde a F2 (leitura de planilha de importacao),
+    # mas so o WORKER, nunca a API. `executarRelatorio` responde 200 com o
+    # arquivo direto na API para relatorios leves (`formato=xlsx` sincrono,
+    # PCF F11 secao 2.5) -- a API tambem precisa ESCREVER XLSX, entao a mesma
+    # biblioteca aparece de novo aqui: dois processos, duas imagens, mesma
+    # necessidade. Mesma versao minima do worker, para nao divergir.
+    "openpyxl>=3.1",
+    # Validacao de expressao cron (`app.relatorios.agendamentos.
+    # criar_agendamento`, T11/A3). ACHADO DE CONTRATO: o PCF F11 §2.5 só
+    # manda adicionar `croniter` em `apps/worker/pyproject.toml` (para
+    # `worker/scheduler.py::verificar_agendamentos_relatorio` recalcular
+    # `proxima_execucao_em` a cada disparo) -- mas o próprio PCF F11 §6/T11
+    # também exige que `criarAgendamentoRelatorio` "valide cron com
+    # croniter, calcule proxima_execucao_em na criação", e essa rota roda
+    # na API, não no worker. Sem `croniter` aqui, a API não tem como
+    # cumprir a própria tarefa que o PCF descreve. Mesmo raciocínio de
+    # "dois processos, duas imagens, mesma necessidade" já usado acima para
+    # `openpyxl` -- registrado como achado de contrato, não escondido.
+    "croniter>=2.0",
+    # --- fim F11 ---
 ]
 
 [project.optional-dependencies]
@@ -97,6 +119,15 @@ dev = [
     # conteudo minimo exigido (nome, periodo, totais) esta mesmo no arquivo,
     # nao so "gerou bytes". Nunca usado em codigo de producao.
     "pypdf>=5.0",
+    # F11/A3: stub de tipos para o mypy --strict de
+    # `app.relatorios.exportadores.xlsx` (openpyxl e biblioteca de producao,
+    # ver bloco F11 acima; os tipos ficam so em dev, mesmo padrao que o
+    # worker ja usa desde a F2).
+    "types-openpyxl>=3.1",
+    # F11/A3: stub de tipos para o mypy --strict de
+    # `app.relatorios.agendamentos` (croniter, ver achado de contrato no
+    # bloco F11 acima).
+    "types-croniter>=2.0",
 ]
 # Ferramental de geracao de codigo a partir do contrato. Nao entra na imagem.
 # Uso: python tools/gerar_do_contrato.py  (ver cabecalho do script)
@@ -216,6 +247,12 @@ ignore_missing_imports = true
 # asyncpg/redis acima recebem por identico motivo.
 [[tool.mypy.overrides]]
 module = ["reportlab.*", "minio.*"]
+ignore_missing_imports = true
+
+# F12/A3: asn1crypto (parsing/verificacao independente de CMS/PKCS#7 em
+# `app.fiscal.assinatura.cades.validar_cades`) nao publica py.typed.
+[[tool.mypy.overrides]]
+module = ["asn1crypto.*"]
 ignore_missing_imports = true
 
 # ==================================================================

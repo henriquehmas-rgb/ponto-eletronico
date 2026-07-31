@@ -1,8 +1,10 @@
 "use client";
 
+import { GraficoDeLinha } from "@/componentes/graficos/graficos";
 import { CartaoDeSaldoDeBanco } from "@/componentes/dominio/cartao-de-saldo-de-banco";
-import { Cartao, CartaoConteudo } from "@/componentes/ui/card";
+import { Cartao, CartaoCabecalho, CartaoConteudo, CartaoTitulo } from "@/componentes/ui/card";
 import { Esqueleto } from "@/componentes/ui/skeleton";
+import { CHAVE_VALOR_SALDO_BANCO_HORAS, useTendenciaMensal } from "@/ganchos/use-dataviz-dashboard";
 import { useSaldoBancoHorasAmostra } from "@/ganchos/use-indicadores-dashboard";
 import { useSessaoCompleta } from "@/ganchos/use-sessao-completa";
 import { ehErroDaApi } from "@/lib/api";
@@ -19,6 +21,17 @@ import { ehErroDaApi } from "@/lib/api";
 export function SecaoBancoDeHoras() {
   const { sessao, carregando: carregandoSessao } = useSessaoCompleta();
   const saldo = useSaldoBancoHorasAmostra();
+  // Dataviz (T13, PCF F11 §2.6): evolução do saldo dos últimos 6 meses,
+  // alimentada pelo motor de relatórios (dataset `banco-de-horas` do
+  // catálogo) — mesma restrição de AMOSTRA do KPI acima (só o
+  // `colaboradorId` do próprio usuário logado; hooks sempre chamados, nunca
+  // condicionalmente, `habilitado` decide se a chamada de rede dispara).
+  const tendenciaDeSaldo = useTendenciaMensal({
+    codigo: "banco-de-horas",
+    chaveValor: CHAVE_VALOR_SALDO_BANCO_HORAS,
+    colaboradorId: sessao?.colaboradorId,
+    habilitado: Boolean(sessao?.colaboradorId),
+  });
 
   if (carregandoSessao) return <Esqueleto className="h-40 w-full" />;
   if (!sessao?.colaboradorId) return null;
@@ -43,15 +56,43 @@ export function SecaoBancoDeHoras() {
   if (!saldo.data) return null;
 
   return (
-    <CartaoDeSaldoDeBanco
-      saldoMinutos={saldo.data.saldoMinutos ?? 0}
-      {...(saldo.data.contaCodigo ? { contaCodigo: saldo.data.contaCodigo } : {})}
-      {...(saldo.data.aVencer30Minutos !== undefined
-        ? { aVencer30Minutos: saldo.data.aVencer30Minutos }
-        : {})}
-      {...((saldo.data.aVencer30Minutos ?? 0) > 0 && saldo.data.periodoFim
-        ? { proximoVencimentoEm: saldo.data.periodoFim }
-        : {})}
-    />
+    <div className="flex flex-col gap-4">
+      <CartaoDeSaldoDeBanco
+        saldoMinutos={saldo.data.saldoMinutos ?? 0}
+        {...(saldo.data.contaCodigo ? { contaCodigo: saldo.data.contaCodigo } : {})}
+        {...(saldo.data.aVencer30Minutos !== undefined
+          ? { aVencer30Minutos: saldo.data.aVencer30Minutos }
+          : {})}
+        {...((saldo.data.aVencer30Minutos ?? 0) > 0 && saldo.data.periodoFim
+          ? { proximoVencimentoEm: saldo.data.periodoFim }
+          : {})}
+      />
+
+      <Cartao>
+        <CartaoCabecalho>
+          <CartaoTitulo>Evolução do saldo (últimos 6 meses)</CartaoTitulo>
+        </CartaoCabecalho>
+        <CartaoConteudo>
+          {tendenciaDeSaldo.isPending ? (
+            <p className="estilo-corpo text-texto-secundario">Carregando…</p>
+          ) : tendenciaDeSaldo.isError ? (
+            <p className="estilo-corpo text-estado-erro-texto">
+              Não foi possível carregar a evolução do saldo.
+            </p>
+          ) : !tendenciaDeSaldo.data || tendenciaDeSaldo.data.length === 0 ? (
+            <p className="estilo-corpo text-texto-secundario">
+              Sem dado suficiente no período para montar a evolução.
+            </p>
+          ) : (
+            <GraficoDeLinha
+              dados={tendenciaDeSaldo.data}
+              chaveCategoria="mes"
+              altura={220}
+              series={[{ chave: "valor", rotulo: "Saldo (min)" }]}
+            />
+          )}
+        </CartaoConteudo>
+      </Cartao>
+    </div>
   );
 }

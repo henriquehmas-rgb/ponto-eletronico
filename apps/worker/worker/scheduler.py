@@ -70,6 +70,9 @@ from worker.log import configurar_log, obter_logger
 # nada registrado: o scheduler continua sem conhecer as oito tarefas pesadas.
 from worker.main import montar_redis
 from worker.notificacoes_verificacao import verificar_notificacoes_pendentes_cross_tenant
+from worker.relatorios_agendamentos_verificacao import (
+    verificar_agendamentos_relatorio_cross_tenant,
+)
 from worker.terminais_saude import (
     TerminalAtivo,
     gravar_amostra_saude,
@@ -101,6 +104,7 @@ ROTINAS: Final[dict[str, dict[str, str]]] = {
     "verificar_banco_horas_vencendo": {"fase": "F4", "evento": "banco_horas.vencendo"},
     "verificar_terminal_offline": {"fase": "F6", "evento": "terminal.offline"},
     "verificar_notificacoes_pendentes": {"fase": "F10", "evento": ""},
+    "verificar_agendamentos_relatorio": {"fase": "F11", "evento": ""},
 }
 
 
@@ -385,6 +389,77 @@ async def verificar_notificacoes_pendentes(ctx: dict[Any, Any]) -> dict[str, Any
     }
 
 
+async def verificar_agendamentos_relatorio(ctx: dict[Any, Any]) -> dict[str, Any]:
+    """Dispara relatórios agendados cuja `proxima_execucao_em` já venceu
+    (F11, T11/A3).
+
+    Para cada tenant `ativo` (`fn_tenants_ativos()`, RFC-014, mesmo padrão
+    de `verificar_notificacoes_pendentes`), busca `relatorio_agendamentos`
+    com `ativo=true AND proxima_execucao_em <= now()`
+    (`worker.relatorios_agendamentos_verificacao`), cria a
+    `RelatorioExecucao(status='enfileirado', agendamento_id=...)`
+    correspondente e recalcula `proxima_execucao_em` via `croniter`
+    (`app.relatorios.agendamentos.calcular_proxima_execucao`) -- tudo na
+    mesma transação, o que torna a varredura idempotente por construção
+    (ver docstring do módulo de suporte): uma linha disparada sai da janela
+    `<= now()` antes da rotina seguinte rodar, então nunca duplica.
+
+    Enfileira `executar_relatorio` no worker com `_queue_name=FILA_PADRAO`
+    **explícito**: `ctx["redis"]` aqui é o pool do SCHEDULER
+    (`default_queue_name=FILA_MANUTENCAO`), então sem o override o job
+    cairia numa fila que o `worker` (`queue_name=FILA_PADRAO`) nunca
+    consome -- o mesmo "job órfão" que `app/core/filas.py` (F9b/A3) e
+    `verificar_notificacoes_pendentes` (acima) já documentam.
+
+    Roda a cada 10 minutos, mesmo intervalo de `verificar_notificacoes_
+    pendentes` (PCF §2.10 de F10): frequência alta o bastante para um
+    agendamento diário/mensal disparar dentro da mesma janela de horário
+    configurada, sem se aproximar do custo de varrer `relatorio_
+    agendamentos` de todo tenant a cada poucos segundos.
+    """
+    redis = ctx.get("redis")
+
+    async def _enfileirar(
+        *,
+        tenant_id: str,
+        execucao_id: str,
+        codigo: str,
+        parametros: dict[str, Any],
+        formato: str,
+        solicitante_id: str | None,
+    ) -> None:
+        if redis is None:  # pragma: no cover - so em teste sem ctx["redis"]
+            return
+        await redis.enqueue_job(
+            "executar_relatorio",
+            tenant_id=tenant_id,
+            execucao_id=execucao_id,
+            codigo=codigo,
+            parametros=parametros,
+            formato=formato,
+            solicitante_id=solicitante_id,
+            _queue_name=FILA_PADRAO,
+        )
+
+    resultado = await verificar_agendamentos_relatorio_cross_tenant(enfileirar=_enfileirar)
+
+    logger.info(
+        "rotina verificar_agendamentos_relatorio concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "tenantsVerificados": resultado.tenants_verificados,
+            "agendamentosDisparados": resultado.agendamentos_disparados,
+        },
+    )
+    return {
+        "implementado": True,
+        "rotina": "verificar_agendamentos_relatorio",
+        "tenantsVerificados": resultado.tenants_verificados,
+        "agendamentosDisparados": resultado.agendamentos_disparados,
+        "executadoEm": dt.datetime.now(tz=dt.UTC).isoformat(),
+    }
+
+
 def montar_cron() -> list[CronJob]:
     """Agenda das rotinas periodicas.
 
@@ -423,6 +498,16 @@ def montar_cron() -> list[CronJob]:
         cron(
             verificar_notificacoes_pendentes,
             name="verificar_notificacoes_pendentes",
+            minute={0, 10, 20, 30, 40, 50},
+            second=0,
+            timeout=300,
+            max_tries=1,
+        ),
+        # A cada 10 minutos (mesmo intervalo de verificar_notificacoes_
+        # pendentes, PCF F11 §6/T11).
+        cron(
+            verificar_agendamentos_relatorio,
+            name="verificar_agendamentos_relatorio",
             minute={0, 10, 20, 30, 40, 50},
             second=0,
             timeout=300,
@@ -498,6 +583,7 @@ __all__ = [
     "ao_encerrar",
     "ao_iniciar",
     "montar_cron",
+    "verificar_agendamentos_relatorio",
     "verificar_banco_horas_vencendo",
     "verificar_notificacoes_pendentes",
     "verificar_terminal_offline",

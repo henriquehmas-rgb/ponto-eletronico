@@ -2443,6 +2443,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/relatorios/preferencias-colunas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar preferencias de colunas
+         * @description RFC-015 (decidida em 30/07/2026): lista as preferencias de colunas do usuario autenticado. Filtra
+         *     sempre pelo usuarioId do proprio sujeito -- nunca aceita usuarioId de query, para um usuario nao
+         *     conseguir listar a preferencia de outro. Filtre por relatorioDefinicaoId OU tela; informar os dois ao
+         *     mesmo tempo responde PONTO-VAL-005 (mesma exclusividade da CHECK ck_preferencias_colunas_alvo).
+         */
+        get: operations["listarPreferenciasColunas"];
+        /**
+         * Salvar preferencia de colunas
+         * @description RFC-015 (decidida em 30/07/2026): cria ou substitui uma preferencia de colunas do usuario autenticado.
+         *     O corpo descreve o estado final completo (INSERT ... ON CONFLICT ... DO UPDATE sobre
+         *     uq_preferencias_colunas): sem Idempotency-Key, porque reenviar a mesma chamada produz o mesmo
+         *     resultado, ao contrario de um POST que criaria uma linha nova a cada chamada. usuarioId e sempre o do
+         *     sujeito autenticado, nunca aceito no corpo.
+         */
+        put: operations["salvarPreferenciaColunas"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/solicitacoes": {
         parameters: {
             query?: never;
@@ -9898,6 +9929,12 @@ export interface components {
             dados: components["schemas"]["Permissao"][];
             paginacao: components["schemas"]["Paginacao"];
         };
+        /** @description Pagina de resultados de PreferenciaColunas. */
+        ListaPreferenciaColunas: {
+            /** @description Itens da pagina, na ordem pedida em ordenar. */
+            dados: components["schemas"]["PreferenciaColunas"][];
+            paginacao: components["schemas"]["Paginacao"];
+        };
         /** @description Pagina de resultados de RedePermitida. */
         ListaRedePermitida: {
             /** @description Itens da pagina, na ordem pedida em ordenar. */
@@ -10885,6 +10922,103 @@ export interface components {
             recurso?: string;
             /** @description Quando verdadeira, todo exercicio da permissao gera registro de acesso a dado sensivel. */
             sensivel?: boolean;
+        };
+        /** @description Layout de colunas salvo pelo usuario, para um relatorio do catalogo ou para uma tela (grade) da interface -- e o que faz a configuracao do espelho de jornada persistir entre sessoes. RFC-015 (decidida em 30/07/2026). */
+        PreferenciaColunas: {
+            /**
+             * Format: date-time
+             * @description Instante da ultima atualizacao.
+             */
+            atualizadoEm?: string;
+            /**
+             * Format: uuid
+             * @description Usuario responsavel pela ultima atualizacao.
+             */
+            atualizadoPor?: string;
+            /** @description Chaves de coluna selecionadas, na ordem de exibicao. */
+            colunas?: string[];
+            /**
+             * Format: date-time
+             * @description Instante de criacao, atribuido pelo servidor.
+             */
+            criadoEm?: string;
+            /**
+             * Format: uuid
+             * @description Usuario que criou o registro.
+             */
+            criadoPor?: string;
+            /** @description Filtros salvos junto com o layout. */
+            filtros?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: uuid
+             * @description Identificador da preferencia.
+             */
+            id?: string;
+            /** @description Largura de cada coluna, em pixels, por chave. */
+            larguras?: {
+                [key: string]: unknown;
+            };
+            /** @description Nome da preferencia, unico por usuario e alvo. O padrao e "padrao". */
+            nome?: string;
+            /** @description Ordenacao de linhas salva junto com o layout. */
+            ordenacao?: {
+                [key: string]: unknown;
+            };
+            /** @description Verdadeiro quando esta e a preferencia aplicada automaticamente ao abrir a tela. */
+            padrao?: boolean;
+            /**
+             * Format: uuid
+             * @description Relatorio do catalogo ao qual a preferencia se aplica. Mutuamente exclusivo com tela.
+             */
+            relatorioDefinicaoId?: string;
+            /** @description Tela (grade) da interface a qual a preferencia se aplica. Mutuamente exclusivo com relatorioDefinicaoId. */
+            tela?: string;
+            /**
+             * Format: uuid
+             * @description Tenant dono do registro.
+             */
+            tenantId?: string;
+            /**
+             * Format: uuid
+             * @description Usuario dono da preferencia. Sempre o do sujeito autenticado.
+             */
+            usuarioId?: string;
+        };
+        /** @description Dados aceitos na criacao ou substituicao de PreferenciaColunas (RFC-015). Informe relatorioDefinicaoId OU tela, nunca os dois: mesma exclusividade da CHECK ck_preferencias_colunas_alvo. */
+        PreferenciaColunasCriar: {
+            /** @description Chaves de coluna selecionadas, na ordem de exibicao. */
+            colunas: string[];
+            /** @description Filtros salvos junto com o layout. */
+            filtros?: {
+                [key: string]: unknown;
+            };
+            /** @description Largura de cada coluna, em pixels, por chave. */
+            larguras?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Nome da preferencia, unico por usuario e alvo.
+             * @default padrao
+             */
+            nome: string;
+            /** @description Ordenacao de linhas salva junto com o layout. */
+            ordenacao?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Verdadeiro para tornar esta a preferencia aplicada automaticamente ao abrir a tela.
+             * @default false
+             */
+            padrao: boolean;
+            /**
+             * Format: uuid
+             * @description Relatorio do catalogo ao qual a preferencia se aplica. Mutuamente exclusivo com tela.
+             */
+            relatorioDefinicaoId?: string;
+            /** @description Tela (grade) da interface a qual a preferencia se aplica. Mutuamente exclusivo com relatorioDefinicaoId. */
+            tela?: string;
         };
         /** @description Corpo de erro no formato RFC 9457 (application/problem+json), estendido com o codigo estavel do catalogo. O campo codigo e o unico identificador estavel: title e detail sao texto e podem mudar sem aviso. Toda mensagem exibida ao usuario final deve ser derivada do codigo, nunca do texto. O catalogo completo, com causa provavel e acao sugerida por codigo, esta em packages/contracts/errors.yaml. */
         Problema: {
@@ -24616,6 +24750,118 @@ export interface operations {
             403: components["responses"]["Erro403"];
             404: components["responses"]["Erro404"];
             410: components["responses"]["Erro410"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    listarPreferenciasColunas: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parametro ordenar junto com um cursor resulta em PONTO-VAL-006.
+                 * @example eyJvIjoiY3JpYWRvRW0iLCJ2IjoiMjAyNi0wNy0yNVQwODowMDowMFoifQ
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /**
+                 * @description Quantidade de itens por pagina.
+                 * @example 50
+                 */
+                limite?: components["parameters"]["Limite"];
+                /**
+                 * @description Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada operacao.
+                 * @example criadoEm:desc
+                 */
+                ordenar?: components["parameters"]["Ordenar"];
+                /** @description Filtra pelas preferencias de um relatorio do catalogo. Mutuamente exclusivo com tela. */
+                relatorioDefinicaoId?: string;
+                /** @description Filtra pelas preferencias de uma tela (grade) da interface. Mutuamente exclusivo com relatorioDefinicaoId. */
+                tela?: string;
+            };
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de resultados. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaPreferenciaColunas"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    salvarPreferenciaColunas: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Corpo da requisicao (PreferenciaColunasCriar). */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferenciaColunasCriar"];
+            };
+        };
+        responses: {
+            /** @description Preferencia gravada. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferenciaColunas"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
             429: components["responses"]["Erro429"];
             500: components["responses"]["Erro500"];
             501: components["responses"]["Erro501"];

@@ -44,6 +44,21 @@ dependencies = [
     # (`COPY packages/contracts /contratos`); nao repetido aqui.
     "openpyxl>=3.1",
     # --- fim F2 ---
+    # --- F11 ---
+    # `worker/scheduler.py::verificar_agendamentos_relatorio` (T11/A3) calcula
+    # `proxima_execucao_em` a partir da expressao cron de
+    # `relatorio_agendamentos.cron` (por exemplo "0 8 1 * *"). `croniter` e a
+    # biblioteca padrao de mercado para isto em Python, pura (sem dependencia
+    # de sistema), e nenhuma alternativa ja esta no projeto.
+    "croniter>=2.0",
+    # O canal `webhook` de `relatorio_agendamentos` (`app.relatorios.entrega.
+    # webhook`, T11/A3) faz um POST HTTP simples de entrega -- nao a
+    # assinatura HMAC/retentativa/DLQ completa da tag `webhooks` (F13, fora
+    # de escopo). `apps/api` ja depende de `httpx` desde o andaime da Fase 0;
+    # so o worker ainda nao tinha consumidor. Mesma versao minima da API,
+    # para nao divergir.
+    "httpx>=0.27",
+    # --- fim F11 ---
 ]
 
 [project.optional-dependencies]
@@ -59,6 +74,10 @@ dev = [
     # --- F2 --- (stub de tipos para o mypy --strict de `importar_colaboradores`)
     "types-openpyxl>=3.1",
     # --- fim F2 ---
+    # --- F11 --- (stub de tipos para o mypy --strict de `worker.scheduler`/
+    # `app.relatorios.agendamentos`, que chamam `croniter`)
+    "types-croniter>=2.0",
+    # --- fim F11 ---
 ]
 
 # Descoberta automatica, nao lista estatica: uma lista manual fica
@@ -112,6 +131,15 @@ pretty = true
 
 [[tool.mypy.overrides]]
 module = ["arq.*", "redis.*"]
+ignore_missing_imports = true
+
+# F11/A3: `worker/tarefas/relatorios.py::_EscritorPdf` usa `reportlab`
+# diretamente (mesmo pacote que `apps/api` já trata assim, `apps/api/
+# pyproject.toml`, bloco F10) -- disponível no venv do worker porque
+# `apps/api` é instalado como biblioteca (ADR-009), mas sem stubs/py.typed
+# próprios, mesmo tratamento que `apps/api` já dá.
+[[tool.mypy.overrides]]
+module = ["reportlab.*"]
 ignore_missing_imports = true
 
 # ==================================================================
