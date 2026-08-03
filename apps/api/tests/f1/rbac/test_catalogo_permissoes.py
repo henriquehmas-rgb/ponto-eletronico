@@ -1,6 +1,12 @@
-"""Criterio de aceite 6.1: os 142 `x-permissao` do openapi.yaml existem em
+"""Criterio de aceite 6.1: os 144 `x-permissao` do openapi.yaml existem em
 `permissoes`, sem excecao (RFC-002 ja decidida: as 4 acoes antes bloqueadas
-pelo CHECK -- configurar/reabrir/ler_sensivel -- agora sao aceitas)."""
+pelo CHECK -- configurar/reabrir/ler_sensivel -- agora sao aceitas).
+
+Numero atualizado de 142 para 144 no fechamento da F13 (orquestrador,
+03/08/2026): duas permissoes novas, unicas, confirmadas por diff programatico
+contra o `openapi.yaml` da F12 (commit 5c3b18a) -- `admin.configurar`
+(GET/PUT /v1/admin/sso/provedores, RFC-018) e `api_clients.editar`
+(PUT/PATCH de cliente de API, RFC-016)."""
 
 from __future__ import annotations
 
@@ -24,9 +30,9 @@ def _permissoes_exigidas() -> set[str]:
     return exigidas
 
 
-def test_openapi_exige_142_permissoes() -> None:
+def test_openapi_exige_144_permissoes() -> None:
     """Trava o numero: se o contrato mudar, este teste avisa antes do resto."""
-    assert len(_permissoes_exigidas()) == 142
+    assert len(_permissoes_exigidas()) == 144
 
 
 async def test_todas_as_142_permissoes_existem_no_catalogo(

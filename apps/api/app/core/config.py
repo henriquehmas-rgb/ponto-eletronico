@@ -102,6 +102,28 @@ class Configuracao(BaseSettings):
     sentry_dsn: str = ""
     otel_exporter_otlp_endpoint: str = ""
 
+    # --- SSO -- OIDC (F13/A9, RFC-018/ADR-013) --------------------------------------
+    #: App OAuth/OIDC COMPARTILHADO da aplicacao (um par por provedor, nunca por
+    #: tenant -- ADR-013). A restricao por tenant e so a allowlist guardada em
+    #: `tenant_configuracoes` (`sso.google.dominios_permitidos`/`sso.entra_id.tenant_id`).
+    sso_google_client_id: str = ""
+    sso_google_client_secret: SecretStr = SecretStr("")
+    sso_entra_client_id: str = ""
+    sso_entra_client_secret: SecretStr = SecretStr("")
+    #: Chave simetrica (HS256) que assina o `state` anti-CSRF do fluxo OIDC
+    #: (`app.identidade.sso.oidc.estado`). Nao e o mesmo par RS256 do access
+    #: token: o `state` e curto (10 min) e so este processo precisa validá-lo.
+    sso_estado_chave_secreta: SecretStr = SecretStr("")
+
+    # --- SSO -- SAML 2.0 (F13/A10, RFC-018/ADR-013) ---------------------------------
+    #: Chave simetrica (HS256) que assina o RelayState do fluxo SAML
+    #: (`app.identidade.sso.saml.estado`). Mesma familia da chave OIDC acima
+    #: (curta, 5 min, so este processo valida), mas campo proprio: o RelayState
+    #: carrega tenant_id + o ID do AuthnRequest (correlacao InResponseTo), que o
+    #: `state` OIDC nao tem. Nunca e o certificado X.509 do IdP (esse e dado
+    #: publico do tenant, vive em `tenant_configuracoes`, nunca aqui).
+    sso_saml_estado_chave: SecretStr = SecretStr("")
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def lista_cors_origens(self) -> list[str]:

@@ -122,6 +122,14 @@ tags:
   description: 'Autenticacao de usuarios e de clientes de integracao: login, segundo fator, rotacao de
     refresh token com deteccao de reuso, reautenticacao para operacao sensivel, recuperacao de senha e
     emissao de token OAuth 2.0 client credentials.'
+- name: sso
+  description: 'Login federado (RFC-018/ADR-013): inicia e conclui o fluxo com o Identity Provider da
+    empresa cliente (Google Workspace, Microsoft Entra ID via OIDC; IdP proprio via SAML 2.0) e emite
+    a MESMA sessao que autenticar/renovarSessao (tag auth) ja emitem -- SSO e uma forma alternativa de
+    autenticar, nunca um mecanismo de sessao paralelo. Isolada da tag auth porque o protocolo e
+    heterogeneo (redirect HTML e, no caminho SAML, POST de formulario com XML assinado -- unica
+    excecao a JSON de todo o contrato) e nunca cria usuario novo no primeiro login: sempre vincula a um
+    usuarios ja existente.'
 - name: tenants
   description: 'Tenants do SaaS e suas configuracoes. Todo dado de dominio pertence a um tenant e vive
     sob Row Level Security no banco: nenhuma operacao atravessa a fronteira, e tentativa de acesso cross-tenant
@@ -902,6 +910,345 @@ paths:
       x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
         PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004,
         PONTO-VAL-011]
+  /v1/sso/{provedor}/iniciar:
+    get:
+      tags:
+      - sso
+      summary: Iniciar login federado
+      description: 'Redireciona o navegador ao Identity Provider (RFC-018/ADR-013). google e entra_id
+        usam o app OIDC compartilhado da aplicacao (client id/secret de AMBIENTE, nunca por tenant);
+        saml redireciona ao IdP proprio configurado pelo tenant em GET/PUT /v1/admin/sso/provedores. O
+        tenant e resolvido por tenant (query, para link direto sem cabecalho customizado) ou pelo
+        subdominio de acesso, mesma precedencia de X-Tenant > corpo > subdominio que autenticar ja usa.
+        401/403 nunca acontecem aqui: falha de credencial so e detectavel depois da volta do IdP, em
+        GET /v1/sso/{provedor}/callback.'
+      operationId: iniciarSso
+      security: []
+      parameters:
+      - name: provedor
+        in: path
+        required: true
+        description: Identity Provider alvo.
+        schema:
+          type: string
+          enum:
+          - google
+          - entra_id
+          - saml
+      - name: tenant
+        in: query
+        required: false
+        description: Slug ou UUID do tenant alvo, para acesso por link direto sem subdominio proprio
+          (mesmo papel de X-Tenant nas demais rotas de auth, adaptado a navegacao pura de link).
+        schema:
+          type: string
+          maxLength: 64
+      - name: vinculoHash
+        in: query
+        required: false
+        description: 'RFC-019: hash SHA-256 (hex) de um valor aleatorio gerado pelo navegador e guardado
+          em sessionStorage, embutido no state assinado e conferido de volta em GET /v1/sso/{provedor}/
+          callback (parametro vinculo) para impedir login-CSRF -- um state valido apresentado por um
+          navegador diferente do que iniciou o fluxo e rejeitado. Opcional no schema (Schemathesis explora
+          a operacao sem ele), exigido pelo roteador para google/entra_id (ausencia responde
+          PONTO-VAL-001); nao se aplica a saml, que ja tem RelayState/AuthnRequest.ID como equivalente.'
+        schema:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      x-idempotente: false
+      responses:
+        '302':
+          description: Redirecionamento ao Identity Provider (ou, para saml, ao endpoint de SSO do IdP
+            do tenant) com o pedido de autorizacao/AuthnRequest.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-INT-001, PONTO-INT-003, PONTO-INT-005, PONTO-RATE-001, PONTO-TEN-001, PONTO-TEN-003,
+        PONTO-VAL-001]
+  /v1/sso/{provedor}/callback:
+    get:
+      tags:
+      - sso
+      summary: Concluir login federado (OIDC)
+      description: 'Troca o code pelo id_token no provedor, valida assinatura/emissor/audiencia/nonce,
+        resolve a credenciais existente por (tenant_id, provedor_sso, identificador_externo) ou VINCULA
+        (nunca cria) um usuarios existente pelo e-mail da claim, e emite o MESMO par access/refresh que
+        autenticar/renovarSessao emitem. Restrito a google/entra_id -- SAML conclui por POST
+        /v1/sso/saml/acs, endpoint separado por exigir corpo de formulario, nao querystring. Chamado via
+        fetch pela pagina que recebe o redirecionamento do IdP, nunca por navegacao de documento
+        completa: a resposta e JSON, como o resto do contrato.'
+      operationId: callbackSso
+      security: []
+      parameters:
+      - name: provedor
+        in: path
+        required: true
+        description: Identity Provider que concluiu a autenticacao.
+        schema:
+          type: string
+          enum:
+          - google
+          - entra_id
+      - name: code
+        in: query
+        required: true
+        description: Authorization code emitido pelo provedor.
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        description: Valor opaco emitido por GET /v1/sso/{provedor}/iniciar. Carrega o tenant e o nonce
+          anti-CSRF/anti-replay; expira em 10 minutos.
+        schema:
+          type: string
+      - name: vinculo
+        in: query
+        required: false
+        description: 'RFC-019: valor bruto (nao o hash) do mesmo vinculo de navegador enviado como
+          vinculoHash a GET /v1/sso/{provedor}/iniciar -- confere contra a claim embutida no state.
+          Opcional no schema, exigido pelo roteador (ausencia ou divergencia responde PONTO-AUTH-004,
+          mesmo codigo de state invalido -- nao distingue qual das duas checagens falhou).'
+        schema:
+          type: string
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      x-idempotente: false
+      responses:
+        '200':
+          description: Login federado concluido.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResposta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-001, PONTO-AUTH-004, PONTO-AUTH-010, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005,
+        PONTO-RATE-001, PONTO-TEN-001, PONTO-TEN-003, PONTO-VAL-001]
+  /v1/admin/sso/provedores:
+    get:
+      tags:
+      - sso
+      summary: Obter configuracao de SSO do tenant
+      description: 'Allowlist por tenant dos provedores federados (RFC-018/ADR-013 secao 5): dominios
+        de e-mail aceitos para google, tenant_id/issuer aceito para entra_id, e o IdP proprio (entityId/
+        ssoUrl/certificado X.509) para saml. Nenhum destes campos e segredo -- client id/secret do app
+        OIDC compartilhado ficam em variavel de ambiente, nunca aqui.'
+      operationId: obterConfiguracaoSso
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - admin:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      x-permissao: admin.configurar
+      x-escopo: admin:ler
+      x-idempotente: false
+      responses:
+        '200':
+          description: Configuracao corrente.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfiguracaoSso'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004,
+        PONTO-VAL-011]
+    put:
+      tags:
+      - sso
+      summary: Atualizar configuracao de SSO do tenant
+      description: 'Atualizacao parcial (upsert por chave): campos omitidos permanecem com o valor
+        anterior. Mesma restricao de x-permissao da leitura (admin.configurar).'
+      operationId: atualizarConfiguracaoSso
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - admin:escrever
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/CabecalhoIdempotencia'
+      x-permissao: admin.configurar
+      x-escopo: admin:escrever
+      x-idempotente: true
+      requestBody:
+        required: true
+        description: Corpo da requisicao (ConfiguracaoSso).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfiguracaoSso'
+      responses:
+        '200':
+          description: Configuracao atualizada.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfiguracaoSso'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004,
+        PONTO-VAL-001, PONTO-VAL-011]
+  /v1/sso/saml/acs:
+    post:
+      tags:
+      - sso
+      summary: Concluir login federado (SAML)
+      description: 'Assertion Consumer Service (RFC-018/ADR-013, T22/A10): recebe o SAMLResponse do
+        Identity Provider por POST de formulario -- content: application/x-www-form-urlencoded, a UNICA
+        excecao a JSON de todo o contrato, exigida pelo perfil HTTP-POST do SAML 2.0 (mesma excecao ja
+        documentada em iniciarSso/callbackSso para o protocolo heterogeneo da tag sso). Valida a
+        assinatura da asserção contra o certificado X.509 configurado pelo tenant (samlCertificadoX509
+        de GET/PUT /v1/admin/sso/provedores), a janela de validade (Conditions) e a audiencia; asserção
+        sem assinatura ou com assinatura que nao confere e sempre rejeitada (PONTO-AUTH-004), nunca
+        aceita em "modo de compatibilidade". Resolve credenciais existente por (tenant_id,
+        provedor_sso=saml, identificador_externo=NameID) ou VINCULA (nunca cria) um usuarios existente
+        pelo mesmo NameID tratado como e-mail, e emite o MESMO par access/refresh que
+        autenticar/renovarSessao emitem -- SSO nunca cria usuario novo no primeiro login (mesma decisao
+        de escopo de callbackSso). RelayState carrega o tenant e o ID do AuthnRequest (correlacao
+        InResponseTo), assinado por esta API em GET /v1/sso/{provedor}/iniciar com provedor=saml -- nunca
+        gerado nem confiavel vindo de fora, expira em 10 minutos. Sem Idempotency-Key: quem chama este
+        endpoint e o Identity Provider de terceiro, que nao envia cabecalhos proprios da SEEG -- excecao
+        documentada, mesmo espirito da excecao de content-type acima. Responde 302 para
+        {webBaseUrl}/sso/concluir com os tokens de sessao no FRAGMENTO da URL (nunca na query string
+        nem em log de servidor, pois fragmento nunca trafega ate o servidor) para o SPA capturar por
+        JavaScript.'
+      operationId: concluirLoginSaml
+      security: []
+      requestBody:
+        required: true
+        description: Formulario HTTP-POST do IdP (perfil SAML 2.0 HTTP-POST binding).
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+              - SAMLResponse
+              properties:
+                SAMLResponse:
+                  type: string
+                  description: Resposta SAML assinada pelo IdP, codificada em base64 (sem deflate, perfil
+                    POST).
+                RelayState:
+                  type: string
+                  description: Estado opaco emitido por iniciarSso (provedor=saml), ecoado pelo IdP sem
+                    alteracao.
+      x-idempotente: false
+      responses:
+        '302':
+          description: Redirecionamento ao SPA com os tokens de sessao no fragmento da URL.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-001, PONTO-AUTH-004, PONTO-AUTH-010, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005,
+        PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-001, PONTO-TEN-003, PONTO-VAL-001]
   /v1/tenants/atual:
     get:
       tags:
@@ -16353,6 +16700,84 @@ paths:
         PONTO-IDEM-002, PONTO-IDEM-003, PONTO-INT-001, PONTO-INT-003, PONTO-INT-004, PONTO-INT-005, PONTO-PER-001,
         PONTO-PERM-001, PONTO-PERM-002, PONTO-PERM-004, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002,
         PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-001, PONTO-VAL-007, PONTO-VAL-011]
+  /v1/integracoes/folha/{integracaoId}/exportacoes/{processamentoId}:
+    get:
+      tags:
+      - integracoes
+      summary: Obter exportacao de folha
+      description: 'Devolve o estado do processamento assincrono disparado por exportarFolha, com progresso
+        e, quando concluido, a URL temporaria de download do arquivo gerado. Processamento expirado responde
+        PONTO-REC-002: solicite a exportacao novamente. Adicionado pela RFC-017 (2026-08-03): replica byte
+        a byte o padrao de resposta/erro de obterExecucaoRelatorio (tag relatorios) para o mesmo problema
+        (consulta de processamento assincrono por item unico).'
+      operationId: obterExportacaoFolha
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - integracoes:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - name: integracaoId
+        in: path
+        required: true
+        description: Identificador da integracao.
+        schema:
+          type: string
+          format: uuid
+      - name: processamentoId
+        in: path
+        required: true
+        description: Identificador do processamento, devolvido por exportarFolha.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: integracoes.ler
+      x-escopo: integracoes:ler
+      x-idempotente: false
+      responses:
+        '200':
+          description: Operacao concluida.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessamentoAssincrono'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploProcessamentoAssincrono'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '410':
+          $ref: '#/components/responses/Erro410'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-PERM-002, PONTO-RATE-001, PONTO-REC-001, PONTO-REC-002,
+        PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-011]
   /v1/importacoes:
     get:
       tags:
@@ -16538,6 +16963,74 @@ paths:
         PONTO-IDEM-002, PONTO-IDEM-003, PONTO-IMP-001, PONTO-IMP-002, PONTO-IMP-003, PONTO-INT-001, PONTO-INT-003,
         PONTO-INT-005, PONTO-PERM-001, PONTO-PERM-004, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003,
         PONTO-TEN-004, PONTO-VAL-001, PONTO-VAL-008, PONTO-VAL-009, PONTO-VAL-011]
+  /v1/importacoes/{importacaoId}:
+    get:
+      tags:
+      - integracoes
+      summary: Obter importacao
+      description: >-
+        Devolve o estado da importacao, incluindo o relatorio de erros linha a linha quando disponivel.
+        RFC-017: lacuna de contrato fechada pelo orquestrador em 03/08/2026 -- ate entao nao havia como
+        consultar por item unico o desfecho de uma importacao criada por POST /v1/importacoes.
+      operationId: obterImportacao
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - integracoes:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - name: importacaoId
+        in: path
+        required: true
+        description: Identificador da importacao.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: importacoes.ler
+      x-escopo: integracoes:ler
+      x-idempotente: false
+      responses:
+        '200':
+          description: Operacao concluida.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Importacao'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploImportacao'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003,
+        PONTO-TEN-004, PONTO-VAL-011]
   /v1/auditoria:
     get:
       tags:
@@ -18062,6 +18555,229 @@ paths:
         PONTO-IDEM-001, PONTO-IDEM-002, PONTO-IDEM-003, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001,
         PONTO-PERM-003, PONTO-PERM-004, PONTO-RATE-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-001,
         PONTO-VAL-011]
+  /v1/admin/api-clients/{apiClientId}/chaves:
+    get:
+      tags:
+      - admin
+      summary: Listar chaves de API do cliente
+      description: 'Lista as chaves de API emitidas para o ApiClient (RFC-016). Nunca devolve `hash` nem a
+        chave em claro -- so a resposta de `criarApiKey` mostra o valor, uma unica vez.'
+      operationId: listarApiKeys
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - admin:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limite'
+      - $ref: '#/components/parameters/Ordenar'
+      - name: apiClientId
+        in: path
+        required: true
+        description: Identificador do cliente de API dono das chaves.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: api_clients.ler
+      x-escopo: admin:ler
+      x-idempotente: false
+      responses:
+        '200':
+          description: Pagina de resultados.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaApiKey'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploListaApiKey'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003,
+        PONTO-TEN-004, PONTO-VAL-005, PONTO-VAL-006, PONTO-VAL-011]
+    post:
+      tags:
+      - admin
+      summary: Criar chave de API
+      description: 'Emite uma nova chave de API para o cliente (RFC-016). A chave em claro aparece UMA UNICA
+        VEZ nesta resposta, no campo `chave`: nao ha como recupera-la depois, apenas revogar e criar outra.
+        `ambiente` da chave nunca excede o `ambiente` do ApiClient pai (chave de cliente sandbox nao pode
+        ser producao).'
+      operationId: criarApiKey
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - admin:escrever
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/CabecalhoIdempotencia'
+      - name: apiClientId
+        in: path
+        required: true
+        description: Identificador do cliente de API dono da chave nova.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: api_clients.criar
+      x-escopo: admin:escrever
+      x-idempotente: true
+      requestBody:
+        required: true
+        description: Corpo da requisicao (ApiKeyCriar).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCriar'
+            examples:
+              padrao:
+                $ref: '#/components/examples/ExemploApiKeyCriar'
+      responses:
+        '201':
+          description: 'Chave criada. Guarde o valor de `chave`: ele nao sera exibido novamente.'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCriada'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploApiKeyCriada'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '409':
+          $ref: '#/components/responses/Erro409'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-CONF-001,
+        PONTO-IDEM-001, PONTO-IDEM-002, PONTO-IDEM-003, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001,
+        PONTO-PERM-003, PONTO-PERM-004, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004,
+        PONTO-VAL-001, PONTO-VAL-011]
+  /v1/admin/api-clients/{apiClientId}/chaves/{chaveId}:
+    delete:
+      tags:
+      - admin
+      summary: Revogar chave de API
+      description: Revoga a chave (RFC-016). Marca `revogadaEm`/`motivoRevogacao`; idempotente por natureza,
+        revogar uma chave ja revogada continua respondendo 204.
+      operationId: revogarApiKey
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - admin:escrever
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/CabecalhoIdempotencia'
+      - name: apiClientId
+        in: path
+        required: true
+        description: Identificador do cliente de API dono da chave.
+        schema:
+          type: string
+          format: uuid
+      - name: chaveId
+        in: path
+        required: true
+        description: Identificador da chave de API a revogar.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: api_clients.editar
+      x-escopo: admin:escrever
+      x-idempotente: true
+      responses:
+        '204':
+          description: Chave revogada.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-IDEM-001,
+        PONTO-IDEM-002, PONTO-IDEM-003, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005, PONTO-PERM-001, PONTO-RATE-001,
+        PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-001, PONTO-VAL-011]
 webhooks:
   marcacaoCriada:
     post:
@@ -26285,6 +27001,48 @@ components:
         clientSecret: cs_prd_exemplo_troque_este_valor
         apiKey: pk_prd_exemplo_troque_este_valor
         apiKeyPrefixo: pk_prd_a1b2
+    ExemploListaApiKey:
+      summary: Resposta de exemplo para ListaApiKey.
+      value:
+        dados:
+        - id: 3a9c7e21-5b4d-4f8a-9c1e-7d2b8a3f6c05
+          tenantId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+          apiClientId: 5b1e08d3-7f42-4a96-8c05-3d9b2e7a1f68
+          prefixo: pk_prd_a1b2c3d4
+          rotulo: Integracao de folha - producao
+          ambiente: producao
+          escopos:
+          - marcacoes:ler
+          - colaboradores:ler
+          criadoEm: '2026-07-25T08:02:13-03:00'
+        paginacao:
+          proximoCursor: null
+          temMais: false
+          limite: 50
+          total: 1
+    ExemploApiKeyCriar:
+      summary: Requisicao de exemplo para ApiKeyCriar.
+      value:
+        rotulo: Integracao de folha - producao
+        ambiente: producao
+        escopos:
+        - marcacoes:ler
+        - colaboradores:ler
+    ExemploApiKeyCriada:
+      summary: Resposta de exemplo para ApiKeyCriada.
+      value:
+        apiKey:
+          id: 3a9c7e21-5b4d-4f8a-9c1e-7d2b8a3f6c05
+          tenantId: 9c7a2f18-4b3d-4e6a-8f21-5d0c7b1a9e42
+          apiClientId: 5b1e08d3-7f42-4a96-8c05-3d9b2e7a1f68
+          prefixo: pk_prd_a1b2c3d4
+          rotulo: Integracao de folha - producao
+          ambiente: producao
+          escopos:
+          - marcacoes:ler
+          - colaboradores:ler
+          criadoEm: '2026-07-25T08:02:13-03:00'
+        chave: kQ2vX9wZp3mN7bR1sT5uY8aC4dF6gH0jK2lM4nO6pQ8rS_troque-este-valor
   schemas:
     Tenant:
       type: object
@@ -38564,6 +39322,111 @@ components:
         apiKeyPrefixo:
           type: string
           description: Prefixo da chave, exibido na interface para identifica-la sem expo-la.
+    ApiKey:
+      type: object
+      description: Chave de API para integracoes simples que nao justificam o fluxo OAuth completo (RFC-016).
+        Guardada por hash; nunca devolve o valor em claro fora da resposta de criarApiKey.
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador da chave.
+        tenantId:
+          type: string
+          format: uuid
+          description: Tenant dono da chave.
+        apiClientId:
+          type: string
+          format: uuid
+          description: Cliente de API dono da chave.
+        prefixo:
+          type: string
+          description: Primeiros caracteres da chave, exibidos na interface, por exemplo pk_prd_a1b2.
+        rotulo:
+          type: string
+          description: Rotulo livre para o usuario identificar o proposito da chave.
+        ambiente:
+          type: string
+          enum:
+          - sandbox
+          - producao
+          description: Ambiente da chave. Nunca excede o ambiente do ApiClient pai.
+        escopos:
+          type: array
+          items:
+            type: string
+          description: Escopos OAuth concedidos a esta chave.
+        expiraEm:
+          type: string
+          format: date-time
+          description: Prazo de validade da chave. Ausente quando a chave nao expira.
+        ultimoUsoEm:
+          type: string
+          format: date-time
+          description: Instante do ultimo uso bem-sucedido da chave.
+        revogadaEm:
+          type: string
+          format: date-time
+          description: Instante da revogacao. Ausente enquanto a chave esta ativa.
+        motivoRevogacao:
+          type: string
+          description: Motivo informado na revogacao.
+        criadoEm:
+          type: string
+          format: date-time
+          description: Instante de criacao, atribuido pelo servidor.
+        criadoPor:
+          type: string
+          format: uuid
+          description: Usuario que criou o registro.
+        atualizadoEm:
+          type: string
+          format: date-time
+          description: Instante da ultima atualizacao.
+        atualizadoPor:
+          type: string
+          format: uuid
+          description: Usuario responsavel pela ultima atualizacao.
+    ApiKeyCriar:
+      type: object
+      description: Dados aceitos na criacao de ApiKey (RFC-016).
+      properties:
+        rotulo:
+          type: string
+          description: Rotulo livre para o usuario identificar o proposito da chave.
+        ambiente:
+          type: string
+          enum:
+          - sandbox
+          - producao
+          description: Ambiente da chave. Quando ausente, herda o ambiente do ApiClient pai. Nunca pode
+            exceder o ambiente do ApiClient pai (chave de cliente sandbox nao pode ser producao).
+        escopos:
+          type: array
+          items:
+            type: string
+          description: Escopos OAuth concedidos a esta chave. Nao pode exceder os escopos do ApiClient pai.
+        expiraEm:
+          type: string
+          format: date-time
+          description: Prazo de validade da chave. Quando ausente, a chave nao expira.
+      required:
+      - escopos
+    ApiKeyCriada:
+      type: object
+      description: Chave de API recem-criada (RFC-016). O valor em claro aparece UMA UNICA VEZ nesta resposta
+        e nao pode ser recuperado depois.
+      properties:
+        apiKey:
+          allOf:
+          - $ref: '#/components/schemas/ApiKey'
+          description: Metadados da chave criada.
+        chave:
+          type: string
+          description: 'Valor da chave em claro (token opaco), a ser enviado no cabecalho X-API-Key. O
+            prefixo pk_<ambiente>_<...> exibido em apiKey.prefixo e um identificador de exibicao separado,
+            nao um literal dentro deste valor. Guarde-o agora: nao ha como consulta-lo novamente, apenas
+            revogar e criar outra.'
     Saude:
       type: object
       description: Estado operacional da API e de suas dependencias.
@@ -39749,3 +40612,51 @@ components:
             $ref: '#/components/schemas/ApiClient'
         paginacao:
           $ref: '#/components/schemas/Paginacao'
+    ListaApiKey:
+      type: object
+      description: Pagina de resultados de ApiKey (RFC-016).
+      required:
+      - dados
+      - paginacao
+      properties:
+        dados:
+          type: array
+          description: Itens da pagina, na ordem pedida em ordenar.
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+    ConfiguracaoSso:
+      type: object
+      description: 'Configuracao de confianca de SSO por tenant (RFC-018/ADR-013 secao 5, GET/PUT
+        /v1/admin/sso/provedores). Nenhum campo aqui e segredo: client id/secret do app OIDC
+        compartilhado (google/entra_id) vivem em variavel de ambiente da aplicacao, nunca por tenant;
+        os tres campos de saml sao dado publico (um certificado X.509 de assinatura e chave publica).'
+      properties:
+        googleDominiosPermitidos:
+          type: array
+          description: Dominios de e-mail do Google Workspace aceitos para login federado neste tenant.
+            Lista vazia ou ausente desabilita o provedor google para o tenant.
+          items:
+            type: string
+          example:
+          - seeg.com.br
+        entraIdTenantId:
+          type: string
+          nullable: true
+          description: tenant_id (GUID) do Microsoft Entra ID aceito para este tenant. Ausente desabilita
+            o provedor entra_id para o tenant.
+          example: 72f988bf-86f1-41af-91ab-2d7cd011db47
+        samlEntityId:
+          type: string
+          nullable: true
+          description: entityId do Identity Provider SAML 2.0 proprio do tenant.
+        samlSsoUrl:
+          type: string
+          nullable: true
+          description: URL do SSO Service do Identity Provider SAML 2.0 proprio do tenant.
+        samlCertificadoX509:
+          type: string
+          nullable: true
+          description: Certificado X.509 (PEM) usado para validar a assinatura das asserções SAML deste
+            tenant.

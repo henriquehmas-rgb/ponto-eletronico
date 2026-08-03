@@ -34,6 +34,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/api-clients/{apiClientId}/chaves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar chaves de API do cliente
+         * @description Lista as chaves de API emitidas para o ApiClient (RFC-016). Nunca devolve `hash` nem a chave em claro -- so a resposta de `criarApiKey` mostra o valor, uma unica vez.
+         */
+        get: operations["listarApiKeys"];
+        put?: never;
+        /**
+         * Criar chave de API
+         * @description Emite uma nova chave de API para o cliente (RFC-016). A chave em claro aparece UMA UNICA VEZ nesta resposta, no campo `chave`: nao ha como recupera-la depois, apenas revogar e criar outra. `ambiente` da chave nunca excede o `ambiente` do ApiClient pai (chave de cliente sandbox nao pode ser producao).
+         */
+        post: operations["criarApiKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/api-clients/{apiClientId}/chaves/{chaveId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revogar chave de API
+         * @description Revoga a chave (RFC-016). Marca `revogadaEm`/`motivoRevogacao`; idempotente por natureza, revogar uma chave ja revogada continua respondendo 204.
+         */
+        delete: operations["revogarApiKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/perfis": {
         parameters: {
             query?: never;
@@ -91,6 +135,30 @@ export interface paths {
          */
         get: operations["obterSaude"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/sso/provedores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obter configuracao de SSO do tenant
+         * @description Allowlist por tenant dos provedores federados (RFC-018/ADR-013 secao 5): dominios de e-mail aceitos para google, tenant_id/issuer aceito para entra_id, e o IdP proprio (entityId/ ssoUrl/certificado X.509) para saml. Nenhum destes campos e segredo -- client id/secret do app OIDC compartilhado ficam em variavel de ambiente, nunca aqui.
+         */
+        get: operations["obterConfiguracaoSso"];
+        /**
+         * Atualizar configuracao de SSO do tenant
+         * @description Atualizacao parcial (upsert por chave): campos omitidos permanecem com o valor anterior. Mesma restricao de x-permissao da leitura (admin.configurar).
+         */
+        put: operations["atualizarConfiguracaoSso"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1944,6 +2012,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/importacoes/{importacaoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obter importacao
+         * @description Devolve o estado da importacao, incluindo o relatorio de erros linha a linha quando disponivel. RFC-017: lacuna de contrato fechada pelo orquestrador em 03/08/2026 -- ate entao nao havia como consultar por item unico o desfecho de uma importacao criada por POST /v1/importacoes.
+         */
+        get: operations["obterImportacao"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/integracoes/folha": {
         parameters: {
             query?: never;
@@ -1962,6 +2050,26 @@ export interface paths {
          * @description Configura a exportacao para um sistema de folha. mapeamentoRubricas traduz os codigos dos componentes de apuracao para as rubricas do parceiro; sem mapeamento, a exportacao sai com os codigos internos e o parceiro nao consome.
          */
         post: operations["criarIntegracaoFolha"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integracoes/folha/{integracaoId}/exportacoes/{processamentoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obter exportacao de folha
+         * @description Devolve o estado do processamento assincrono disparado por exportarFolha, com progresso e, quando concluido, a URL temporaria de download do arquivo gerado. Processamento expirado responde PONTO-REC-002: solicite a exportacao novamente. Adicionado pela RFC-017 (2026-08-03): replica byte a byte o padrao de resposta/erro de obterExecucaoRelatorio (tag relatorios) para o mesmo problema (consulta de processamento assincrono por item unico).
+         */
+        get: operations["obterExportacaoFolha"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2532,6 +2640,66 @@ export interface paths {
          * @description Cancela um pedido ainda nao concluido. O solicitante cancela o proprio pedido; RH e administrador cancelam qualquer um dentro do escopo, sempre com justificativa registrada.
          */
         post: operations["cancelarSolicitacao"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sso/{provedor}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Concluir login federado (OIDC)
+         * @description Troca o code pelo id_token no provedor, valida assinatura/emissor/audiencia/nonce, resolve a credenciais existente por (tenant_id, provedor_sso, identificador_externo) ou VINCULA (nunca cria) um usuarios existente pelo e-mail da claim, e emite o MESMO par access/refresh que autenticar/renovarSessao emitem. Restrito a google/entra_id -- SAML conclui por POST /v1/sso/saml/acs, endpoint separado por exigir corpo de formulario, nao querystring. Chamado via fetch pela pagina que recebe o redirecionamento do IdP, nunca por navegacao de documento completa: a resposta e JSON, como o resto do contrato.
+         */
+        get: operations["callbackSso"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sso/{provedor}/iniciar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Iniciar login federado
+         * @description Redireciona o navegador ao Identity Provider (RFC-018/ADR-013). google e entra_id usam o app OIDC compartilhado da aplicacao (client id/secret de AMBIENTE, nunca por tenant); saml redireciona ao IdP proprio configurado pelo tenant em GET/PUT /v1/admin/sso/provedores. O tenant e resolvido por tenant (query, para link direto sem cabecalho customizado) ou pelo subdominio de acesso, mesma precedencia de X-Tenant > corpo > subdominio que autenticar ja usa. 401/403 nunca acontecem aqui: falha de credencial so e detectavel depois da volta do IdP, em GET /v1/sso/{provedor}/callback.
+         */
+        get: operations["iniciarSso"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sso/saml/acs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Concluir login federado (SAML)
+         * @description Assertion Consumer Service (RFC-018/ADR-013, T22/A10): recebe o SAMLResponse do Identity Provider por POST de formulario -- content: application/x-www-form-urlencoded, a UNICA excecao a JSON de todo o contrato, exigida pelo perfil HTTP-POST do SAML 2.0 (mesma excecao ja documentada em iniciarSso/callbackSso para o protocolo heterogeneo da tag sso). Valida a assinatura da asserção contra o certificado X.509 configurado pelo tenant (samlCertificadoX509 de GET/PUT /v1/admin/sso/provedores), a janela de validade (Conditions) e a audiencia; asserção sem assinatura ou com assinatura que nao confere e sempre rejeitada (PONTO-AUTH-004), nunca aceita em "modo de compatibilidade". Resolve credenciais existente por (tenant_id, provedor_sso=saml, identificador_externo=NameID) ou VINCULA (nunca cria) um usuarios existente pelo mesmo NameID tratado como e-mail, e emite o MESMO par access/refresh que autenticar/renovarSessao emitem -- SSO nunca cria usuario novo no primeiro login (mesma decisao de escopo de callbackSso). RelayState carrega o tenant e o ID do AuthnRequest (correlacao InResponseTo), assinado por esta API em GET /v1/sso/{provedor}/iniciar com provedor=saml -- nunca gerado nem confiavel vindo de fora, expira em 10 minutos. Sem Idempotency-Key: quem chama este endpoint e o Identity Provider de terceiro, que nao envia cabecalhos proprios da SEEG -- excecao documentada, mesmo espirito da excecao de content-type acima. Responde 302 para {webBaseUrl}/sso/concluir com os tokens de sessao no FRAGMENTO da URL (nunca na query string nem em log de servidor, pois fragmento nunca trafega ate o servidor) para o SPA capturar por JavaScript.
+         */
+        post: operations["concluirLoginSaml"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4551,6 +4719,96 @@ export interface components {
              * @enum {string}
              */
             tipo?: "confidencial" | "publico" | "maquina";
+        };
+        /** @description Chave de API para integracoes simples que nao justificam o fluxo OAuth completo (RFC-016). Guardada por hash; nunca devolve o valor em claro fora da resposta de criarApiKey. */
+        ApiKey: {
+            /**
+             * @description Ambiente da chave. Nunca excede o ambiente do ApiClient pai.
+             * @enum {string}
+             */
+            ambiente?: "sandbox" | "producao";
+            /**
+             * Format: uuid
+             * @description Cliente de API dono da chave.
+             */
+            apiClientId?: string;
+            /**
+             * Format: date-time
+             * @description Instante da ultima atualizacao.
+             */
+            atualizadoEm?: string;
+            /**
+             * Format: uuid
+             * @description Usuario responsavel pela ultima atualizacao.
+             */
+            atualizadoPor?: string;
+            /**
+             * Format: date-time
+             * @description Instante de criacao, atribuido pelo servidor.
+             */
+            criadoEm?: string;
+            /**
+             * Format: uuid
+             * @description Usuario que criou o registro.
+             */
+            criadoPor?: string;
+            /** @description Escopos OAuth concedidos a esta chave. */
+            escopos?: string[];
+            /**
+             * Format: date-time
+             * @description Prazo de validade da chave. Ausente quando a chave nao expira.
+             */
+            expiraEm?: string;
+            /**
+             * Format: uuid
+             * @description Identificador da chave.
+             */
+            id?: string;
+            /** @description Motivo informado na revogacao. */
+            motivoRevogacao?: string;
+            /** @description Primeiros caracteres da chave, exibidos na interface, por exemplo pk_prd_a1b2. */
+            prefixo?: string;
+            /**
+             * Format: date-time
+             * @description Instante da revogacao. Ausente enquanto a chave esta ativa.
+             */
+            revogadaEm?: string;
+            /** @description Rotulo livre para o usuario identificar o proposito da chave. */
+            rotulo?: string;
+            /**
+             * Format: uuid
+             * @description Tenant dono da chave.
+             */
+            tenantId?: string;
+            /**
+             * Format: date-time
+             * @description Instante do ultimo uso bem-sucedido da chave.
+             */
+            ultimoUsoEm?: string;
+        };
+        /** @description Chave de API recem-criada (RFC-016). O valor em claro aparece UMA UNICA VEZ nesta resposta e nao pode ser recuperado depois. */
+        ApiKeyCriada: {
+            /** @description Metadados da chave criada. */
+            apiKey?: components["schemas"]["ApiKey"];
+            /** @description Valor da chave em claro (token opaco), a ser enviado no cabecalho X-API-Key. O prefixo pk_<ambiente>_<...> exibido em apiKey.prefixo e um identificador de exibicao separado, nao um literal dentro deste valor. Guarde-o agora: nao ha como consulta-lo novamente, apenas revogar e criar outra. */
+            chave?: string;
+        };
+        /** @description Dados aceitos na criacao de ApiKey (RFC-016). */
+        ApiKeyCriar: {
+            /**
+             * @description Ambiente da chave. Quando ausente, herda o ambiente do ApiClient pai. Nunca pode exceder o ambiente do ApiClient pai (chave de cliente sandbox nao pode ser producao).
+             * @enum {string}
+             */
+            ambiente?: "sandbox" | "producao";
+            /** @description Escopos OAuth concedidos a esta chave. Nao pode exceder os escopos do ApiClient pai. */
+            escopos: string[];
+            /**
+             * Format: date-time
+             * @description Prazo de validade da chave. Quando ausente, a chave nao expira.
+             */
+            expiraEm?: string;
+            /** @description Rotulo livre para o usuario identificar o proposito da chave. */
+            rotulo?: string;
         };
         /** @description Uma etapa da cadeia de uma solicitacao. Guarda quem decidiu, quando, de onde e se decidiu por delegacao. */
         Aprovacao: {
@@ -6636,6 +6894,27 @@ export interface components {
              * @description Dias apurados no escopo.
              */
             totalDias?: number;
+        };
+        /** @description Configuracao de confianca de SSO por tenant (RFC-018/ADR-013 secao 5, GET/PUT /v1/admin/sso/provedores). Nenhum campo aqui e segredo: client id/secret do app OIDC compartilhado (google/entra_id) vivem em variavel de ambiente da aplicacao, nunca por tenant; os tres campos de saml sao dado publico (um certificado X.509 de assinatura e chave publica). */
+        ConfiguracaoSso: {
+            /**
+             * @description tenant_id (GUID) do Microsoft Entra ID aceito para este tenant. Ausente desabilita o provedor entra_id para o tenant.
+             * @example 72f988bf-86f1-41af-91ab-2d7cd011db47
+             */
+            entraIdTenantId?: string | null;
+            /**
+             * @description Dominios de e-mail do Google Workspace aceitos para login federado neste tenant. Lista vazia ou ausente desabilita o provedor google para o tenant.
+             * @example [
+             *       "seeg.com.br"
+             *     ]
+             */
+            googleDominiosPermitidos?: string[];
+            /** @description Certificado X.509 (PEM) usado para validar a assinatura das asserções SAML deste tenant. */
+            samlCertificadoX509?: string | null;
+            /** @description entityId do Identity Provider SAML 2.0 proprio do tenant. */
+            samlEntityId?: string | null;
+            /** @description URL do SSO Service do Identity Provider SAML 2.0 proprio do tenant. */
+            samlSsoUrl?: string | null;
         };
         /** @description Consentimento LGPD versionado. O registro do ponto se apoia em obrigacao legal, mas a BIOMETRIA exige consentimento especifico. */
         Consentimento: {
@@ -9737,6 +10016,12 @@ export interface components {
         ListaApiClient: {
             /** @description Itens da pagina, na ordem pedida em ordenar. */
             dados: components["schemas"]["ApiClient"][];
+            paginacao: components["schemas"]["Paginacao"];
+        };
+        /** @description Pagina de resultados de ApiKey (RFC-016). */
+        ListaApiKey: {
+            /** @description Itens da pagina, na ordem pedida em ordenar. */
+            dados: components["schemas"]["ApiKey"][];
             paginacao: components["schemas"]["Paginacao"];
         };
         /** @description Pagina de resultados de Aprovacao. */
@@ -15406,6 +15691,182 @@ export interface operations {
             503: components["responses"]["Erro503"];
         };
     };
+    listarApiKeys: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parametro ordenar junto com um cursor resulta em PONTO-VAL-006.
+                 * @example eyJvIjoiY3JpYWRvRW0iLCJ2IjoiMjAyNi0wNy0yNVQwODowMDowMFoifQ
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /**
+                 * @description Quantidade de itens por pagina.
+                 * @example 50
+                 */
+                limite?: components["parameters"]["Limite"];
+                /**
+                 * @description Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada operacao.
+                 * @example criadoEm:desc
+                 */
+                ordenar?: components["parameters"]["Ordenar"];
+            };
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador do cliente de API dono das chaves. */
+                apiClientId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de resultados. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaApiKey"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    criarApiKey: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devolve a resposta original e Idempotency-Replayed: true. Mesma chave com corpo diferente resulta em PONTO-IDEM-002.
+                 * @example 01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "Idempotency-Key": components["parameters"]["CabecalhoIdempotencia"];
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador do cliente de API dono da chave nova. */
+                apiClientId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Corpo da requisicao (ApiKeyCriar). */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyCriar"];
+            };
+        };
+        responses: {
+            /** @description Chave criada. Guarde o valor de `chave`: ele nao sera exibido novamente. */
+            201: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    Location: components["headers"]["Location"];
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyCriada"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            409: components["responses"]["Erro409"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    revogarApiKey: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devolve a resposta original e Idempotency-Replayed: true. Mesma chave com corpo diferente resulta em PONTO-IDEM-002.
+                 * @example 01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "Idempotency-Key": components["parameters"]["CabecalhoIdempotencia"];
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador do cliente de API dono da chave. */
+                apiClientId: string;
+                /** @description Identificador da chave de API a revogar. */
+                chaveId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chave revogada. */
+            204: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
     listarPerfis: {
         parameters: {
             query?: {
@@ -15627,6 +16088,103 @@ export interface operations {
                     "application/json": components["schemas"]["Saude"];
                 };
             };
+            503: components["responses"]["Erro503"];
+        };
+    };
+    obterConfiguracaoSso: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuracao corrente. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracaoSso"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    atualizarConfiguracaoSso: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devolve a resposta original e Idempotency-Replayed: true. Mesma chave com corpo diferente resulta em PONTO-IDEM-002.
+                 * @example 01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "Idempotency-Key": components["parameters"]["CabecalhoIdempotencia"];
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Corpo da requisicao (ConfiguracaoSso). */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfiguracaoSso"];
+            };
+        };
+        responses: {
+            /** @description Configuracao atualizada. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfiguracaoSso"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
             503: components["responses"]["Erro503"];
         };
     };
@@ -22901,6 +23459,53 @@ export interface operations {
             503: components["responses"]["Erro503"];
         };
     };
+    obterImportacao: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador da importacao. */
+                importacaoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operacao concluida. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Importacao"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
     listarIntegracoesFolha: {
         parameters: {
             query?: {
@@ -23017,6 +23622,56 @@ export interface operations {
             403: components["responses"]["Erro403"];
             404: components["responses"]["Erro404"];
             409: components["responses"]["Erro409"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    obterExportacaoFolha: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador da integracao. */
+                integracaoId: string;
+                /** @description Identificador do processamento, devolvido por exportarFolha. */
+                processamentoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operacao concluida. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessamentoAssincrono"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            410: components["responses"]["Erro410"];
             429: components["responses"]["Erro429"];
             500: components["responses"]["Erro500"];
             501: components["responses"]["Erro501"];
@@ -25102,6 +25757,131 @@ export interface operations {
             403: components["responses"]["Erro403"];
             404: components["responses"]["Erro404"];
             409: components["responses"]["Erro409"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    callbackSso: {
+        parameters: {
+            query: {
+                /** @description Authorization code emitido pelo provedor. */
+                code: string;
+                /** @description Valor opaco emitido por GET /v1/sso/{provedor}/iniciar. Carrega o tenant e o nonce anti-CSRF/anti-replay; expira em 10 minutos. */
+                state: string;
+            };
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+            };
+            path: {
+                /** @description Identity Provider que concluiu a autenticacao. */
+                provedor: "google" | "entra_id";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Login federado concluido. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResposta"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            404: components["responses"]["Erro404"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    iniciarSso: {
+        parameters: {
+            query?: {
+                /** @description Slug ou UUID do tenant alvo, para acesso por link direto sem subdominio proprio (mesmo papel de X-Tenant nas demais rotas de auth, adaptado a navegacao pura de link). */
+                tenant?: string;
+            };
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identity Provider alvo. */
+                provedor: "google" | "entra_id" | "saml";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirecionamento ao Identity Provider (ou, para saml, ao endpoint de SSO do IdP do tenant) com o pedido de autorizacao/AuthnRequest. */
+            302: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Erro400"];
+            404: components["responses"]["Erro404"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    concluirLoginSaml: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Formulario HTTP-POST do IdP (perfil SAML 2.0 HTTP-POST binding). */
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    /** @description Estado opaco emitido por iniciarSso (provedor=saml), ecoado pelo IdP sem alteracao. */
+                    RelayState?: string;
+                    /** @description Resposta SAML assinada pelo IdP, codificada em base64 (sem deflate, perfil POST). */
+                    SAMLResponse: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Redirecionamento ao SPA com os tokens de sessao no fragmento da URL. */
+            302: {
+                headers: {
+                    Location: components["headers"]["Location"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            404: components["responses"]["Erro404"];
             429: components["responses"]["Erro429"];
             500: components["responses"]["Erro500"];
             501: components["responses"]["Erro501"];

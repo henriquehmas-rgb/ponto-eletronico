@@ -96,12 +96,24 @@ def montar_envelope(
 
 
 def publicar(envelope: dict[str, Any]) -> None:
-    """Publica um envelope no barramento interno."""
+    """Publica um envelope no barramento interno.
+
+    F13/A3, T11 -- aditivo, corpo desta funcao e o UNICO ponto que A3 toca
+    neste arquivo (PCF F13 secao 5.2/5.4): alem do `BARRAMENTO_INTERNO.
+    append` acima (nome/assinatura/comportamento inalterados -- os testes
+    desta fase dependem disso), registra o envelope para fan-out
+    transacionalmente seguro em `webhook_entregas`. `registrar_pendente`
+    NUNCA levanta excecao e so grava a linha durável depois que a
+    transacao corrente (que chamou `publicar`) commitar de verdade -- ver
+    `app.integracoes.webhooks.fan_out` para a costura completa."""
     BARRAMENTO_INTERNO.append(envelope)
     logger.info(
         "evento de dominio publicado",
         extra={"tipo": envelope["tipo"], "id": envelope["id"], "tenantId": envelope["tenantId"]},
     )
+    from app.integracoes.webhooks.fan_out import registrar_pendente
+
+    registrar_pendente(envelope)
 
 
 def publicar_ajuste_solicitado(

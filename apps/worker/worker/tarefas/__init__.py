@@ -26,6 +26,16 @@ enfileira por nome, e renomear tarefa com job em voo perde trabalho.
 | `expurgo_lgpd` | manutencao | F14 | aplica a politica de retencao |
 | `importar_colaboradores` | integracoes | F2 | processa CSV/XLSX de colaboradores linha a linha |
 | `processar_fila_notificacoes` | notificacoes | F10 | drena notificacoes pendentes de um tenant |
+| `importar_arquivo_generico` | integracoes | F13 | importacao generica (hoje: AFD de terceiro) |
+| `exportar_folha` | integracoes | F13 | gera o arquivo de exportacao de folha do parceiro |
+
+**Catorze tarefas a partir da F13/A5** (`exportar_folha`, acima -- ver
+`worker/tarefas/integracoes.py` para o corpo completo, e `app.integracoes.
+folha.comum.execucao.executar_exportacao_folha` para o trabalho pesado).
+Mesmo precedente ja registrado para `importar_colaboradores` (F2) e
+`importar_arquivo_generico` (F13/A8): acrescimo autorizado pelo PCF da
+fase (`docs/fases/F13-api-publica-webhooks-integracoes.md` §5.3), nao
+invencao de escopo.
 """
 
 from __future__ import annotations
@@ -37,7 +47,12 @@ from worker.tarefas.apuracao import apurar_dia, recalcular_periodo
 from worker.tarefas.fechamento import gerar_espelhos, processar_fechamento
 from worker.tarefas.fiscal import gerar_aej, gerar_afd
 from worker.tarefas.importacoes import importar_colaboradores
-from worker.tarefas.integracoes import enviar_webhook, sincronizar_terminal
+from worker.tarefas.integracoes import (
+    enviar_webhook,
+    exportar_folha,
+    importar_arquivo_generico,
+    sincronizar_terminal,
+)
 from worker.tarefas.lgpd import expurgo_lgpd
 from worker.tarefas.notificacoes import processar_fila_notificacoes
 from worker.tarefas.relatorios import executar_relatorio
@@ -56,6 +71,8 @@ TAREFAS: tuple[Callable[..., Any], ...] = (
     expurgo_lgpd,
     importar_colaboradores,
     processar_fila_notificacoes,
+    importar_arquivo_generico,
+    exportar_folha,
 )
 
 NOMES_DAS_TAREFAS: tuple[str, ...] = tuple(tarefa.__name__ for tarefa in TAREFAS)
@@ -66,10 +83,12 @@ __all__ = [
     "apurar_dia",
     "enviar_webhook",
     "executar_relatorio",
+    "exportar_folha",
     "expurgo_lgpd",
     "gerar_aej",
     "gerar_afd",
     "gerar_espelhos",
+    "importar_arquivo_generico",
     "importar_colaboradores",
     "processar_fechamento",
     "processar_fila_notificacoes",

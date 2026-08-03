@@ -131,13 +131,47 @@ def test_todo_evento_com_origem_scheduler_tem_rotina_produtora() -> None:
 #: precisa de banco/Redis de verdade e e testada pela propria fase dona --
 #: `importar_colaboradores` (F2/A3) tem sua cobertura em
 #: `apps/api/tests/f2/importadores/test_worker_tarefa.py`;
+#: `apurar_dia`/`recalcular_periodo` (F4) em
+#: `apps/api/tests/f4/dominio/test_apurar_dia_worker.py` e
+#: `apps/api/tests/f4/performance/test_performance_recalculo.py`;
 #: `sincronizar_terminal` (F6/A2) em `apps/device-gw/tests/f6/provisionamento/
-#: test_sincronizar_terminal.py`.
-_TAREFAS_JA_IMPLEMENTADAS = frozenset({"importar_colaboradores", "sincronizar_terminal"})
+#: test_sincronizar_terminal.py`; `processar_fechamento`/`gerar_espelhos`
+#: (F10) em `apps/api/tests/f10/fechamento/test_worker_tarefas.py`;
+#: `executar_relatorio` (F11) em
+#: `apps/api/tests/f11/agendamentos/test_worker_executar_relatorio.py`;
+#: `gerar_afd`/`gerar_aej` (F12) em `apps/api/tests/f12/afd/test_gerador.py`
+#: e `apps/api/tests/f12/aej/test_gerador.py`; `enviar_webhook` (F13/A3) em
+#: `apps/api/tests/f13/webhooks/**`; `importar_arquivo_generico` (F13/A8) em
+#: `apps/api/tests/f13/importadores/**`; `exportar_folha` (F13/A5) em
+#: `apps/api/tests/f13/folha/comum/test_execucao.py` (ponta a ponta, via
+#: `app.integracoes.folha.comum.execucao.executar_exportacao_folha`, que
+#: `exportar_folha` chama por import tardio); `processar_fila_notificacoes`
+#: (F10) em `apps/api/tests/f10/notificacao/test_processar_fila_notificacoes.py`.
+_TAREFAS_JA_IMPLEMENTADAS = frozenset(
+    {
+        "importar_colaboradores",
+        "apurar_dia",
+        "recalcular_periodo",
+        "processar_fechamento",
+        "gerar_espelhos",
+        "executar_relatorio",
+        "gerar_afd",
+        "gerar_aej",
+        "sincronizar_terminal",
+        "enviar_webhook",
+        "importar_arquivo_generico",
+        "exportar_folha",
+        "processar_fila_notificacoes",
+    }
+)
 
 #: Mesma logica, para as rotinas de cron do scheduler. `verificar_terminal_offline`
 #: (F6/A1) e real; cobertura em `apps/worker/tests/f6/test_verificar_terminal_offline.py`.
-_ROTINAS_JA_IMPLEMENTADAS = frozenset({"verificar_terminal_offline"})
+#: `verificar_banco_horas_vencendo` (F4/T7/A2) tambem e real; cobertura em
+#: `apps/api/tests/f4/banco_horas/test_vencimento.py`.
+_ROTINAS_JA_IMPLEMENTADAS = frozenset(
+    {"verificar_terminal_offline", "verificar_banco_horas_vencendo"}
+)
 
 
 @pytest.mark.asyncio

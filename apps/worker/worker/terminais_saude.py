@@ -252,4 +252,14 @@ def publicar_terminal_offline(
         "evento de dominio publicado",
         extra={"tipo": envelope["tipo"], "id": envelope["id"], "tenantId": envelope["tenantId"]},
     )
+    # F13/A3, T11 -- aditivo (nome/comportamento do que ja existia acima
+    # inalterados). `publicar_terminal_offline` roda SEMPRE depois de
+    # `await gravar_amostra_saude` (o unico INSERT desta rotina) ja ter
+    # commitado (`engine.begin()` fecha a transacao ao sair do `async with`,
+    # antes deste ponto ser alcancado no chamador) -- ver
+    # `worker.despacho_webhooks` para a prova completa e a janela de risco
+    # aceita (fire-and-forget, nunca bloqueia esta rotina de cron).
+    from worker.despacho_webhooks import publicar_fire_and_forget
+
+    publicar_fire_and_forget(envelope)
     return envelope

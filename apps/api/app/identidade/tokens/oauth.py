@@ -66,6 +66,20 @@ def extrair_credenciais(
     raise ErroDeAplicacao("PONTO-AUTH-012")
 
 
+#: Achado de revisao adversarial (fechamento da F13): trocar o hash de
+#: `client_secret` de SHA-256 para Argon2id (correcao do bug critico desta
+#: mesma sessao) tornou `verificar_hash` deliberadamente lenta -- mas so
+#: quando de fato chamada. `client_id` inexistente/inativo curto-circuitava
+#: SEM chamar `verificar_hash`, abrindo um oraculo de tempo mensuravel para
+#: enumeracao de `client_id`. Mesmo padrao ja usado por
+#: `autenticacao/servico.py::_HASH_FANTASMA` para login por senha: gasta o
+#: MESMO tempo de CPU do caso "cliente existe, segredo errado", mesmo
+#: quando o cliente nem existe. Impacto pratico ja era baixo (`client_id` e
+#: publico por desenho, 96 bits de entropia) -- corrigido mesmo assim por
+#: ser barato e ja ter padrao pronto no codebase.
+_HASH_FANTASMA_CLIENTE = gerar_hash("um-segredo-que-nunca-e-comparado-de-verdade")
+
+
 async def autenticar_client(
     sessao_db: AsyncSession, *, tenant_id: uuid.UUID, credenciais: CredenciaisClient
 ) -> ApiClient:
@@ -78,12 +92,10 @@ async def autenticar_client(
             )
         )
     ).scalar_one_or_none()
-    if (
-        cliente is None
-        or cliente.status != "ativo"
-        or not cliente.client_secret_hash
-        or not verificar_hash(cliente.client_secret_hash, credenciais.client_secret)
-    ):
+    if cliente is None or cliente.status != "ativo" or not cliente.client_secret_hash:
+        verificar_hash(_HASH_FANTASMA_CLIENTE, credenciais.client_secret)
+        raise ErroDeAplicacao("PONTO-AUTH-012")
+    if not verificar_hash(cliente.client_secret_hash, credenciais.client_secret):
         raise ErroDeAplicacao("PONTO-AUTH-012")
     return cliente
 

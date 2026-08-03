@@ -61,6 +61,7 @@ from worker.banco_horas_vencimento import (
     publicar_banco_horas_vencendo,
 )
 from worker.config import Configuracao, obter_configuracao
+from worker.despacho_webhooks import despachar_webhooks_pendentes_cross_tenant
 from worker.filas import CODIGO_NAO_IMPLEMENTADO, FILA_MANUTENCAO, FILA_PADRAO
 from worker.log import configurar_log, obter_logger
 
@@ -100,11 +101,17 @@ INTERVALO_SAUDE_S: Final[int] = 20
 #: indiretamente (via lembrete de prazo vencido). `evento` fica vazio de
 #: proposito -- `_resultado_rotina` ja trata ausencia com `meta.get("evento",
 #: "")`, sem quebrar o andaime original.
+#: `despachar_webhooks_pendentes` (F13/A3, T11/T12) e a mesma excecao
+#: deliberada de `verificar_notificacoes_pendentes`: nao publica um evento
+#: NOVO do catalogo (ela CONSOME `webhook_entregas` ja gravada pelo fan-out
+#: de T11, nunca cria o fato de dominio em si) -- `evento` fica vazio de
+#: proposito, mesmo motivo.
 ROTINAS: Final[dict[str, dict[str, str]]] = {
     "verificar_banco_horas_vencendo": {"fase": "F4", "evento": "banco_horas.vencendo"},
     "verificar_terminal_offline": {"fase": "F6", "evento": "terminal.offline"},
     "verificar_notificacoes_pendentes": {"fase": "F10", "evento": ""},
     "verificar_agendamentos_relatorio": {"fase": "F11", "evento": ""},
+    "despachar_webhooks_pendentes": {"fase": "F13", "evento": ""},
 }
 
 
@@ -460,6 +467,48 @@ async def verificar_agendamentos_relatorio(ctx: dict[Any, Any]) -> dict[str, Any
     }
 
 
+async def despachar_webhooks_pendentes(ctx: dict[Any, Any]) -> dict[str, Any]:
+    """Varre `webhook_entregas` pendentes/em retentativa de TODO tenant
+    ativo e enfileira `enviar_webhook` para o `worker` consumir (F13/A3,
+    T11/T12 -- ver `worker.despacho_webhooks` para a implementacao completa
+    e o porque desta rotina, em vez de enfileirar direto no ponto de
+    publicacao, foi a rota escolhida por A3 para o lado `apps/api` do T11).
+
+    A enumeracao cross-tenant usa `fn_tenants_ativos()` (RFC-014, SECURITY
+    DEFINER), mesmo padrao ja usado tres vezes por
+    `verificar_banco_horas_vencendo`/`verificar_terminal_offline`/
+    `verificar_notificacoes_pendentes` acima -- reaproveitada via
+    `worker.notificacoes_verificacao.listar_tenants_ativos_cross_tenant`,
+    nunca uma segunda funcao `SECURITY DEFINER` (proibicao 5 do PCF).
+
+    Roda a cada minuto: e a rotina que da o "tempo ate a entrega" de
+    `webhook_entregas` recem-criada por fan-out (T11) -- diferente das
+    rotinas irmas (5-10 minutos), aqui a latencia importa de verdade para
+    quem integra por webhook.
+    """
+    redis = ctx.get("redis")
+    if redis is None:  # pragma: no cover - so em teste sem ctx["redis"]
+        return _resultado_rotina("despachar_webhooks_pendentes")
+
+    resultado = await despachar_webhooks_pendentes_cross_tenant(redis=redis)
+
+    logger.info(
+        "rotina despachar_webhooks_pendentes concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "tenantsVerificados": resultado["tenantsVerificados"],
+            "entregasEnfileiradas": resultado["entregasEnfileiradas"],
+        },
+    )
+    return {
+        "implementado": True,
+        "rotina": "despachar_webhooks_pendentes",
+        "tenantsVerificados": resultado["tenantsVerificados"],
+        "entregasEnfileiradas": resultado["entregasEnfileiradas"],
+        "executadoEm": dt.datetime.now(tz=dt.UTC).isoformat(),
+    }
+
+
 def montar_cron() -> list[CronJob]:
     """Agenda das rotinas periodicas.
 
@@ -511,6 +560,15 @@ def montar_cron() -> list[CronJob]:
             minute={0, 10, 20, 30, 40, 50},
             second=0,
             timeout=300,
+            max_tries=1,
+        ),
+        # A cada minuto (PCF F13 §6/T11-T12) -- latencia de entrega de
+        # webhook importa mais do que a folga das rotinas irmas acima.
+        cron(
+            despachar_webhooks_pendentes,
+            name="despachar_webhooks_pendentes",
+            second=0,
+            timeout=120,
             max_tries=1,
         ),
     ]

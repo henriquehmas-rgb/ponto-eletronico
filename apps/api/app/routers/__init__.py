@@ -41,6 +41,7 @@ from app.routers import (
     relatorios,
     saude,
     solicitacoes,
+    sso,
     tenants,
     terminais,
     tratamentos,
@@ -53,6 +54,7 @@ from app.routers import (
 ROTEADORES: tuple[APIRouter, ...] = (
     saude.roteador,
     auth.roteador,
+    sso.roteador,
     tenants.roteador,
     empresas.roteador,
     unidades.roteador,

@@ -11257,7 +11257,7 @@ class PreferenciaColunasCriar(BaseModel):
     """
     Tela (grade) da interface a qual a preferencia se aplica. Mutuamente exclusivo com relatorioDefinicaoId.
     """
-    nome: str = "padrao"
+    nome: str | None = "padrao"
     """
     Nome da preferencia, unico por usuario e alvo.
     """
@@ -11277,7 +11277,7 @@ class PreferenciaColunasCriar(BaseModel):
     """
     Largura de cada coluna, em pixels, por chave.
     """
-    padrao: bool = False
+    padrao: bool | None = False
     """
     Verdadeiro para tornar esta a preferencia aplicada automaticamente ao abrir a tela.
     """
@@ -13191,6 +13191,138 @@ class ApiClientCriado(BaseModel):
     """
 
 
+class Ambiente2(StrEnum):
+    """
+    Ambiente da chave. Nunca excede o ambiente do ApiClient pai.
+    """
+
+    sandbox = "sandbox"
+    producao = "producao"
+
+
+class ApiKey(BaseModel):
+    """
+    Chave de API para integracoes simples que nao justificam o fluxo OAuth completo (RFC-016). Guardada por hash; nunca devolve o valor em claro fora da resposta de criarApiKey.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: UUID | None = None
+    """
+    Identificador da chave.
+    """
+    tenant_id: UUID | None = Field(None, alias="tenantId")
+    """
+    Tenant dono da chave.
+    """
+    api_client_id: UUID | None = Field(None, alias="apiClientId")
+    """
+    Cliente de API dono da chave.
+    """
+    prefixo: str | None = None
+    """
+    Primeiros caracteres da chave, exibidos na interface, por exemplo pk_prd_a1b2.
+    """
+    rotulo: str | None = None
+    """
+    Rotulo livre para o usuario identificar o proposito da chave.
+    """
+    ambiente: Ambiente2 | None = None
+    """
+    Ambiente da chave. Nunca excede o ambiente do ApiClient pai.
+    """
+    escopos: list[str] | None = None
+    """
+    Escopos OAuth concedidos a esta chave.
+    """
+    expira_em: AwareDatetime | None = Field(None, alias="expiraEm")
+    """
+    Prazo de validade da chave. Ausente quando a chave nao expira.
+    """
+    ultimo_uso_em: AwareDatetime | None = Field(None, alias="ultimoUsoEm")
+    """
+    Instante do ultimo uso bem-sucedido da chave.
+    """
+    revogada_em: AwareDatetime | None = Field(None, alias="revogadaEm")
+    """
+    Instante da revogacao. Ausente enquanto a chave esta ativa.
+    """
+    motivo_revogacao: str | None = Field(None, alias="motivoRevogacao")
+    """
+    Motivo informado na revogacao.
+    """
+    criado_em: AwareDatetime | None = Field(None, alias="criadoEm")
+    """
+    Instante de criacao, atribuido pelo servidor.
+    """
+    criado_por: UUID | None = Field(None, alias="criadoPor")
+    """
+    Usuario que criou o registro.
+    """
+    atualizado_em: AwareDatetime | None = Field(None, alias="atualizadoEm")
+    """
+    Instante da ultima atualizacao.
+    """
+    atualizado_por: UUID | None = Field(None, alias="atualizadoPor")
+    """
+    Usuario responsavel pela ultima atualizacao.
+    """
+
+
+class Ambiente3(StrEnum):
+    """
+    Ambiente da chave. Quando ausente, herda o ambiente do ApiClient pai. Nunca pode exceder o ambiente do ApiClient pai (chave de cliente sandbox nao pode ser producao).
+    """
+
+    sandbox = "sandbox"
+    producao = "producao"
+
+
+class ApiKeyCriar(BaseModel):
+    """
+    Dados aceitos na criacao de ApiKey (RFC-016).
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    rotulo: str | None = None
+    """
+    Rotulo livre para o usuario identificar o proposito da chave.
+    """
+    ambiente: Ambiente3 | None = None
+    """
+    Ambiente da chave. Quando ausente, herda o ambiente do ApiClient pai. Nunca pode exceder o ambiente do ApiClient pai (chave de cliente sandbox nao pode ser producao).
+    """
+    escopos: list[str]
+    """
+    Escopos OAuth concedidos a esta chave. Nao pode exceder os escopos do ApiClient pai.
+    """
+    expira_em: AwareDatetime | None = Field(None, alias="expiraEm")
+    """
+    Prazo de validade da chave. Quando ausente, a chave nao expira.
+    """
+
+
+class ApiKeyCriada(BaseModel):
+    """
+    Chave de API recem-criada (RFC-016). O valor em claro aparece UMA UNICA VEZ nesta resposta e nao pode ser recuperado depois.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    api_key: ApiKey | None = Field(None, alias="apiKey")
+    """
+    Metadados da chave criada.
+    """
+    chave: str | None = None
+    """
+    Valor da chave em claro (token opaco), a ser enviado no cabecalho X-API-Key. O prefixo pk_<ambiente>_<...> exibido em apiKey.prefixo e um identificador de exibicao separado, nao um literal dentro deste valor. Guarde-o agora: nao ha como consulta-lo novamente, apenas revogar e criar outra.
+    """
+
+
 class Status63(StrEnum):
     """
     Estado agregado.
@@ -13201,7 +13333,7 @@ class Status63(StrEnum):
     indisponivel = "indisponivel"
 
 
-class Ambiente2(StrEnum):
+class Ambiente4(StrEnum):
     """
     Ambiente da instancia.
     """
@@ -13231,7 +13363,7 @@ class Saude(BaseModel):
     """
     Commit da build em execucao.
     """
-    ambiente: Ambiente2 | None = None
+    ambiente: Ambiente4 | None = None
     """
     Ambiente da instancia.
     """
@@ -14464,6 +14596,55 @@ class ListaApiClient(BaseModel):
     Itens da pagina, na ordem pedida em ordenar.
     """
     paginacao: Paginacao
+
+
+class ListaApiKey(BaseModel):
+    """
+    Pagina de resultados de ApiKey (RFC-016).
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    dados: list[ApiKey]
+    """
+    Itens da pagina, na ordem pedida em ordenar.
+    """
+    paginacao: Paginacao
+
+
+class ConfiguracaoSso(BaseModel):
+    """
+    Configuracao de confianca de SSO por tenant (RFC-018/ADR-013 secao 5, GET/PUT /v1/admin/sso/provedores). Nenhum campo aqui e segredo: client id/secret do app OIDC compartilhado (google/entra_id) vivem em variavel de ambiente da aplicacao, nunca por tenant; os tres campos de saml sao dado publico (um certificado X.509 de assinatura e chave publica).
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    google_dominios_permitidos: list[str] | None = Field(
+        None, alias="googleDominiosPermitidos", examples=[["seeg.com.br"]]
+    )
+    """
+    Dominios de e-mail do Google Workspace aceitos para login federado neste tenant. Lista vazia ou ausente desabilita o provedor google para o tenant.
+    """
+    entra_id_tenant_id: str | None = Field(
+        None, alias="entraIdTenantId", examples=["72f988bf-86f1-41af-91ab-2d7cd011db47"]
+    )
+    """
+    tenant_id (GUID) do Microsoft Entra ID aceito para este tenant. Ausente desabilita o provedor entra_id para o tenant.
+    """
+    saml_entity_id: str | None = Field(None, alias="samlEntityId")
+    """
+    entityId do Identity Provider SAML 2.0 proprio do tenant.
+    """
+    saml_sso_url: str | None = Field(None, alias="samlSsoUrl")
+    """
+    URL do SSO Service do Identity Provider SAML 2.0 proprio do tenant.
+    """
+    saml_certificado_x509: str | None = Field(None, alias="samlCertificadoX509")
+    """
+    Certificado X.509 (PEM) usado para validar a assinatura das asserções SAML deste tenant.
+    """
 
 
 class Solicitacao(BaseModel):

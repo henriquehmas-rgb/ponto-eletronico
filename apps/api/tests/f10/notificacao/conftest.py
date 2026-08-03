@@ -419,7 +419,7 @@ async def contexto_notificacao(sessao_notificacao: AsyncSession) -> ContextoNoti
 
 @pytest_asyncio.fixture
 async def ambiente_worker_notificacao(
-    url_login_sessao_notificacao: URL,
+    url_login_sessao_notificacao: URL, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncIterator[None]:
     """Aponta `app.core.config.Configuracao`/`worker.config.Configuracao`
     (`DATABASE_URL`) para o mesmo banco de teste da fase, autenticado como a
@@ -435,8 +435,17 @@ async def ambiente_worker_notificacao(
     (`asyncio_default_fixture_loop_scope = "function"`), e reusar uma
     engine assíncrona sob um loop diferente derruba a conexão em vez de
     reconectar (mesmo achado que `app/db/sessao.py` já documenta na própria
-    docstring, para o `TestClient` síncrono da Fase 0)."""
-    os.environ["DATABASE_URL"] = url_login_sessao_notificacao.render_as_string(hide_password=False)
+    docstring, para o `TestClient` síncrono da Fase 0).
+
+    `monkeypatch.setenv` (nunca `os.environ[...] =` direto, achado do
+    orquestrador no fechamento da F13): reverte `DATABASE_URL`
+    automaticamente no teardown, evitando vazar para qualquer teste que rode
+    depois no mesmo processo -- mesma correção já aplicada em
+    `tests/f13/sso/oidc/conftest.py`/`tests/f4/dominio/
+    test_apurar_dia_worker.py`."""
+    monkeypatch.setenv(
+        "DATABASE_URL", url_login_sessao_notificacao.render_as_string(hide_password=False)
+    )
     from worker.config import obter_configuracao as obter_configuracao_worker
 
     from app.core.config import obter_configuracao as obter_configuracao_api

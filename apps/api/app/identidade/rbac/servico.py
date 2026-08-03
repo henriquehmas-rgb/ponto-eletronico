@@ -22,6 +22,7 @@ from app.core.seguranca import Sujeito
 from app.identidade.auditoria.hash_chain import registrar_auditoria_de_sujeito
 from app.identidade.rbac import paginacao
 from app.identidade.rbac._contrato import contrato
+from app.identidade.tokens import oauth
 
 # ===========================================================================
 # Permissoes (catalogo global, somente leitura)
@@ -404,15 +405,6 @@ async def listar_api_clients(
     )
 
 
-def _gerar_segredo() -> tuple[str, str]:
-    """Devolve `(segredo_em_claro, hash_sha256_hex)`."""
-    import hashlib
-
-    segredo = secrets.token_urlsafe(32)
-    hash_segredo = hashlib.sha256(segredo.encode("utf-8")).hexdigest()
-    return segredo, hash_segredo
-
-
 async def criar_api_client(
     sessao: AsyncSession,
     *,
@@ -423,11 +415,15 @@ async def criar_api_client(
     """Cria o `ApiClient`. Devolve `(cliente, client_secret_em_claro)`.
 
     O segredo aparece so aqui, uma unica vez -- o que fica gravado e o hash
-    SHA-256 (`client_secret_hash`). `client_id` e um identificador publico,
-    gerado aqui (nao e segredo).
+    Argon2id (`client_secret_hash`), gerado por
+    `app.identidade.tokens.oauth.gerar_client_secret` -- a mesma funcao que
+    `autenticar_client` usa para verificar (`verificar_hash`, Argon2id).
+    Um hash SHA-256 aqui faria `verificar_hash` rejeitar sempre (nao e um
+    hash Argon2id valido), impedindo qualquer cliente novo de autenticar.
+    `client_id` e um identificador publico, gerado aqui (nao e segredo).
     """
     client_id = f"client_{secrets.token_hex(12)}"
-    segredo, hash_segredo = _gerar_segredo()
+    segredo, hash_segredo = oauth.gerar_client_secret()
 
     cliente = contrato.ApiClient(
         tenant_id=tenant_id,

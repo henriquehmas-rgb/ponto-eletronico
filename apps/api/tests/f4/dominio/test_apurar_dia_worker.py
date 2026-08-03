@@ -23,7 +23,6 @@ worker ja tornou a linha visivel para qualquer outra sessao do mesmo banco).
 
 from __future__ import annotations
 
-import os
 from typing import Any
 from uuid import UUID
 
@@ -39,15 +38,38 @@ _DATA_APURADA = "2026-02-10"
 
 
 @pytest.fixture
-def ambiente_app_apontado_para_teste(url_login_sessao_tratamento: URL) -> None:
+def ambiente_app_apontado_para_teste(
+    url_login_sessao_tratamento: URL, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Aponta `app.core.config.Configuracao` (`DATABASE_URL`) para o mesmo
     banco de teste desta fase, autenticado como a MESMA role de LOGIN --
     mesmo padrao de `ambiente_worker_banco_horas`
-    (`tests/f4/banco_horas/test_vencimento.py`, F4/A2)."""
-    from app.core.config import obter_configuracao
+    (`tests/f4/banco_horas/test_vencimento.py`, F4/A2).
 
-    os.environ["DATABASE_URL"] = url_login_sessao_tratamento.render_as_string(hide_password=False)
+    `monkeypatch.setenv` (nunca `os.environ[...] =` direto) e reset da
+    engine cacheada de `app.db.sessao` (achado do orquestrador no fechamento
+    da F13, ao rodar `tests/f4` combinado com outras fases pela primeira
+    vez -- nunca reproduz com este arquivo isolado): sem os dois, (1)
+    `DATABASE_URL` vazava para qualquer teste que rodasse depois no mesmo
+    processo (mesma classe de bug ja corrigida em `tests/f13/sso/oidc/
+    conftest.py`/`tests/f13/webhooks/conftest.py`); e (2)
+    `worker.tarefas.apuracao.apurar_dia` reusa a engine cacheada de
+    `app.db.sessao` (docstring do modulo) -- se essa engine ja existia,
+    criada por um teste ANTERIOR e presa ao event loop JA FECHADO dele
+    (`pytest-asyncio`, escopo `function`, um loop novo por teste), o
+    checkout de conexao deste teste falha com `RuntimeError: Event loop is
+    closed`, mesmo padrao ja documentado e corrigido em
+    `tests/f13/sso/oidc/test_router_fluxo_completo.py::
+    _engine_da_app_no_loop_do_teste`."""
+    from app.core.config import obter_configuracao
+    from app.db import sessao as db_sessao
+
+    monkeypatch.setenv(
+        "DATABASE_URL", url_login_sessao_tratamento.render_as_string(hide_password=False)
+    )
     obter_configuracao.cache_clear()
+    db_sessao._engine = None
+    db_sessao._fabrica = None
 
 
 @pytest.mark.asyncio

@@ -24,7 +24,7 @@ WEB_DIR      := apps/web
 KEYS_DIR     := $(INFRA)/keys
 
 .PHONY: help up down restart logs ps migrate migration seed test test-web lint lint-web \
-        fmt typecheck build bootstrap keys env validate shell psql redis clean nuke
+        fmt typecheck build bootstrap keys env validate shell psql redis clean nuke schemathesis
 
 # -----------------------------------------------------------------------------
 help: ## Lista os alvos disponiveis
@@ -116,6 +116,18 @@ validate: ## Valida YAML da infra, compose e contrato OpenAPI
 
 build: ## Constroi as imagens Docker
 	$(COMPOSE_PRD) build
+
+schemathesis: ## Conforma o contrato contra a API subida (F13/T6 -- rode "make up" antes)
+	# Teto em <4.0 de proposito: a serie 4.x exige pytest>=9, incompativel com
+	# o pytest==8.3.4 fixado nos extras [dev] (ver nota em apps/api/pyproject.toml).
+	pip show schemathesis >/dev/null 2>&1 || pip install "schemathesis>=3.35,<4.0"
+	# --experimental=openapi-3.1 e obrigatorio: o contrato declara `openapi: 3.1.0`
+	# (packages/contracts/openapi.yaml) e a serie 3.x do schemathesis so suporta
+	# 3.1 via essa flag -- sem ela, falha antes de carregar o schema.
+	schemathesis run packages/contracts/openapi.yaml \
+		--base-url http://localhost:8000 \
+		--checks all \
+		--experimental=openapi-3.1
 
 # --- Preparacao do ambiente ---------------------------------------------------
 env: ## Cria infra/.env a partir do exemplo, se ainda nao existir

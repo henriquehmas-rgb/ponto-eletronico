@@ -13,7 +13,6 @@ entao `import worker` funciona daqui.
 from __future__ import annotations
 
 import datetime as dt
-import os
 
 import pytest
 import pytest_asyncio
@@ -32,12 +31,23 @@ from tests.f4.banco_horas.conftest import (
 
 
 @pytest.fixture
-def ambiente_worker_banco_horas(url_login_sessao_banco_horas: URL) -> None:
+def ambiente_worker_banco_horas(
+    url_login_sessao_banco_horas: URL, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Aponta `worker.config.Configuracao` (`DATABASE_URL`) para o mesmo
     banco de teste da fase, autenticado como a MESMA role de LOGIN -- o
     worker tambem passa pelo RLS, nunca por superusuario (ADR-001). Mesmo
-    padrao de `tests/f2/importadores/conftest.py` (F2)."""
-    os.environ["DATABASE_URL"] = url_login_sessao_banco_horas.render_as_string(hide_password=False)
+    padrao de `tests/f2/importadores/conftest.py` (F2).
+
+    `monkeypatch.setenv` (nunca `os.environ[...] =` direto, achado do
+    orquestrador no fechamento da F13): reverte `DATABASE_URL`
+    automaticamente no teardown deste teste, evitando vazar para qualquer
+    arquivo que rode depois no mesmo processo -- mesma correcao ja aplicada
+    em `tests/f13/sso/oidc/conftest.py`/`tests/f4/dominio/
+    test_apurar_dia_worker.py`."""
+    monkeypatch.setenv(
+        "DATABASE_URL", url_login_sessao_banco_horas.render_as_string(hide_password=False)
+    )
     from worker.config import obter_configuracao
 
     obter_configuracao.cache_clear()

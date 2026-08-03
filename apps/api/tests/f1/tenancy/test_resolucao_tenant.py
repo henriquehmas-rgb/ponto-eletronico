@@ -42,8 +42,15 @@ def test_rota_ainda_stub_sem_x_tenant_nao_e_bloqueada_pelo_middleware(
     `SessaoDb` (ainda `501`) nao e bloqueada pelo `TenantMiddleware` so por
     faltar `X-Tenant` -- a exigencia de tenant e da dependencia de sessao, nao
     de todo `/v1/...` incondicionalmente (ver docstring de
-    `app/core/middleware.py:TenantMiddleware`)."""
-    resposta = cliente.get("/v1/fiscal/afd")
+    `app/core/middleware.py:TenantMiddleware`).
+
+    `/v1/fiscal/afd` era o exemplo original (F1) mas F12 implementou a tag
+    `fiscal` de verdade -- trocado por `/v1/lgpd/consentimentos` (orquestrador,
+    fechamento da F13, 03/08/2026): `app/routers/lgpd.py` ainda e o stub
+    GERADO original, tag inteira reservada a uma fase futura (F14, `Onda 5`,
+    segurança/antifraude/LGPD -- ver `docs/backlog.md`/status das ondas),
+    ninguem a tocou ainda."""
+    resposta = cliente.get("/v1/lgpd/consentimentos")
     assert resposta.status_code == 501
     assert resposta.json()["codigo"] == "PONTO-INT-005"
 

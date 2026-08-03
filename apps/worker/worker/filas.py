@@ -58,6 +58,8 @@ FILA_POR_TAREFA: Final[dict[str, str]] = {
     "expurgo_lgpd": FILA_MANUTENCAO,
     "importar_colaboradores": FILA_INTEGRACOES,
     "processar_fila_notificacoes": FILA_NOTIFICACOES,
+    "importar_arquivo_generico": FILA_INTEGRACOES,
+    "exportar_folha": FILA_INTEGRACOES,
 }
 
 #: Fase de FASES-E-AGENTES.md que implementa cada tarefa.
@@ -74,6 +76,8 @@ FASE_POR_TAREFA: Final[dict[str, str]] = {
     "expurgo_lgpd": "F14",
     "importar_colaboradores": "F2",
     "processar_fila_notificacoes": "F10",
+    "importar_arquivo_generico": "F13",
+    "exportar_folha": "F13",
 }
 
 CODIGO_NAO_IMPLEMENTADO: Final[str] = "PONTO-INT-005"

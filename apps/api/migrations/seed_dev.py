@@ -255,6 +255,11 @@ CATALOGO_PERMISSOES: tuple[tuple[str, str, tuple[str, ...], bool, str], ...] = (
     ("workflow", "tipos_solicitacao", (CRIAR, LER), False, "Tipos de solicitacao"),
     ("apuracao", "tipos_tratamento", (LER,), False, "Tipos de tratamento"),
     # --- fim complemento F1 --------------------------------------------------
+    # --- F13 (A9/A10): gap achado por dois agentes independentes ao rodar o
+    # mesmo script acima -- `admin.configurar` (GET/PUT /v1/admin/sso/
+    # provedores, RFC-018/ADR-013) nao tinha entrada no catalogo. `admin_empresa`
+    # ja cobre por `"*": _TODAS_AS_ACOES` (nenhuma mudanca na matriz abaixo).
+    ("identidade", "admin", (CONFIGURAR,), False, "Configuracao administrativa de SSO"),
 )
 
 

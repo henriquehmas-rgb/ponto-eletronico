@@ -21,7 +21,8 @@ param(
         'help', 'up', 'down', 'restart', 'logs', 'ps',
         'migrate', 'migration', 'seed', 'psql', 'redis', 'shell',
         'test', 'test-web', 'lint', 'lint-web', 'typecheck', 'fmt',
-        'validate', 'build', 'env', 'keys', 'bootstrap', 'clean', 'nuke'
+        'validate', 'build', 'env', 'keys', 'bootstrap', 'clean', 'nuke',
+        'schemathesis'
     )]
     [string]$Alvo = 'help',
 
@@ -113,6 +114,7 @@ function Alvo-Help {
         'fmt'       = 'Formata o codigo (ruff + prettier)'
         'validate'  = 'Valida YAML da infra, compose e contrato OpenAPI'
         'build'     = 'Constroi as imagens Docker'
+        'schemathesis' = 'Conforma o contrato contra a API subida (F13/T6 -- rode "up" antes)'
         'env'       = 'Cria infra\.env a partir do exemplo'
         'keys'      = 'Gera o par de chaves JWT RS256 em infra\keys'
         'bootstrap' = 'Prepara o ambiente do zero'
@@ -268,6 +270,28 @@ sys.exit(1 if erros else 0)
 
 function Alvo-Build { Invoke-Compose @('build') -Producao }
 
+function Alvo-Schemathesis {
+    # Teto em <4.0 de proposito: a serie 4.x exige pytest>=9, incompativel com
+    # o pytest==8.3.4 fixado nos extras [dev] (ver nota em apps/api/pyproject.toml).
+    $instalado = & python -m pip show schemathesis 2>$null
+    if (-not $instalado) {
+        Write-Passo 'Instalando schemathesis'
+        Invoke-Externo -Comando 'python' -Argumentos @('-m', 'pip', 'install', 'schemathesis>=3.35,<4.0')
+    }
+    $openapi = Join-Path $Raiz 'packages\contracts\openapi.yaml'
+    # PYTHONIOENCODING=utf-8: o console do Windows usa cp1252 por padrao, que nao
+    # decodifica todo byte que os dados fuzzados do schemathesis podem devolver no
+    # relatorio de falhas -- sem isso, o proprio schemathesis quebra com
+    # `UnicodeEncodeError` ao tentar IMPRIMIR o relatorio (mascara o resultado real).
+    $env:PYTHONIOENCODING = 'utf-8'
+    # --experimental=openapi-3.1 e obrigatorio: o contrato declara `openapi: 3.1.0`
+    # e a serie 3.x do schemathesis so suporta 3.1 via essa flag -- sem ela, falha
+    # antes de carregar o schema.
+    Invoke-Externo -Comando 'schemathesis' -Argumentos @(
+        'run', $openapi, '--base-url', 'http://localhost:8000', '--checks', 'all', '--experimental=openapi-3.1'
+    )
+}
+
 function Alvo-Keys {
     Test-Ferramenta 'openssl' 'Vem com o Git for Windows (C:\Program Files\Git\usr\bin).'
     if (-not (Test-Path $KeysDir)) { New-Item -ItemType Directory -Path $KeysDir | Out-Null }
@@ -354,6 +378,7 @@ switch ($Alvo) {
     'fmt'       { Alvo-Fmt }
     'validate'  { Alvo-Validate }
     'build'     { Alvo-Build }
+    'schemathesis' { Alvo-Schemathesis }
     'env'       { Alvo-Env }
     'keys'      { Alvo-Keys }
     'bootstrap' { Alvo-Bootstrap }

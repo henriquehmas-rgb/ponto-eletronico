@@ -19,6 +19,7 @@ Contrato (ver `packages/contracts/errors.yaml` e o schema `Problema` do
 from __future__ import annotations
 
 from typing import Any, Final
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -175,7 +176,14 @@ def montar_problema(
         "title": linha.titulo,
         "status": status,
         "codigo": codigo,
-        "instance": caminho,
+        # `caminho` vem de `request.url.path`, que pode conter caractere de
+        # controle bruto (achado por fuzzing do schemathesis, F13/T6 -- um
+        # segmento de path como "\x1f" chega ate aqui sem decodificar). Sem
+        # `quote`, o `instance` viola o proprio schema `Problema` (formato
+        # `uri-reference` no contrato) porque caractere de controle nao e
+        # valido em URI. `quote` preserva a informacao (percent-encode) em vez
+        # de descartar o caractere.
+        "instance": quote(caminho, safe="/:@!$&'()*+,;="),
         "documentacao": f"{PREFIXO_TYPE}{codigo}",
     }
     # `expoe_regra: false` -> a explicacao especifica fica fora da resposta.

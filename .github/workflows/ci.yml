@@ -2,13 +2,14 @@
 # CI — Ponto Eletronico
 # =============================================================================
 # Jobs paralelos:
-#   deteccao       descobre quais arvores do monorepo ja existem
-#   lint-python    ruff (lint + format) + mypy
-#   test-python    pytest com servico PostgreSQL 16 real
-#   web            eslint + tsc --noEmit + next build
-#   openapi        spectral lint sobre packages/contracts/openapi.yaml
-#   docker         build das imagens (sem push)
-#   ci-ok          gate agregador para branch protection
+#   deteccao              descobre quais arvores do monorepo ja existem
+#   lint-python            ruff (lint + format) + mypy
+#   test-python            pytest com servico PostgreSQL 16 real
+#   contrato-schemathesis  Schemathesis contra a API real subida (F13/A1, T6)
+#   web                    eslint + tsc --noEmit + next build
+#   openapi                spectral lint sobre packages/contracts/openapi.yaml
+#   docker                 build das imagens (sem push)
+#   ci-ok                  gate agregador para branch protection
 #
 # -----------------------------------------------------------------------------
 # NOTA SOBRE O JOB `deteccao` (concessao explicita e temporaria da Fase 0)
@@ -310,6 +311,141 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
+  # (b2) Schemathesis contra o contrato, com a API real subida (F13/A1, T6)
+  #
+  # Citada como ferramenta desta fase em `packages/contracts/README.md`/
+  # `ADR-005` desde a Fase 0, mas nunca instalada nem usada ate esta fase
+  # (achado do PCF F13, T6). Roda em paralelo ao job `openapi` (que so faz
+  # `spectral lint`, estatico, sem subir processo nenhum) -- este job sobe a
+  # API de verdade e compara o contrato contra respostas reais. Rotas ainda em
+  # 501 (`PONTO-INT-005`, fases futuras) respondem de forma consistente com o
+  # catalogo e nao contam como divergencia -- Schemathesis compara forma de
+  # resposta contra o schema declarado, nao se a regra de negocio existe.
+  # ---------------------------------------------------------------------------
+  contrato-schemathesis:
+    name: Contrato · schemathesis
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_openapi == 'true' && needs.deteccao.outputs.tem_python == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ponto
+          POSTGRES_PASSWORD: ponto_ci
+          POSTGRES_DB: ponto_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ponto -d ponto_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AMBIENTE: ci
+      TZ: America/Sao_Paulo
+      DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
+      REDIS_URL: redis://localhost:6379/0
+      JWT_PRIVATE_KEY_PATH: /tmp/jwt-ci/private.pem
+      JWT_PUBLIC_KEY_PATH: /tmp/jwt-ci/public.pem
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala ferramental e dependencias das apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # Teto em <4.0 de proposito: a serie 4.x exige pytest>=9,
+          # incompativel com o pytest==8.3.4 fixado em apps/api/pyproject.toml
+          # (ver nota la -- instalar 4.x quebra a suite inteira do monorepo).
+          pip install "schemathesis>=3.35,<4.0"
+          for proj in packages/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install $dir"
+            pip install "$dir[dev]" || pip install "$dir"
+            echo "::endgroup::"
+          done
+          for proj in apps/api/pyproject.toml; do
+            dir=$(dirname "$proj")
+            echo "::group::pip install -e $dir"
+            pip install -e "$dir[dev]" || pip install -e "$dir"
+            echo "::endgroup::"
+          done
+
+      - name: Gera par de chaves JWT descartavel (so para este job)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/jwt-ci
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/jwt-ci/private.pem
+          openssl rsa -pubout -in /tmp/jwt-ci/private.pem -out /tmp/jwt-ci/public.pem
+
+      - name: Migrations Alembic
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      - name: Sobe a API em segundo plano
+        working-directory: apps/api
+        run: |
+          set -euo pipefail
+          nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+            > /tmp/api-schemathesis.log 2>&1 &
+          echo $! > /tmp/api-schemathesis.pid
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health >/dev/null; then
+              echo "API pronta."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::API nao respondeu /health a tempo."
+          cat /tmp/api-schemathesis.log
+          exit 1
+
+      - name: schemathesis run
+        run: |
+          # --experimental=openapi-3.1 e obrigatorio: o contrato declara
+          # `openapi: 3.1.0` e a serie 3.x do schemathesis so suporta 3.1 via
+          # essa flag -- sem ela, falha antes de carregar o schema.
+          schemathesis run packages/contracts/openapi.yaml \
+            --base-url http://localhost:8000 \
+            --checks all \
+            --experimental=openapi-3.1
+
+      - name: Encerra a API
+        if: always()
+        run: |
+          if [ -f /tmp/api-schemathesis.pid ]; then
+            kill "$(cat /tmp/api-schemathesis.pid)" 2>/dev/null || true
+          fi
+
+      - name: Publica log da API (em caso de falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-log-schemathesis
+          path: /tmp/api-schemathesis.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
   # (c) Lint, tipos e build do web
   # ---------------------------------------------------------------------------
   web:
@@ -536,7 +672,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [deteccao, lint-python, test-python, web, openapi, docker, infra]
+    needs: [deteccao, lint-python, test-python, contrato-schemathesis, web, openapi, docker, infra]
     runs-on: ubuntu-latest
     steps:
       - name: Consolida resultado

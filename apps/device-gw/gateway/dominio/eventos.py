@@ -83,4 +83,84 @@ def publicar_terminal_online(
         "evento de dominio publicado",
         extra={"tipo": envelope["tipo"], "id": envelope["id"], "tenantId": envelope["tenantId"]},
     )
+
+    # F13/A3, T11 -- aditivo, TODO dentro do corpo desta funcao (unico ponto
+    # que A3 tem permissao de tocar em apps/device-gw/**, PCF secao 5.4).
+    # `device-gw` e imagem/pacote Python separado (nao instala `apps/api`
+    # nem `apps/worker`, mesma razao de `gateway/log.py` duplicar
+    # `app/core/log.py`) -- por isso a logica de fan-out fire-and-forget e
+    # uma copia LOCAL e AUTOCONTIDA (import tardio, SQL inline, funcao
+    # aninhada), em vez de importar `worker.despacho_webhooks` ou
+    # `app.integracoes.webhooks.fan_out`. `publicar_terminal_online` roda
+    # SEMPRE depois que a leitura de `terminal_saude` (unica consulta desta
+    # rotina, `_publicar_online_se_estava_offline` em
+    # `gateway/rotas/catchup.py`) ja saiu do `async with sessao_com_tenant`
+    # -- nao ha commit pendente para esperar aqui, e o mesmo espirito de
+    # "fire and forget, janela de risco pequena e documentada" do lado
+    # `worker` (ver `apps/worker/worker/despacho_webhooks.py`, docstring do
+    # modulo) se aplica.
+    import asyncio
+    import json
+
+    async def _inserir_entrega_pendente_local() -> None:
+        from sqlalchemy import text
+
+        from gateway.dominio.bd import aplicar_tenant, fabrica_de_sessoes
+
+        try:
+            fabrica = fabrica_de_sessoes()
+            async with fabrica() as sessao:
+                await aplicar_tenant(sessao, str(tenant_id))
+                await sessao.execute(
+                    text(
+                        """
+                        INSERT INTO webhook_entregas
+                            (tenant_id, webhook_id, evento, evento_id, payload,
+                             tentativa, status, proxima_tentativa_em)
+                        SELECT w.tenant_id, w.id, :evento, :evento_id,
+                               CAST(:payload AS jsonb), 1, 'pendente', now()
+                        FROM webhooks w
+                        WHERE w.tenant_id = :tenant_id
+                          AND w.status = 'ativo'
+                          AND w.eventos @> ARRAY[:evento]::text[]
+                          AND w.excluido_em IS NULL
+                        """
+                    ),
+                    {
+                        "evento": envelope["tipo"],
+                        "evento_id": envelope["id"],
+                        "payload": json.dumps(envelope, ensure_ascii=False, default=str),
+                        "tenant_id": str(tenant_id),
+                    },
+                )
+                await sessao.commit()
+        except Exception:
+            logger.exception(
+                "falha ao gravar fan-out de webhook_entregas (device-gw)",
+                extra={"tipo": envelope["tipo"]},
+            )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # pragma: no cover - so fora de contexto assincrono
+        logger.warning(
+            "publicar_terminal_online fora de um event loop; fan-out de webhook descartado",
+            extra={"tipo": envelope["tipo"]},
+        )
+        return envelope
+
+    # Referencia forte na propria funcao (atributo dinamico, inicializado no
+    # primeiro uso) para a Task nao ser coletada pelo GC antes de terminar --
+    # mesmo problema documentado em `worker.despacho_webhooks._TASKS_EM_VOO`,
+    # resolvido aqui sem acrescentar nome novo ao MODULO (so ao objeto
+    # funcao), para manter a mudanca restrita ao corpo de `publicar_
+    # terminal_online` (unico ponto de `apps/device-gw/**` que A3 pode tocar).
+    tasks_em_voo: set[asyncio.Task[None]] = (
+        getattr(publicar_terminal_online, "_tasks_fan_out_em_voo", None) or set()
+    )
+    publicar_terminal_online._tasks_fan_out_em_voo = tasks_em_voo  # type: ignore[attr-defined]
+    tarefa = loop.create_task(_inserir_entrega_pendente_local())
+    tasks_em_voo.add(tarefa)
+    tarefa.add_done_callback(tasks_em_voo.discard)
+
     return envelope

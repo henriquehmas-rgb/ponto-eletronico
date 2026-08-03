@@ -4,6 +4,28 @@ Administracao do tenant: usuarios, perfis, catalogo de permissoes e clientes
 de API. Regra de negocio implementada na F1/A3 (T8) -- ver
 `app.identidade.rbac.servico`. `GET /v1/admin/saude` NAO vive aqui: e
 infraestrutura de F0, registrada em `app/routers/saude.py`.
+
+**F13/A1 (T2, RFC-016).** `listarApiClients`/`criarApiClient` **já estavam
+implementados** por F1/A3 (não eram stub, ao contrário do que uma versão
+anterior do PCF desta fase presumia -- conferido por leitura direta antes de
+tocar neste arquivo) e continuam usando `exigir_permissao` (sessão humana),
+sem alteração de autorização. As três operações NOVAS desta fase
+(`listarApiKeys`/`criarApiKey`/`revogarApiKey`, ver `app.integracoes.
+clientes.servico`) seguem o MESMO mecanismo (`exigir_permissao`, com os
+códigos de permissão que a decisão do orquestrador em RFC-016 fixou:
+`api_clients.ler`/`criar`/`editar`) -- não `app.comum.autenticacao_cliente.
+exigir_escopo` (T1): gestão de clientes/chaves de integração permanece
+operação de administração humana, o mesmo padrão que `listarApiClients`/
+`criarApiClient` já estabeleceram, e é consistente com nunca reabrir/duplicar
+a fiação de `app/core/seguranca.py` só para este subconjunto de rotas.
+
+`criarApiClient` ganhou `Depends(exigir_idempotencia())` nesta fase (T3): o
+cabeçalho `Idempotency-Key` já era exigido pelo contrato mas, antes desta
+fase, chegava e era descartado (achado do PCF §2.4, que nomeia explicitamente
+"admin api-clients/keys" como escopo de retrofit LEGÍTIMO desta fase --
+diferente da proibição geral de retrofit nas ~130 rotas de F1-F12). As duas
+rotas novas de escrita (`criarApiKey`/`revogarApiKey`) já nascem com o mesmo
+mecanismo.
 """
 
 from __future__ import annotations
@@ -11,13 +33,20 @@ from __future__ import annotations
 from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from pydantic import BaseModel
 
+from app.comum.idempotencia_generica import (
+    ChaveIdempotencia,
+    abrir_operacao,
+    concluir_operacao,
+    exigir_idempotencia,
+)
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.identidade.rbac import servico
+from app.integracoes.clientes import servico as clientes_servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["admin"])
@@ -279,16 +308,137 @@ async def listar_api_clients(
 async def criar_api_client(
     sessao: SessaoDb,
     sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.criar"))],
-    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
+    response: Response,
     corpo: contrato.ApiClientCriar,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.ApiClientCriado:
     """Criar cliente de API. O segredo (`clientSecret`) sai uma unica vez."""
     tenant_id = tenant_id_ou_erro(sujeito)
+    resultado = await abrir_operacao(
+        sessao, tenant_id=tenant_id, escopo="criarApiClient", chave=chave_idem
+    )
+    response.headers["Idempotency-Replayed"] = "true" if resultado.ja_concluido else "false"
+    if resultado.ja_concluido:
+        return contrato.ApiClientCriado.model_validate(resultado.resposta_corpo)
+
     cliente, segredo = await servico.criar_api_client(
         sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito
     )
-    return contrato.ApiClientCriado.model_validate(
+    resposta = contrato.ApiClientCriado.model_validate(
         {"cliente": _para_schema(contrato.ApiClient, cliente), "clientSecret": segredo}
     )
+    await concluir_operacao(
+        sessao,
+        registro_id=resultado.registro_id,
+        status_http=201,
+        corpo_resposta=resposta.model_dump(mode="json", by_alias=True),
+    )
+    return resposta
+
+
+# =============================================================================
+# Chaves de API (F13/A1, T2 -- RFC-016)
+# =============================================================================
+
+
+@roteador.get(
+    "/v1/admin/api-clients/{apiClientId}/chaves",
+    status_code=200,
+    operation_id="listarApiKeys",
+    summary="Listar chaves de API do cliente",
+    responses=RESPOSTAS_PADRAO,
+)
+async def listar_api_keys(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.ler"))],
+    api_client_id: Annotated[UUID, Path(alias="apiClientId")],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+) -> contrato.ListaApiKey:
+    """Listar chaves de API do cliente. Nunca devolve `hash` nem a chave em claro."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, paginacao = await clientes_servico.listar_api_keys(
+        sessao, tenant_id=tenant_id, api_client_id=api_client_id, cursor=cursor, limite=limite
+    )
+    dados = [_para_schema(contrato.ApiKey, linha) for linha in linhas]
+    return contrato.ListaApiKey(dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao))
+
+
+@roteador.post(
+    "/v1/admin/api-clients/{apiClientId}/chaves",
+    status_code=201,
+    operation_id="criarApiKey",
+    summary="Criar chave de API",
+    responses=RESPOSTAS_PADRAO,
+)
+async def criar_api_key(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.criar"))],
+    chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
+    response: Response,
+    api_client_id: Annotated[UUID, Path(alias="apiClientId")],
+    corpo: contrato.ApiKeyCriar,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> contrato.ApiKeyCriada:
+    """Criar chave de API. O valor em claro (`chave`) sai uma unica vez."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    resultado = await abrir_operacao(
+        sessao, tenant_id=tenant_id, escopo="criarApiKey", chave=chave_idem
+    )
+    response.headers["Idempotency-Replayed"] = "true" if resultado.ja_concluido else "false"
+    if resultado.ja_concluido:
+        return contrato.ApiKeyCriada.model_validate(resultado.resposta_corpo)
+
+    chave, chave_em_claro = await clientes_servico.criar_api_key(
+        sessao, tenant_id=tenant_id, api_client_id=api_client_id, dados=corpo, sujeito=sujeito
+    )
+    resposta = contrato.ApiKeyCriada.model_validate(
+        {"apiKey": _para_schema(contrato.ApiKey, chave), "chave": chave_em_claro}
+    )
+    await concluir_operacao(
+        sessao,
+        registro_id=resultado.registro_id,
+        status_http=201,
+        corpo_resposta=resposta.model_dump(mode="json", by_alias=True),
+    )
+    return resposta
+
+
+@roteador.delete(
+    "/v1/admin/api-clients/{apiClientId}/chaves/{chaveId}",
+    status_code=204,
+    operation_id="revogarApiKey",
+    summary="Revogar chave de API",
+    responses=RESPOSTAS_PADRAO,
+)
+async def revogar_api_key(
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.editar"))],
+    chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
+    response: Response,
+    api_client_id: Annotated[UUID, Path(alias="apiClientId")],
+    chave_id: Annotated[UUID, Path(alias="chaveId")],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+) -> Response:
+    """Revogar chave de API. Idempotente: revogar de novo continua respondendo 204."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    resultado = await abrir_operacao(
+        sessao, tenant_id=tenant_id, escopo="revogarApiKey", chave=chave_idem
+    )
+    response.headers["Idempotency-Replayed"] = "true" if resultado.ja_concluido else "false"
+    if not resultado.ja_concluido:
+        await clientes_servico.revogar_api_key(
+            sessao, tenant_id=tenant_id, api_client_id=api_client_id, chave_id=chave_id
+        )
+        await concluir_operacao(
+            sessao, registro_id=resultado.registro_id, status_http=204, corpo_resposta=None
+        )
+    response.status_code = 204
+    return response

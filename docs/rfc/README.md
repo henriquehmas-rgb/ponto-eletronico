@@ -203,6 +203,10 @@ Proposta ──► Decidida ──► Implementada
 | [013](RFC-013-enumeracao-cross-tenant-para-rotinas-de-manutencao.md) | Rotina de cron cross-tenant (`verificar_terminal_offline`, `verificar_banco_horas_vencendo`) não tem mecanismo sancionado para enumerar tenants/terminais antes do RLS por linha | ✅ Decidida/Implementada | 26/07/2026 | F6, F4 |
 | [014](RFC-014-enumeracao-cross-tenant-para-verificar-notificacoes-pendentes.md) | Terceiro caso do mesmo problema da RFC-013 (`verificar_notificacoes_pendentes`) — estende o precedente e o pré-aprova para futuras rotinas equivalentes | ✅ Decidida/Implementada | 27/07/2026 | F10 |
 | [015](RFC-015-preferencias-colunas-sem-endpoint.md) | `preferencias_colunas` existe no schema desde a Fase 0 mas não tem nenhum schema OpenAPI nem rota HTTP | ✅ Decidida | 30/07/2026 | F11 |
+| [016](RFC-016-chaves-de-api-sem-endpoint.md) | `api_keys` tem tabela e primitivas de emissão/verificação prontas desde F0/F1, mas nenhum endpoint HTTP para emitir, listar ou revogar | ✅ Decidida | 03/08/2026 | F13 |
+| [017](RFC-017-tag-integracoes-sem-endpoint-de-item-unico.md) | A tag `integracoes` não tem endpoint de item único: sem `GET /v1/importacoes/{id}` e sem forma de recuperar o resultado de uma exportação de folha | ✅ Decidida | 03/08/2026 | F13 |
+| [018](RFC-018-sso-sem-superficie-de-contrato.md) | SSO (Google Workspace, Entra ID, SAML 2.0) não tem nenhuma superfície de contrato: nem tag, nem caminho, nem escopo | ✅ Decidida | 03/08/2026 | F13 |
+| [019](RFC-019-vinculo-de-navegador-no-state-oidc.md) | `state` do OIDC não é vinculado ao navegador que iniciou o fluxo — login-CSRF (achado de revisão adversarial) | ✅ Decidida | 03/08/2026 | F13 |
 
 > Ao abrir uma RFC nova, acrescente a linha aqui **no mesmo commit**. Um índice
 > desatualizado faz o próximo agente escolher um número já usado.

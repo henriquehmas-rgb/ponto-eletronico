@@ -120,6 +120,23 @@ dependencies = [
     # INDEPENDENTE (nao reaproveitar estado interno de quem assinou).
     "asn1crypto>=1.5",
     # --- fim F12 ---
+    # --- F13/A10 (SSO SAML 2.0) ---
+    # Valida a assinatura da asserção SAML contra o certificado X.509 do IdP
+    # de cada tenant (`app.identidade.sso.saml.protocolo`, T20/T22). Biblioteca
+    # escolhida: `python3-saml` (OneLogin), MIT, SP-only -- ver a nota de
+    # escolha completa na docstring do proprio modulo. Traz `lxml` e `xmlsec`
+    # (bindings de `libxmlsec1`) como dependencias transitivas; wheels
+    # `manylinux`/`win_amd64` prontos para cp312, confirmados por instalacao
+    # real nesta sessao -- nao exige compilar nada na imagem de producao.
+    "python3-saml>=1.16",
+    # `POST /v1/sso/saml/acs` recebe o SAMLResponse por
+    # `application/x-www-form-urlencoded` (perfil HTTP-POST do SAML 2.0, a
+    # UNICA excecao a JSON do contrato inteiro -- ver openapi.yaml). O FastAPI/
+    # Starlette exige `python-multipart` para `Request.form()` funcionar,
+    # mesmo para corpo urlencoded (nao so multipart/form-data) -- confirmado
+    # lendo `starlette.requests.Request._get_form` nesta sessao.
+    "python-multipart>=0.0.9",
+    # --- fim F13/A10 ---
 ]
 
 [project.optional-dependencies]
@@ -143,6 +160,34 @@ dev = [
     # `app.relatorios.agendamentos` (croniter, ver achado de contrato no
     # bloco F11 acima).
     "types-croniter>=2.0",
+    # F13/A1 (T6): citada como ferramenta desta fase desde
+    # `packages/contracts/README.md`/ADR-005, nunca instalada ate agora --
+    # conforma o contrato contra a API real subida (`make schemathesis`/
+    # `.\tasks.ps1 schemathesis`, job `contrato-schemathesis` do CI). So dev,
+    # nunca entra na imagem de producao. TETO EM <4.0 DE PROPOSITO: a serie
+    # 4.x exige `pytest>=9`, incompativel com o `pytest==8.3.4` fixado acima
+    # -- confirmado nesta sessao (instalar 4.24.3 forcou o pip a atualizar o
+    # pytest do ambiente inteiro e quebrou toda a suite F1-F12 ate reverter).
+    # A serie 3.x (ultima: 3.39.16) declara `pytest<9,>=4.6.4`, compativel.
+    "schemathesis>=3.35,<4.0",
+    # F13/A3 (achado, docs/backlog.md 03/08/2026): o plugin pytest do
+    # schemathesis acima (`schemathesis.pytest.plugin`, carregado via entry
+    # point `pytest11` em TODA invocacao de `pytest`, mesmo para testes sem
+    # nada a ver com schemathesis) importa `_pytest.subtests.SubtestReport`.
+    # Sem esta dependencia, `pytest tests/f13` inteiro falha na coleta com
+    # `ModuleNotFoundError: No module named '_pytest.subtests'`, antes de
+    # rodar um teste sequer -- fechando o gap que A3 documentou como correcao
+    # manual de ambiente, nunca declarada em nenhum pyproject.toml.
+    "pytest-subtests>=0.14",
+    # Orquestrador (fechamento F13): so a dependencia, sem `timeout` default
+    # neste arquivo de proposito -- fica disponivel para quem quiser rodar
+    # `pytest --timeout=N` como guarda-corpo manual (ex.: suite de regressao
+    # completa contra o banco de teste tunelado, achado real desta sessao: um
+    # teste travado silenciosamente parece indistinguivel de "so esta lento"
+    # sem um teto explicito). Nenhum default global aqui porque a suite ja
+    # tem teste deliberadamente lento (F11, prova de performance <60s) que
+    # um teto generico quebraria.
+    "pytest-timeout>=2.3",
 ]
 # Ferramental de geracao de codigo a partir do contrato. Nao entra na imagem.
 # Uso: python tools/gerar_do_contrato.py  (ver cabecalho do script)
@@ -268,6 +313,12 @@ ignore_missing_imports = true
 # `app.fiscal.assinatura.cades.validar_cades`) nao publica py.typed.
 [[tool.mypy.overrides]]
 module = ["asn1crypto.*"]
+ignore_missing_imports = true
+
+# F13/A10: python3-saml (pacote `onelogin.saml2`, validacao de asserção SAML
+# em `app.identidade.sso.saml.protocolo`) nao publica stubs nem py.typed.
+[[tool.mypy.overrides]]
+module = ["onelogin.*"]
 ignore_missing_imports = true
 
 # ==================================================================

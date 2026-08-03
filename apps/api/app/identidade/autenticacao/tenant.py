@@ -48,6 +48,13 @@ async def resolver_tenant_para_autenticacao(
     identificador = (identificador or "").strip()
     if not identificador:
         raise ErroDeAplicacao("PONTO-VAL-011", detalhe="X-Tenant")
+    if "\x00" in identificador:
+        # Achado por fuzzing do schemathesis (F13/T6, `GET /v1/sso/{provedor}/
+        # iniciar?tenant=%00`): o protocolo de fio do Postgres nao consegue
+        # representar NUL dentro de um TEXT -- sem esta checagem, a consulta
+        # abaixo levanta excecao crua do driver e vira 500 (`PONTO-INT-001`)
+        # em vez do 404 de negocio que um identificador impossivel merece.
+        raise ErroDeAplicacao("PONTO-TEN-001")
 
     try:
         candidato_uuid = uuid.UUID(identificador)

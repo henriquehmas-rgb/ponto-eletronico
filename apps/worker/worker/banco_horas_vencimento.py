@@ -285,4 +285,12 @@ def publicar_banco_horas_vencendo(
         "evento de dominio publicado",
         extra={"tipo": envelope["tipo"], "id": envelope["id"], "tenantId": envelope["tenantId"]},
     )
+    # F13/A3, T11 -- aditivo (nome/comportamento do que ja existia acima
+    # inalterados). `publicar_banco_horas_vencendo` nao tem escrita propria
+    # associada (e uma notificacao derivada de LEITURA de `bh_contas`, nunca
+    # desfeita por rollback) -- nao ha "commit" para esperar aqui, ao
+    # contrario de `terminal.offline`. Ver `worker.despacho_webhooks`.
+    from worker.despacho_webhooks import publicar_fire_and_forget
+
+    publicar_fire_and_forget(envelope)
     return envelope

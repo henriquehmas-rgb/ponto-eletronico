@@ -71,6 +71,14 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
         <PortaoDePermissao permissao="escalas.ler">
           <ItemDeNavegacao href="/painel/escalas" rotulo="Escalas" caminhoAtual={caminhoAtual} />
         </PortaoDePermissao>
+        <PortaoDePermissao permissao="webhooks.ler">
+          <ItemDeNavegacao
+            href="/painel/integracoes"
+            rotulo="Integrações"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/integracoes"
+          />
+        </PortaoDePermissao>
 
         <Botao
           type="button"
