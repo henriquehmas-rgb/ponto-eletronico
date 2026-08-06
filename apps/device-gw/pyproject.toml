@@ -42,6 +42,12 @@ dependencies = [
     "redis>=5.0",
     "pydantic>=2.9,<3.0",
     "pydantic-settings>=2.6",
+    # `gateway.dominio.cifra` decifra `terminais.senha_api_cifrada` (AES-256-GCM,
+    # copia deliberada de `apps/api/app/terminais/cifra.py`, F6) -- dependencia
+    # nunca declarada aqui (so funcionava localmente por vir de carona de outro
+    # pacote do venv compartilhado); achado ao construir a imagem Docker limpa
+    # pela primeira vez (F14, fechamento).
+    "cryptography>=43.0",
     "sqlalchemy>=2.0.30,<3.0",
     "asyncpg>=0.29",
 ]
