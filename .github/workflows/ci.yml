@@ -899,3 +899,61 @@ jobs:
             exit 1
           fi
           echo "CI verde."
+
+  # ---------------------------------------------------------------------------
+  # (f) Deploy continuo em hml — so em push real a main, so depois do CI
+  # inteiro passar. Publica cada imagem em ghcr.io (GITHUB_TOKEN nativo, sem
+  # segredo extra) e dispara o redeploy na VPS por uma chave SSH DEDICADA e
+  # restrita (forced-command em authorized_keys, so executa infra/
+  # deploy-hml.sh -- mesmo se vazar, o estrago maximo e "alguem forca um
+  # redeploy do hml", nunca acesso de shell). Alvo e SO hml (homologacao);
+  # producao (dominio/segredos reais) e decisao separada, ainda nao tomada.
+  # ---------------------------------------------------------------------------
+  deploy-hml:
+    name: Deploy · hml
+    needs: [ci-ok]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        servico: [api, worker, web, device-gw, facial-svc]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e publica ${{ matrix.servico }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.servico }}/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/ponto-${{ matrix.servico }}:latest
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+
+  deploy-hml-aplicar:
+    name: Deploy · hml (aplicar)
+    needs: [deploy-hml]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispara infra/deploy-hml.sh na VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PONTO_DEPLOY_HOST }}
+          username: root
+          key: ${{ secrets.PONTO_DEPLOY_SSH_KEY }}
+          # O comando aqui e IGNORADO pelo servidor -- o forced-command do
+          # authorized_keys sempre roda infra/deploy-hml.sh, nunca isto.
+          script: echo "disparando deploy-hml.sh (forced-command do lado do servidor)"
