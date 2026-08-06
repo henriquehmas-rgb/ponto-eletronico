@@ -27192,7 +27192,6 @@ components:
           - colaboradores:ler
           criadoEm: '2026-07-25T08:02:13-03:00'
         paginacao:
-          proximoCursor: null
           temMais: false
           limite: 50
           total: 1

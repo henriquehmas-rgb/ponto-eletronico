@@ -301,14 +301,45 @@ jobs:
           fi
 
       - name: pytest
-        run: pytest -q --cov --cov-report=xml --cov-report=term-missing
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Cada app roda em processo isolado, com cwd == raiz do app: e o
+          # unico jeito de o pytest respeitar o [tool.pytest.ini_options] de
+          # cada apps/*/pyproject.toml (asyncio_mode etc.) e, principalmente,
+          # de evitar a colisao de nomes entre apps/api/tests e
+          # apps/worker/tests (ambos pacotes `tests`, ambos com __init__.py) --
+          # rodar tudo de uma vez a partir da raiz do monorepo faz o pytest
+          # registrar dois modulos/plugins sob o mesmo nome pontilhado
+          # (`tests.f14.lgpd.conftest`), e o segundo que tenta se registrar
+          # explode com ImportPathMismatchError/ModuleNotFoundError/ValueError
+          # de plugin duplicado -- achado real: F13 e F14 adicionaram
+          # apps/worker/tests/{f13/webhooks,f13/importadores/afd_terceiro,
+          # f14/lgpd} espelhando caminhos ja existentes em apps/api/tests, e a
+          # execucao unica global travava a coleta inteira (0 testes rodados).
+          falha=0
+          for proj in apps/*/pyproject.toml; do
+            dir=$(dirname "$proj")
+            nome=$(basename "$dir")
+            [ -d "$dir/tests" ] || continue
+            echo "::group::pytest $nome"
+            (cd "$dir" && pytest -q --cov --cov-report=xml --cov-report=term-missing)
+            status=$?
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error::pytest falhou em $nome (exit $status)"
+              falha=1
+            fi
+            [ -f "$dir/coverage.xml" ] && mv "$dir/coverage.xml" "coverage-$nome.xml"
+          done
+          exit $falha
 
       - name: Publica relatorio de cobertura
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cobertura-python
-          path: coverage.xml
+          path: coverage-*.xml
           if-no-files-found: ignore
           retention-days: 7
 
