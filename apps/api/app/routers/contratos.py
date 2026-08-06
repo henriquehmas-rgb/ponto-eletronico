@@ -18,6 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -112,6 +113,7 @@ async def listar_contratos(
     operation_id="criarContrato",
     summary="Criar contrato",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_contrato(
     idempotency_key: Annotated[
@@ -185,6 +187,7 @@ async def obter_contrato(
     operation_id="atualizarContrato",
     summary="Atualizar contrato",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_contrato(
     idempotency_key: Annotated[
@@ -311,6 +314,7 @@ async def listar_vinculos(
     operation_id="criarVinculo",
     summary="Criar vinculo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_vinculo(
     idempotency_key: Annotated[
@@ -382,6 +386,7 @@ async def obter_vinculo(
     operation_id="encerrarVinculo",
     summary="Encerrar vinculo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def encerrar_vinculo(
     idempotency_key: Annotated[

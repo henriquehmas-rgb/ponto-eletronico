@@ -10187,6 +10187,159 @@ paths:
       x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
         PONTO-INT-003, PONTO-INT-005, PONTO-LGPD-002, PONTO-PERM-001, PONTO-PERM-002, PONTO-RATE-001,
         PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-011]
+  /v1/marcacoes/{marcacaoId}/meta/decisao:
+    post:
+      tags:
+      - marcacoes
+      summary: Decidir revisao antifraude da marcacao
+      description: 'Registra a decisao do gestor sobre uma marcacao pendente de revisao (RFC-020, ADR-008
+        regra 2): aprovada ou rejeitada, com observacao opcional. NUNCA altera a marcacao em si (ADR-002)
+        -- so os campos de revisao de MarcacaoMeta, a mesma mutabilidade que obterMetaMarcacao ja documenta.
+        Exige que a marcacao esteja com revisaoStatus=pendente; decidir de novo uma revisao ja decidida
+        e erro.'
+      operationId: decidirRevisaoMarcacao
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - marcacoes:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/CabecalhoIdempotencia'
+      - name: marcacaoId
+        in: path
+        required: true
+        description: Identificador da marcacao.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: marcacoes.aprovar
+      x-escopo: marcacoes:ler
+      x-idempotente: true
+      requestBody:
+        required: true
+        description: Corpo da requisicao (DecisaoRevisaoRequisicao).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisaoRevisaoRequisicao'
+            examples:
+              padrao:
+                $ref: '#/components/examples/ExemploDecisaoRevisaoRequisicao'
+      responses:
+        '200':
+          description: Decisao registrada.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarcacaoMeta'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploMarcacaoMeta'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '404':
+          $ref: '#/components/responses/Erro404'
+        '409':
+          $ref: '#/components/responses/Erro409'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-CONF-003,
+        PONTO-IDEM-001, PONTO-IDEM-002, PONTO-IDEM-003, PONTO-INT-001, PONTO-INT-003, PONTO-INT-005,
+        PONTO-PERM-001, PONTO-PERM-002, PONTO-RATE-001, PONTO-REC-001, PONTO-TEN-002, PONTO-TEN-003,
+        PONTO-TEN-004, PONTO-VAL-001, PONTO-VAL-011]
+  /v1/marcacoes/revisao-pendente:
+    get:
+      tags:
+      - marcacoes
+      summary: Listar fila de revisao antifraude
+      description: 'Lista as marcacoes com revisaoStatus=pendente, mais recentes primeiro (RFC-020): a
+        fila de trabalho do gestor para o painel de marcacoes suspeitas. Rota dedicada em vez de um filtro
+        em listarMarcacoes -- usa o indice parcial dedicado de marcacoes_meta (tenant_id, revisao_status)
+        e um cursor proprio sobre o instante da marcacao, independente da paginacao generica de listarMarcacoes.'
+      operationId: listarRevisaoPendente
+      security:
+      - bearerAuth: []
+      - oauth2:
+        - marcacoes:ler
+      - apiKeyAuth: []
+      parameters:
+      - $ref: '#/components/parameters/CabecalhoTenant'
+      - $ref: '#/components/parameters/CabecalhoRequestId'
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limite'
+      - name: empresaId
+        in: query
+        required: false
+        description: Filtra pelas marcacoes de uma empresa.
+        schema:
+          type: string
+          format: uuid
+      x-permissao: marcacoes.ler_sensivel
+      x-escopo: marcacoes:ler
+      x-idempotente: false
+      responses:
+        '200':
+          description: Pagina de resultados.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+            RateLimit-Limit:
+              $ref: '#/components/headers/RateLimitLimit'
+            RateLimit-Remaining:
+              $ref: '#/components/headers/RateLimitRemaining'
+            RateLimit-Reset:
+              $ref: '#/components/headers/RateLimitReset'
+            RateLimit-Policy:
+              $ref: '#/components/headers/RateLimitPolicy'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRevisaoPendente'
+              examples:
+                padrao:
+                  $ref: '#/components/examples/ExemploListaRevisaoPendente'
+        '400':
+          $ref: '#/components/responses/Erro400'
+        '401':
+          $ref: '#/components/responses/Erro401'
+        '403':
+          $ref: '#/components/responses/Erro403'
+        '429':
+          $ref: '#/components/responses/Erro429'
+        '500':
+          $ref: '#/components/responses/Erro500'
+        '501':
+          $ref: '#/components/responses/Erro501'
+        '503':
+          $ref: '#/components/responses/Erro503'
+      x-erros: [PONTO-AUTH-002, PONTO-AUTH-003, PONTO-AUTH-004, PONTO-AUTH-006, PONTO-AUTH-013, PONTO-INT-001,
+        PONTO-INT-003, PONTO-INT-005, PONTO-LGPD-002, PONTO-PERM-001, PONTO-RATE-001, PONTO-TEN-002,
+        PONTO-TEN-003, PONTO-TEN-004, PONTO-VAL-011]
   /v1/marcacoes/sincronizar-offline:
     post:
       tags:
@@ -24149,6 +24302,12 @@ components:
       value:
         decisao: aprovar
         comentario: Conferido com o registro do controle de acesso.
+    ExemploDecisaoRevisaoRequisicao:
+      summary: Requisicao de exemplo para DecisaoRevisaoRequisicao.
+      value:
+        decisao: aprovada
+        observacao: Confirmado com o colaborador; geolocalizacao divergente por app de mapa aberto em segundo
+          plano.
     ExemploListaDispositivo:
       summary: Resposta de exemplo para ListaDispositivo.
       value:
@@ -25068,6 +25227,23 @@ components:
         mockLocation: false
         revisaoStatus: nao_requer
         criadoEm: '2026-07-25T08:02:14-03:00'
+    ExemploListaRevisaoPendente:
+      summary: Resposta de exemplo para ListaRevisaoPendente.
+      value:
+        dados:
+        - marcacaoId: 4a8e35d1-2c60-4f7b-8e93-0b1d6c5a24f7
+          colaboradorId: 7b3e9a12-5f4d-4c8e-9a1b-2d6c7e8f9a0b
+          empresaId: b3f61d47-0a5c-4d92-a7e8-14c6b09f2358
+          canal: mobile
+          datahoraMarcacao: '2026-08-06T08:02:14-03:00'
+          nsr: 128734
+          scoreConfianca: 58
+          classificacaoConfianca: media
+          flagsIntegridade:
+            mockLocation: true
+        paginacao:
+          temMais: false
+          limite: 50
     ExemploSincronizacaoOfflineRequisicao:
       summary: Requisicao de exemplo para SincronizacaoOfflineRequisicao.
       value:
@@ -38677,6 +38853,23 @@ components:
           type: string
           format: uuid
           description: Delegacao usada, quando a decisao e exercida em nome de outro.
+    DecisaoRevisaoRequisicao:
+      type: object
+      description: Decisao do gestor sobre um item da fila de revisao antifraude (RFC-020). Schema proprio,
+        nao reaproveita DecisaoRequisicao -- os valores de decisao batem com marcacoes_meta.revisao_status
+        (Fase 0), e nao ha conceito de delegacao aqui.
+      required:
+      - decisao
+      properties:
+        decisao:
+          type: string
+          enum:
+          - aprovada
+          - rejeitada
+          description: Decisao tomada sobre a revisao.
+        observacao:
+          type: string
+          description: Observacao do gestor sobre a decisao.
     RecalculoRequisicao:
       type: object
       description: Pedido de reprocessamento determinístico de um intervalo. Recalcular duas vezes o mesmo
@@ -40142,6 +40335,69 @@ components:
           description: Itens da pagina, na ordem pedida em ordenar.
           items:
             $ref: '#/components/schemas/Afastamento'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+    ItemRevisaoPendente:
+      type: object
+      description: Uma marcacao pendente de revisao antifraude, com o minimo de contexto para o gestor
+        decidir sem precisar de uma segunda consulta (RFC-020).
+      required:
+      - marcacaoId
+      - empresaId
+      - canal
+      - datahoraMarcacao
+      - nsr
+      - flagsIntegridade
+      properties:
+        marcacaoId:
+          type: string
+          format: uuid
+        colaboradorId:
+          type: string
+          format: uuid
+        empresaId:
+          type: string
+          format: uuid
+        canal:
+          type: string
+          enum:
+          - terminal
+          - mobile
+          - web
+          - totem
+          - api
+          - importacao
+        datahoraMarcacao:
+          type: string
+          format: date-time
+        nsr:
+          type: integer
+          format: int64
+        scoreConfianca:
+          type: integer
+          format: int32
+        classificacaoConfianca:
+          type: string
+          enum:
+          - alta
+          - media
+          - baixa
+          - bloqueada
+        flagsIntegridade:
+          type: object
+          additionalProperties: true
+          description: Sinais de integridade do ambiente de captura, mesmo formato de MarcacaoMeta.flagsIntegridade.
+    ListaRevisaoPendente:
+      type: object
+      description: Pagina de resultados de ItemRevisaoPendente.
+      required:
+      - dados
+      - paginacao
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemRevisaoPendente'
         paginacao:
           $ref: '#/components/schemas/Paginacao'
     ListaMarcacao:

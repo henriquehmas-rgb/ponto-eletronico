@@ -44,13 +44,17 @@ def test_rota_ainda_stub_sem_x_tenant_nao_e_bloqueada_pelo_middleware(
     de todo `/v1/...` incondicionalmente (ver docstring de
     `app/core/middleware.py:TenantMiddleware`).
 
-    `/v1/fiscal/afd` era o exemplo original (F1) mas F12 implementou a tag
-    `fiscal` de verdade -- trocado por `/v1/lgpd/consentimentos` (orquestrador,
-    fechamento da F13, 03/08/2026): `app/routers/lgpd.py` ainda e o stub
-    GERADO original, tag inteira reservada a uma fase futura (F14, `Onda 5`,
-    segurança/antifraude/LGPD -- ver `docs/backlog.md`/status das ondas),
-    ninguem a tocou ainda."""
-    resposta = cliente.get("/v1/lgpd/consentimentos")
+    `/v1/fiscal/afd` era o exemplo original (F1), trocado para `/v1/lgpd/
+    consentimentos` no fechamento da F13 (03/08/2026) -- mas a F14 (`Onda 5`,
+    seguranca/antifraude/LGPD) implementou `app/routers/lgpd.py` de verdade,
+    quebrando a mesma premissa outra vez. Trocado (orquestrador, fechamento
+    da F14, 2026-08-05) para `GET /v1/tenants` (`listarTenants`): confirmado
+    por leitura que `listar_tenants` em `app/routers/tenants.py` NAO declara
+    `SessaoDb` e levanta `NaoImplementado("listarTenants", fase="F1")` --
+    genuinamente 501 ainda, decisao de acesso do suporte da SEEG pendente
+    (ver docs/backlog.md, item "F1 / A2"). Se uma fase futura implementar
+    isso tambem, troque de novo -- e o mesmo padrao recorrente."""
+    resposta = cliente.get("/v1/tenants")
     assert resposta.status_code == 501
     assert resposta.json()["codigo"] == "PONTO-INT-005"
 

@@ -11,13 +11,14 @@ responde 501 com PONTO-INT-005. Regerar com
 
 from __future__ import annotations
 
-import ipaddress
 from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -35,17 +36,10 @@ roteador = APIRouter(tags=["fiscal"])
 
 
 def _ip_do_cliente(request: Request) -> str | None:
-    """Copia propria do helper de `app/routers/espelhos.py` (F10) -- cada
-    router do projeto mantem sua propria copia em vez de importar de outro
-    dominio (mesmo padrao ja usado em `auth.py`/`espelhos.py`)."""
-    if request.client is None:
-        return None
-    candidato = request.client.host
-    try:
-        ipaddress.ip_address(candidato)
-    except ValueError:
-        return None
-    return candidato
+    """F14/A2, retrofit: delega a `app.comum.ip_confiavel` (honra
+    `X-Forwarded-For`/`X-Real-IP` só quando a conexão vem do proxy reverso
+    de produção -- ver docstring daquele módulo)."""
+    return ip_confiavel_do_cliente(request)
 
 
 def _user_agent(request: Request) -> str | None:
@@ -58,6 +52,7 @@ def _user_agent(request: Request) -> str | None:
     operation_id="gerarAfd",
     summary="Gerar AFD",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def gerar_afd(
     idempotency_key: Annotated[
@@ -273,6 +268,7 @@ async def baixar_afd(
     operation_id="gerarAej",
     summary="Gerar AEJ",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def gerar_aej(
     idempotency_key: Annotated[
@@ -436,6 +432,7 @@ async def obter_aej(
     operation_id="assinarArquivoFiscal",
     summary="Assinar arquivo fiscal",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def assinar_arquivo_fiscal(
     idempotency_key: Annotated[
@@ -568,6 +565,7 @@ async def listar_rep_ps(
     operation_id="criarRepP",
     summary="Cadastrar REP-P",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_rep_p(
     idempotency_key: Annotated[

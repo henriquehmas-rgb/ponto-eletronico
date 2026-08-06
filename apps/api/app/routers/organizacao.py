@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -125,6 +126,7 @@ async def listar_departamentos(
     operation_id="criarDepartamento",
     summary="Criar departamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_departamento(
     sessao: SessaoDb,
@@ -211,6 +213,7 @@ async def obter_departamento(
     operation_id="atualizarDepartamento",
     summary="Atualizar departamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_departamento(
     sessao: SessaoDb,
@@ -261,6 +264,7 @@ async def atualizar_departamento(
     summary="Excluir departamento",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_departamento(
     sessao: SessaoDb,
@@ -388,6 +392,7 @@ async def listar_centros_custo(
     operation_id="criarCentroCusto",
     summary="Criar centro de custo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_centro_custo(
     sessao: SessaoDb,
@@ -474,6 +479,7 @@ async def obter_centro_custo(
     operation_id="atualizarCentroCusto",
     summary="Atualizar centro de custo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_centro_custo(
     sessao: SessaoDb,
@@ -608,6 +614,7 @@ async def listar_cargos(
     operation_id="criarCargo",
     summary="Criar cargo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_cargo(
     sessao: SessaoDb,
@@ -692,6 +699,7 @@ async def obter_cargo(
     operation_id="atualizarCargo",
     summary="Atualizar cargo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_cargo(
     sessao: SessaoDb,
@@ -829,6 +837,7 @@ async def listar_equipes(
     operation_id="criarEquipe",
     summary="Criar equipe",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_equipe(
     sessao: SessaoDb,
@@ -913,6 +922,7 @@ async def obter_equipe(
     operation_id="atualizarEquipe",
     summary="Atualizar equipe",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_equipe(
     sessao: SessaoDb,
@@ -960,6 +970,7 @@ async def atualizar_equipe(
     operation_id="adicionarMembroEquipe",
     summary="Adicionar membro a equipe",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def adicionar_membro_equipe(
     sessao: SessaoDb,

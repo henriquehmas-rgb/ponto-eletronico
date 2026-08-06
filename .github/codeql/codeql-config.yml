@@ -1,0 +1,15 @@
+# Config do CodeQL (F14/A2, hardening) -- exclui diretorios gerados/vendored
+# que nao sao codigo do projeto. Achado nesta sessao ao rodar localmente
+# contra `apps/web`: sem isto, `apps/web/storybook-static/**` (build gerado
+# do Storybook, listado em `.gitignore`) entrava no scan e gerava 8 achados
+# de `js/redos`/`js/incomplete-sanitization`/`js/prototype-pollution-utility`
+# -- todos dentro de bundle de terceiro minificado, nenhum em codigo nosso.
+paths-ignore:
+  - "**/node_modules/**"
+  - "**/.next/**"
+  - "**/storybook-static/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.venv/**"
+  - "**/__pycache__/**"
+  - "**/*.min.js"

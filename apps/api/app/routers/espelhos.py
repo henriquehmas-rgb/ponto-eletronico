@@ -11,7 +11,6 @@ arquivo). A regra em si vive em `app.workflow.fechamento.espelho`/
 
 from __future__ import annotations
 
-import ipaddress
 from typing import Annotated
 from uuid import UUID
 
@@ -20,6 +19,8 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from ponto_contracts import AssinaturaEspelho, Espelho
 
 from app.comum.armazenamento import obter_objeto
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -33,16 +34,10 @@ roteador = APIRouter(tags=["espelhos"])
 
 
 def _ip_do_cliente(request: Request) -> str | None:
-    """Cópia própria do helper de `app/routers/auth.py` (F1) -- endereço do
-    cliente, ou `None` quando o transporte não expõe um IP real."""
-    if request.client is None:
-        return None
-    candidato = request.client.host
-    try:
-        ipaddress.ip_address(candidato)
-    except ValueError:
-        return None
-    return candidato
+    """F14/A2, retrofit: delega a `app.comum.ip_confiavel` (honra
+    `X-Forwarded-For`/`X-Real-IP` só quando a conexão vem do proxy reverso
+    de produção -- ver docstring daquele módulo)."""
+    return ip_confiavel_do_cliente(request)
 
 
 def _user_agent(request: Request) -> str | None:
@@ -148,6 +143,7 @@ async def listar_espelhos(
     operation_id="gerarEspelhos",
     summary="Gerar espelhos de ponto",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def gerar_espelhos(
     idempotency_key: Annotated[
@@ -239,6 +235,7 @@ async def obter_espelho(
     operation_id="assinarEspelho",
     summary="Assinar espelho de ponto",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def assinar_espelho(
     idempotency_key: Annotated[

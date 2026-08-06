@@ -43,6 +43,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -242,6 +243,7 @@ async def listar_preferencias_colunas(
     operation_id="salvarPreferenciaColunas",
     summary="Salvar preferencia de colunas",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def salvar_preferencia_colunas(
     corpo: contrato.PreferenciaColunasCriar,
@@ -277,12 +279,18 @@ async def salvar_preferencia_colunas(
         usuario_id,
         relatorio_definicao_id=corpo.relatorio_definicao_id,
         tela=corpo.tela,
-        nome=corpo.nome,
+        # `corpo.nome`/`corpo.padrao` sao `str | None`/`bool | None` no
+        # contrato (aceitam `null` explicito do cliente, alem de omissao) --
+        # `salvar_preferencia` exige os dois nao-nulos, entao um `null`
+        # explicito cai no mesmo padrao documentado no proprio contrato
+        # (`nome="padrao"`, `padrao=False`) em vez de estourar violacao de
+        # NOT NULL no banco. Achado do passe final de mypy da F14.
+        nome=corpo.nome if corpo.nome is not None else "padrao",
         colunas=corpo.colunas,
         ordenacao=corpo.ordenacao,
         filtros=corpo.filtros,
         larguras=corpo.larguras,
-        padrao=corpo.padrao,
+        padrao=corpo.padrao if corpo.padrao is not None else False,
     )
     return contrato.PreferenciaColunas.model_validate(preferencia, from_attributes=True)
 
@@ -378,6 +386,7 @@ async def listar_agendamentos_relatorio(
     operation_id="criarAgendamentoRelatorio",
     summary="Criar agendamento de relatorio",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_agendamento_relatorio(
     idempotency_key: Annotated[

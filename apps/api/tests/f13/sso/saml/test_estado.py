@@ -36,9 +36,22 @@ def test_dois_estados_tem_nonce_diferente() -> None:
 
 def test_relay_state_adulterado_e_rejeitado() -> None:
     token = estado.gerar_estado(tenant_id=uuid.uuid4(), request_id="_abc")
-    # Troca o ultimo caractere do payload assinado -- qualquer bit alterado
-    # invalida a assinatura HS256.
-    adulterado = token[:-1] + ("a" if token[-1] != "a" else "b")
+    # Troca um caractere do MEIO do segmento de assinatura (nao o ultimo do
+    # token inteiro): o ultimo caractere base64url de uma assinatura HS256
+    # (32 bytes = 256 bits, nao multiplo de 6) carrega 2 bits de sobra que o
+    # decodificador descarta -- ~1 em 4 caracteres alternativos decodifica
+    # para o MESMO byte final, e a adulteracao vira um "achado" que nao
+    # achou nada (achado real: flakiness reproduzida nesta sessao, causa
+    # raiz identificada por leitura de `app.identidade.sso.saml.estado`,
+    # jwt.encode/HS256). Um caractere do meio da assinatura nao tem essa
+    # ambiguidade de borda -- qualquer troca ali sempre muda o byte
+    # decodificado.
+    partes = token.split(".")
+    assinatura = partes[-1]
+    indice_meio = len(assinatura) // 2
+    substituto = "a" if assinatura[indice_meio] != "a" else "b"
+    assinatura_adulterada = assinatura[:indice_meio] + substituto + assinatura[indice_meio + 1 :]
+    adulterado = ".".join([*partes[:-1], assinatura_adulterada])
 
     with pytest.raises(ErroDeAplicacao) as excinfo:
         estado.validar_estado(adulterado)

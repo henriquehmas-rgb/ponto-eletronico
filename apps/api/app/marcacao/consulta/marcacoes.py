@@ -120,7 +120,7 @@ async def _mapa_meta_por_marcacao(
             MarcacaoMetaOrm.marcacao_id.in_(marcacao_ids),
         )
     )
-    return {linha.marcacao_id: _serializar_meta(linha) for linha in resultado.scalars()}
+    return {linha.marcacao_id: serializar_meta_marcacao(linha) for linha in resultado.scalars()}
 
 
 def _serializar_marcacao(linha: MarcacaoOrm, *, comprovante_id: UUID | None) -> contrato.Marcacao:
@@ -163,7 +163,7 @@ def _para_float(valor: decimal.Decimal | None) -> float | None:
     return float(valor) if valor is not None else None
 
 
-def _serializar_meta(linha: MarcacaoMetaOrm) -> contrato.MarcacaoMeta:
+def serializar_meta_marcacao(linha: MarcacaoMetaOrm) -> contrato.MarcacaoMeta:
     return contrato.MarcacaoMeta(
         id=linha.id,
         tenantId=linha.tenant_id,
@@ -343,4 +343,4 @@ async def obter_meta_marcacao(
     linha = resultado.scalars().first()
     if linha is None:
         raise ErroDeAplicacao(CODIGO_NAO_ENCONTRADO, contexto_log={"marcacaoId": str(marcacao_id)})
-    return _serializar_meta(linha)
+    return serializar_meta_marcacao(linha)

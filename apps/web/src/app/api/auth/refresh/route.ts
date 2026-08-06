@@ -6,6 +6,7 @@ import {
   NOME_COOKIE_REFRESH,
   NOME_COOKIE_TENANT,
 } from "@/lib/sessao/servidor/cookie";
+import { corpoDeclaradoComoJson, requisicaoDeMesmaOrigem } from "@/lib/sessao/servidor/csrf";
 import {
   cabecalhosDeEscrita,
   montarRespostaAutenticada,
@@ -29,12 +30,30 @@ import {
  * verificação final da F8 — reproduzido contra a API real: sem isto,
  * `PONTO-VAL-011` em qualquer topologia onde `URL_API_INTERNA` não é, ela
  * mesma, um subdomínio do tenant.
+ *
+ * **CSRF de refresh (F14/A2, retrofit).** Esta rota lê o refresh token do
+ * cookie `httpOnly` -- o navegador anexa cookies automaticamente numa
+ * requisição cross-site induzida, então sem checar a origem um site de
+ * terceiros conseguiria forçar o navegador da vítima a rotacionar a PRÓPRIA
+ * sessão dela (não vaza nada por si só, mas normaliza o padrão e fecha o
+ * mesmo vetor já corrigido em `api/auth/sso/**`/`api/auth/login`).
  */
 export const dynamic = "force-dynamic";
 
 type LoginResposta = Esquema<"LoginResposta">;
 
+function respostaOrigemInvalida(): NextResponse {
+  return NextResponse.json(
+    { type: "about:blank", title: "Origem da requisição não confere", status: 403, codigo: "PONTO-PERM-006" },
+    { status: 403 },
+  );
+}
+
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
+  if (!requisicaoDeMesmaOrigem(requisicao) || !corpoDeclaradoComoJson(requisicao)) {
+    return respostaOrigemInvalida();
+  }
+
   const refreshToken = requisicao.cookies.get(NOME_COOKIE_REFRESH)?.value;
   if (!refreshToken) {
     return NextResponse.json(

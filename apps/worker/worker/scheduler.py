@@ -74,6 +74,7 @@ from worker.notificacoes_verificacao import verificar_notificacoes_pendentes_cro
 from worker.relatorios_agendamentos_verificacao import (
     verificar_agendamentos_relatorio_cross_tenant,
 )
+from worker.retencao_lgpd import verificar_politicas_retencao_vencidas_cross_tenant
 from worker.terminais_saude import (
     TerminalAtivo,
     gravar_amostra_saude,
@@ -106,12 +107,17 @@ INTERVALO_SAUDE_S: Final[int] = 20
 #: NOVO do catalogo (ela CONSOME `webhook_entregas` ja gravada pelo fan-out
 #: de T11, nunca cria o fato de dominio em si) -- `evento` fica vazio de
 #: proposito, mesmo motivo.
+#: `verificar_politicas_retencao_lgpd` (F14/A3) e a mesma excecao mais uma
+#: vez: nao produz evento do catalogo, so ENFILEIRA `expurgo_lgpd` (worker)
+#: para cada tenant com politica de retencao vencida -- `evento` vazio,
+#: mesmo motivo das tres rotinas acima.
 ROTINAS: Final[dict[str, dict[str, str]]] = {
     "verificar_banco_horas_vencendo": {"fase": "F4", "evento": "banco_horas.vencendo"},
     "verificar_terminal_offline": {"fase": "F6", "evento": "terminal.offline"},
     "verificar_notificacoes_pendentes": {"fase": "F10", "evento": ""},
     "verificar_agendamentos_relatorio": {"fase": "F11", "evento": ""},
     "despachar_webhooks_pendentes": {"fase": "F13", "evento": ""},
+    "verificar_politicas_retencao_lgpd": {"fase": "F14", "evento": ""},
 }
 
 
@@ -509,6 +515,55 @@ async def despachar_webhooks_pendentes(ctx: dict[Any, Any]) -> dict[str, Any]:
     }
 
 
+async def verificar_politicas_retencao_lgpd(ctx: dict[Any, Any]) -> dict[str, Any]:
+    """Varre `politicas_retencao` de TODO tenant ativo e enfileira
+    `expurgo_lgpd` para cada um que tiver ao menos uma politica ativa e
+    vencida (F14/A3, PCF secao 5 "A3 -- LGPD", "rotina de expurgo
+    automatico").
+
+    A enumeracao cross-tenant usa `fn_tenants_ativos()` (RFC-014, SECURITY
+    DEFINER), mesmo padrao ja usado quatro vezes pelas rotinas irmas acima
+    -- reaproveitada via `worker.retencao_lgpd.
+    verificar_politicas_retencao_vencidas_cross_tenant`, nunca uma segunda
+    funcao `SECURITY DEFINER` (proibicao 5 do PCF).
+
+    O trabalho de verdade (qual entidade, qual acao, quantos registros
+    tratados, atualizacao de `ultima_execucao_em`/`proxima_execucao_em`)
+    acontece dentro da tarefa `expurgo_lgpd` (`worker.tarefas.lgpd` ->
+    `app.lgpd.expurgo.aplicar_politicas_vencidas`) -- esta rotina so decide
+    QUEM precisa da tarefa, `_queue_name=FILA_PADRAO` explicito pelo mesmo
+    motivo que `despachar_webhooks_pendentes` acima ja documenta
+    (`ctx["redis"]` aqui e o pool do SCHEDULER, `default_queue_name=
+    FILA_MANUTENCAO`).
+
+    Roda uma vez por dia, de madrugada: expurgo de dado pessoal nao e
+    latencia-sensivel como entrega de webhook, e rodar com o sistema mais
+    ocioso reduz o risco de competir por conexao de banco com o horario de
+    pico de batida de ponto.
+    """
+    redis = ctx.get("redis")
+    if redis is None:  # pragma: no cover - so em teste sem ctx["redis"]
+        return _resultado_rotina("verificar_politicas_retencao_lgpd")
+
+    resultado = await verificar_politicas_retencao_vencidas_cross_tenant(redis=redis)
+
+    logger.info(
+        "rotina verificar_politicas_retencao_lgpd concluida",
+        extra={
+            "jobId": ctx.get("job_id"),
+            "tenantsVerificados": resultado["tenantsVerificados"],
+            "tenantsComExpurgoEnfileirado": resultado["tenantsComExpurgoEnfileirado"],
+        },
+    )
+    return {
+        "implementado": True,
+        "rotina": "verificar_politicas_retencao_lgpd",
+        "tenantsVerificados": resultado["tenantsVerificados"],
+        "tenantsComExpurgoEnfileirado": resultado["tenantsComExpurgoEnfileirado"],
+        "executadoEm": dt.datetime.now(tz=dt.UTC).isoformat(),
+    }
+
+
 def montar_cron() -> list[CronJob]:
     """Agenda das rotinas periodicas.
 
@@ -569,6 +624,18 @@ def montar_cron() -> list[CronJob]:
             name="despachar_webhooks_pendentes",
             second=0,
             timeout=120,
+            max_tries=1,
+        ),
+        # Diaria, 03:30 (PCF F14 §5/A3) -- antes de
+        # `verificar_banco_horas_vencendo` (04:10), sistema mais ocioso,
+        # nao concorre por conexao de banco com o horario de pico de ponto.
+        cron(
+            verificar_politicas_retencao_lgpd,
+            name="verificar_politicas_retencao_lgpd",
+            hour=3,
+            minute=30,
+            second=0,
+            timeout=900,
             max_tries=1,
         ),
     ]
@@ -644,5 +711,6 @@ __all__ = [
     "verificar_agendamentos_relatorio",
     "verificar_banco_horas_vencendo",
     "verificar_notificacoes_pendentes",
+    "verificar_politicas_retencao_lgpd",
     "verificar_terminal_offline",
 ]

@@ -2335,6 +2335,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/marcacoes/{marcacaoId}/meta/decisao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decidir revisao antifraude da marcacao
+         * @description Registra a decisao do gestor sobre uma marcacao pendente de revisao (RFC-020, ADR-008 regra 2): aprovada ou rejeitada, com observacao opcional. NUNCA altera a marcacao em si (ADR-002) -- so os campos de revisao de MarcacaoMeta, a mesma mutabilidade que obterMetaMarcacao ja documenta. Exige que a marcacao esteja com revisaoStatus=pendente; decidir de novo uma revisao ja decidida e erro.
+         */
+        post: operations["decidirRevisaoMarcacao"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/marcacoes/nsr/verificar": {
         parameters: {
             query?: never;
@@ -2347,6 +2367,26 @@ export interface paths {
          * @description Verifica a sequencia de NSR de um REP-P em busca de lacuna, repeticao ou quebra da cadeia de hash. E a mesma verificacao que roda antes de gerar o AFD: havendo lacuna, o arquivo nao e gerado, porque um AFD com buraco e pior do que nenhum arquivo.
          */
         get: operations["verificarSequenciaNsr"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/marcacoes/revisao-pendente": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar fila de revisao antifraude
+         * @description Lista as marcacoes com revisaoStatus=pendente, mais recentes primeiro (RFC-020): a fila de trabalho do gestor para o painel de marcacoes suspeitas. Rota dedicada em vez de um filtro em listarMarcacoes -- usa o indice parcial dedicado de marcacoes_meta (tenant_id, revisao_status) e um cursor proprio sobre o instante da marcacao, independente da paginacao generica de listarMarcacoes.
+         */
+        get: operations["listarRevisaoPendente"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7379,6 +7419,16 @@ export interface components {
              */
             delegacaoId?: string;
         };
+        /** @description Decisao do gestor sobre um item da fila de revisao antifraude (RFC-020). Schema proprio, nao reaproveita DecisaoRequisicao -- os valores de decisao batem com marcacoes_meta.revisao_status (Fase 0), e nao ha conceito de delegacao aqui. */
+        DecisaoRevisaoRequisicao: {
+            /**
+             * @description Decisao tomada sobre a revisao.
+             * @enum {string}
+             */
+            decisao: "aprovada" | "rejeitada";
+            /** @description Observacao do gestor sobre a decisao. */
+            observacao?: string;
+        };
         /** @description Delegacao temporaria de atribuicoes, tipicamente ferias do gestor. Toda acao exercida por delegacao e marcada como tal na auditoria. */
         Delegacao: {
             /**
@@ -9605,6 +9655,29 @@ export interface components {
              */
             tempoMonotonicoMs?: number;
         };
+        /** @description Uma marcacao pendente de revisao antifraude, com o minimo de contexto para o gestor decidir sem precisar de uma segunda consulta (RFC-020). */
+        ItemRevisaoPendente: {
+            /** @enum {string} */
+            canal: "terminal" | "mobile" | "web" | "totem" | "api" | "importacao";
+            /** @enum {string} */
+            classificacaoConfianca?: "alta" | "media" | "baixa" | "bloqueada";
+            /** Format: uuid */
+            colaboradorId?: string;
+            /** Format: date-time */
+            datahoraMarcacao: string;
+            /** Format: uuid */
+            empresaId: string;
+            /** @description Sinais de integridade do ambiente de captura, mesmo formato de MarcacaoMeta.flagsIntegridade. */
+            flagsIntegridade: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            marcacaoId: string;
+            /** Format: int64 */
+            nsr: number;
+            /** Format: int32 */
+            scoreConfianca?: number;
+        };
         /** @description Conjunto de regras de trabalho e de calculo aplicado a um vinculo. E o parametro central do motor de apuracao. */
         Jornada: {
             /** @description Jornada ativa. */
@@ -10248,6 +10321,11 @@ export interface components {
         ListaRepP: {
             /** @description Itens da pagina, na ordem pedida em ordenar. */
             dados: components["schemas"]["RepP"][];
+            paginacao: components["schemas"]["Paginacao"];
+        };
+        /** @description Pagina de resultados de ItemRevisaoPendente. */
+        ListaRevisaoPendente: {
+            dados: components["schemas"]["ItemRevisaoPendente"][];
             paginacao: components["schemas"]["Paginacao"];
         };
         /** @description Pagina de resultados de Sessao. */
@@ -24679,6 +24757,65 @@ export interface operations {
             503: components["responses"]["Erro503"];
         };
     };
+    decidirRevisaoMarcacao: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo devolve a resposta original e Idempotency-Replayed: true. Mesma chave com corpo diferente resulta em PONTO-IDEM-002.
+                 * @example 01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "Idempotency-Key": components["parameters"]["CabecalhoIdempotencia"];
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path: {
+                /** @description Identificador da marcacao. */
+                marcacaoId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Corpo da requisicao (DecisaoRevisaoRequisicao). */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisaoRevisaoRequisicao"];
+            };
+        };
+        responses: {
+            /** @description Decisao registrada. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarcacaoMeta"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
+            404: components["responses"]["Erro404"];
+            409: components["responses"]["Erro409"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
     verificarSequenciaNsr: {
         parameters: {
             query: {
@@ -24727,6 +24864,62 @@ export interface operations {
             403: components["responses"]["Erro403"];
             404: components["responses"]["Erro404"];
             409: components["responses"]["Erro409"];
+            429: components["responses"]["Erro429"];
+            500: components["responses"]["Erro500"];
+            501: components["responses"]["Erro501"];
+            503: components["responses"]["Erro503"];
+        };
+    };
+    listarRevisaoPendente: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o parametro ordenar junto com um cursor resulta em PONTO-VAL-006.
+                 * @example eyJvIjoiY3JpYWRvRW0iLCJ2IjoiMjAyNi0wNy0yNVQwODowMDowMFoifQ
+                 */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description Filtra pelas marcacoes de uma empresa. */
+                empresaId?: string;
+                /**
+                 * @description Quantidade de itens por pagina.
+                 * @example 50
+                 */
+                limite?: components["parameters"]["Limite"];
+            };
+            header?: {
+                /**
+                 * @description Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de auditoria.
+                 * @example req_01JZ8QW2M0P3T7C9AB4XK6D2E5
+                 */
+                "X-Request-Id"?: components["parameters"]["CabecalhoRequestId"];
+                /**
+                 * @description Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por subdominio do cliente o valor e inferido do host e este cabecalho e ignorado. Divergencia entre o tenant do token e o deste cabecalho resulta em PONTO-TEN-002.
+                 * @example seeg
+                 */
+                "X-Tenant"?: components["parameters"]["CabecalhoTenant"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de resultados. */
+            200: {
+                headers: {
+                    "RateLimit-Limit": components["headers"]["RateLimitLimit"];
+                    "RateLimit-Policy": components["headers"]["RateLimitPolicy"];
+                    "RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    "RateLimit-Reset": components["headers"]["RateLimitReset"];
+                    "X-Request-Id": components["headers"]["XRequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListaRevisaoPendente"];
+                };
+            };
+            400: components["responses"]["Erro400"];
+            401: components["responses"]["Erro401"];
+            403: components["responses"]["Erro403"];
             429: components["responses"]["Erro429"];
             500: components["responses"]["Erro500"];
             501: components["responses"]["Erro501"];
@@ -25770,6 +25963,8 @@ export interface operations {
                 code: string;
                 /** @description Valor opaco emitido por GET /v1/sso/{provedor}/iniciar. Carrega o tenant e o nonce anti-CSRF/anti-replay; expira em 10 minutos. */
                 state: string;
+                /** @description RFC-019: valor bruto (nao o hash) do mesmo vinculo de navegador enviado como vinculoHash a GET /v1/sso/{provedor}/iniciar -- confere contra a claim embutida no state. Opcional no schema, exigido pelo roteador (ausencia ou divergencia responde PONTO-AUTH-004, mesmo codigo de state invalido -- nao distingue qual das duas checagens falhou). */
+                vinculo?: string;
             };
             header?: {
                 /**
@@ -25814,6 +26009,8 @@ export interface operations {
             query?: {
                 /** @description Slug ou UUID do tenant alvo, para acesso por link direto sem subdominio proprio (mesmo papel de X-Tenant nas demais rotas de auth, adaptado a navegacao pura de link). */
                 tenant?: string;
+                /** @description RFC-019: hash SHA-256 (hex) de um valor aleatorio gerado pelo navegador e guardado em sessionStorage, embutido no state assinado e conferido de volta em GET /v1/sso/{provedor}/ callback (parametro vinculo) para impedir login-CSRF -- um state valido apresentado por um navegador diferente do que iniciou o fluxo e rejeitado. Opcional no schema (Schemathesis explora a operacao sem ele), exigido pelo roteador para google/entra_id (ausencia responde PONTO-VAL-001); nao se aplica a saml, que ja tem RelayState/AuthnRequest.ID como equivalente. */
+                vinculoHash?: string;
             };
             header?: {
                 /**

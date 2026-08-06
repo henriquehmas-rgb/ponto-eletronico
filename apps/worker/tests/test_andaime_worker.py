@@ -146,7 +146,10 @@ def test_todo_evento_com_origem_scheduler_tem_rotina_produtora() -> None:
 #: `apps/api/tests/f13/folha/comum/test_execucao.py` (ponta a ponta, via
 #: `app.integracoes.folha.comum.execucao.executar_exportacao_folha`, que
 #: `exportar_folha` chama por import tardio); `processar_fila_notificacoes`
-#: (F10) em `apps/api/tests/f10/notificacao/test_processar_fila_notificacoes.py`.
+#: (F10) em `apps/api/tests/f10/notificacao/test_processar_fila_notificacoes.py`;
+#: `expurgo_lgpd` (F14/A3) em `apps/worker/tests/f14/lgpd/test_expurgo_lgpd.py`
+#: (fiacao do wrapper) e `apps/api/tests/f14/lgpd/test_expurgo.py` (logica de
+#: negocio, `app.lgpd.expurgo.aplicar_politicas_vencidas`).
 _TAREFAS_JA_IMPLEMENTADAS = frozenset(
     {
         "importar_colaboradores",
@@ -162,6 +165,7 @@ _TAREFAS_JA_IMPLEMENTADAS = frozenset(
         "importar_arquivo_generico",
         "exportar_folha",
         "processar_fila_notificacoes",
+        "expurgo_lgpd",
     }
 )
 

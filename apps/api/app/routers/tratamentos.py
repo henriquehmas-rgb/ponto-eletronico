@@ -19,6 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
 from app.apuracao.tratamento import decisao, servico
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -33,6 +34,7 @@ roteador = APIRouter(tags=["tratamentos"])
     operation_id="criarTratamento",
     summary="Criar tratamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_tratamento(
     idempotency_key: Annotated[
@@ -198,6 +200,7 @@ async def obter_tratamento(
     operation_id="atualizarTratamento",
     summary="Atualizar tratamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_tratamento(
     idempotency_key: Annotated[
@@ -243,6 +246,7 @@ async def atualizar_tratamento(
     summary="Cancelar tratamento",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def cancelar_tratamento(
     idempotency_key: Annotated[
@@ -286,6 +290,7 @@ async def cancelar_tratamento(
     operation_id="decidirTratamento",
     summary="Aprovar ou reprovar tratamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def decidir_tratamento(
     idempotency_key: Annotated[

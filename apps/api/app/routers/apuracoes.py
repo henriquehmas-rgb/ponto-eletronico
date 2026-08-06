@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query
 from app.apuracao.dominio import consulta
 from app.apuracao.tratamento import ocorrencias as ocorrencias_servico
 from app.apuracao.tratamento import recalculo
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -175,6 +176,7 @@ async def obter_apuracao(
     operation_id="recalcularApuracoes",
     summary="Recalcular apuracoes",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def recalcular_apuracoes(
     idempotency_key: Annotated[
@@ -311,6 +313,7 @@ async def listar_ocorrencias(
     operation_id="atualizarOcorrencia",
     summary="Atualizar ocorrencia",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_ocorrencia(
     idempotency_key: Annotated[

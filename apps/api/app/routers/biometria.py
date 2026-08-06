@@ -28,6 +28,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
 from app.biometria import servico
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -180,6 +181,7 @@ async def listar_biometrias(
     operation_id="criarBiometria",
     summary="Cadastrar credencial biometrica",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_biometria(
     idempotency_key: Annotated[
@@ -285,6 +287,7 @@ async def obter_biometria(
     summary="Revogar credencial biometrica",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def revogar_biometria(
     idempotency_key: Annotated[
@@ -328,6 +331,7 @@ async def revogar_biometria(
     operation_id="validarBiometria",
     summary="Validar credencial biometrica",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def validar_biometria(
     idempotency_key: Annotated[

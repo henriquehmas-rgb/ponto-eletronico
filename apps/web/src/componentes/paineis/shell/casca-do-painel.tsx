@@ -79,6 +79,14 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
             prefixoAtivo="/painel/integracoes"
           />
         </PortaoDePermissao>
+        <PortaoDePermissao permissao="marcacoes.ler_sensivel">
+          <ItemDeNavegacao
+            href="/painel/antifraude"
+            rotulo="Antifraude"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/antifraude"
+          />
+        </PortaoDePermissao>
 
         <Botao
           type="button"

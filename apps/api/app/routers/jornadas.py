@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from ponto_contracts import Jornada
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -113,6 +114,7 @@ async def listar_horarios(
     operation_id="criarHorario",
     summary="Criar horario",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_horario(
     idempotency_key: Annotated[
@@ -152,6 +154,7 @@ async def criar_horario(
     operation_id="atualizarHorario",
     summary="Atualizar horario",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_horario(
     idempotency_key: Annotated[
@@ -266,6 +269,7 @@ async def listar_jornadas(
     operation_id="criarJornada",
     summary="Criar jornada",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_jornada(
     idempotency_key: Annotated[
@@ -382,6 +386,7 @@ async def obter_jornada(
     operation_id="atualizarJornada",
     summary="Atualizar jornada",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_jornada(
     idempotency_key: Annotated[
@@ -423,6 +428,7 @@ async def atualizar_jornada(
     summary="Excluir jornada",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_jornada(
     idempotency_key: Annotated[
@@ -529,6 +535,7 @@ async def listar_jornadas_vinculo(
     operation_id="atribuirJornadaVinculo",
     summary="Atribuir jornada ao vinculo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atribuir_jornada_vinculo(
     idempotency_key: Annotated[

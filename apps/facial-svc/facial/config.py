@@ -67,8 +67,19 @@ class Configuracao(BaseSettings):
     facial_limiar_similaridade: float = Field(default=0.42, ge=0.0, le=1.0)
 
     #: CA para mTLS entre os chamadores internos e este servico. Vazio desliga o
-    #: mTLS — aceitavel so em `dev`. A F7 promove ausencia em `prd` a recusa.
+    #: mTLS — aceitavel so em `dev`. A F7 promove ausencia em `prd` a recusa
+    #: (`ciclo_de_vida`, `main.py`, decisao original da Fase 0 -- nao alterada
+    #: por F14/A2: o QUE conta como "recusar" continua adiado, o MECANISMO em
+    #: si e que passa a existir de verdade a partir daqui).
     facial_mtls_ca_path: str = ""
+
+    #: Certificado/chave que ESTE servico apresenta como servidor TLS (F14/A2,
+    #: hardening). Os tres campos (`facial_tls_cert_path`/`facial_tls_key_path`/
+    #: `facial_mtls_ca_path`) juntos ligam o mTLS de verdade em `facial.servidor`
+    #: -- qualquer um vazio, o processo sobe em HTTP puro, exatamente como hoje
+    #: (nenhuma regressao: o comportamento so muda quando os tres sao providos).
+    facial_tls_cert_path: str = ""
+    facial_tls_key_path: str = ""
 
     #: Tamanho maximo da imagem aceita, em bytes. Acima disso a resposta e
     #: `PONTO-VAL-008` antes de qualquer decodificacao: decodificar imagem
@@ -87,6 +98,16 @@ class Configuracao(BaseSettings):
     def producao(self) -> bool:
         """Verdadeiro em homologacao e producao: endurece defaults de seguranca."""
         return self.ambiente in ("hml", "prd")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def mtls_configurado(self) -> bool:
+        """Verdadeiro só quando os TRÊS caminhos de mTLS estão preenchidos
+        (F14/A2) -- `facial.servidor` só liga TLS/mTLS de verdade neste caso;
+        caso contrário sobe em HTTP puro, mesmo comportamento de sempre."""
+        return bool(
+            self.facial_tls_cert_path and self.facial_tls_key_path and self.facial_mtls_ca_path
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

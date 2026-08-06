@@ -21,6 +21,7 @@ from app.apuracao.banco_horas import consulta as consulta_servico
 from app.apuracao.banco_horas import contas as contas_servico
 from app.apuracao.banco_horas import politicas as politicas_servico
 from app.apuracao.banco_horas import quitacoes as quitacoes_servico
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -113,6 +114,7 @@ async def obter_saldo_banco_horas(
     operation_id="simularBancoHoras",
     summary="Simular impacto no saldo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def simular_banco_horas(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
@@ -174,6 +176,7 @@ async def listar_contas_banco_horas(
     operation_id="criarContaBancoHoras",
     summary="Criar conta de banco de horas",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_conta_banco_horas(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
@@ -195,6 +198,7 @@ async def criar_conta_banco_horas(
     operation_id="criarQuitacaoBancoHoras",
     summary="Registrar quitacao de banco de horas",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_quitacao_banco_horas(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
@@ -255,6 +259,7 @@ async def listar_politicas_banco_horas(
     operation_id="criarPoliticaBancoHoras",
     summary="Criar politica de banco de horas",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_politica_banco_horas(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],

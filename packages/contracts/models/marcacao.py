@@ -646,6 +646,25 @@ class PoliticaRegistro(ChavePrimariaUUIDMixin, TenantMixin, TimestampMixin, Audi
     )
     ttl_offline_horas: Mapped[int] = mapped_column(nullable=False, server_default=sa.text("72"))
     ativo: Mapped[bool] = mapped_column(nullable=False, server_default=sa.text("TRUE"))
+    # F14/A1 (ADR-008): pesos da composicao ponderada do score de confianca.
+    # Aditivo -- ver comentario de coluna em schema.sql para o porque de nao
+    # haver CHECK de soma = 100 (o motor renormaliza pelas categorias
+    # disponiveis, `app.antifraude.motor`).
+    peso_dispositivo: Mapped[int] = mapped_column(
+        sa.SmallInteger, nullable=False, server_default=sa.text("25")
+    )
+    peso_biometria: Mapped[int] = mapped_column(
+        sa.SmallInteger, nullable=False, server_default=sa.text("25")
+    )
+    peso_geolocalizacao: Mapped[int] = mapped_column(
+        sa.SmallInteger, nullable=False, server_default=sa.text("25")
+    )
+    peso_comportamento: Mapped[int] = mapped_column(
+        sa.SmallInteger, nullable=False, server_default=sa.text("25")
+    )
+    perfil_confianca: Mapped[str] = mapped_column(
+        nullable=False, server_default=sa.text("'equilibrado'")
+    )
 
     __table_args__ = (
         sa.CheckConstraint(
@@ -684,6 +703,24 @@ class PoliticaRegistro(ChavePrimariaUUIDMixin, TenantMixin, TimestampMixin, Audi
         ),
         sa.CheckConstraint(
             "limiar_revisao >= limiar_bloqueio", name="ck_politicas_registro_limiares"
+        ),
+        sa.CheckConstraint(
+            "peso_dispositivo BETWEEN 0 AND 100", name="politicas_registro_peso_dispositivo_check"
+        ),
+        sa.CheckConstraint(
+            "peso_biometria BETWEEN 0 AND 100", name="politicas_registro_peso_biometria_check"
+        ),
+        sa.CheckConstraint(
+            "peso_geolocalizacao BETWEEN 0 AND 100",
+            name="politicas_registro_peso_geolocalizacao_check",
+        ),
+        sa.CheckConstraint(
+            "peso_comportamento BETWEEN 0 AND 100",
+            name="politicas_registro_peso_comportamento_check",
+        ),
+        sa.CheckConstraint(
+            "perfil_confianca IN ('rigoroso','equilibrado','tolerante','personalizado')",
+            name="politicas_registro_perfil_confianca_check",
         ),
         sa.Index(
             "uq_politicas_registro",

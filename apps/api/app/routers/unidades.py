@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -126,6 +127,7 @@ async def listar_unidades(
     operation_id="criarUnidade",
     summary="Criar unidade",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_unidade(
     sessao: SessaoDb,
@@ -221,6 +223,7 @@ async def obter_unidade(
     operation_id="atualizarUnidade",
     summary="Atualizar unidade",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_unidade(
     sessao: SessaoDb,
@@ -269,6 +272,7 @@ async def atualizar_unidade(
     summary="Excluir unidade",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_unidade(
     sessao: SessaoDb,
@@ -381,6 +385,7 @@ async def listar_redes_permitidas(
     operation_id="criarRedePermitida",
     summary="Adicionar faixa de rede permitida",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_rede_permitida(
     sessao: SessaoDb,
@@ -432,6 +437,7 @@ async def criar_rede_permitida(
     summary="Remover faixa de rede permitida",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_rede_permitida(
     sessao: SessaoDb,

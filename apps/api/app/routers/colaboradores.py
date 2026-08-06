@@ -21,6 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -155,6 +156,7 @@ async def listar_colaboradores(
     operation_id="criarColaborador",
     summary="Criar colaborador",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_colaborador(
     idempotency_key: Annotated[
@@ -228,6 +230,7 @@ async def obter_colaborador(
     operation_id="atualizarColaborador",
     summary="Atualizar colaborador",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_colaborador(
     idempotency_key: Annotated[
@@ -271,6 +274,7 @@ async def atualizar_colaborador(
     summary="Excluir colaborador",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_colaborador(
     idempotency_key: Annotated[
@@ -384,6 +388,7 @@ async def listar_gestores_colaborador(
     operation_id="definirGestoresColaborador",
     summary="Definir gestores do colaborador",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def definir_gestores_colaborador(
     idempotency_key: Annotated[
@@ -426,6 +431,7 @@ async def definir_gestores_colaborador(
     operation_id="importarColaboradores",
     summary="Importar colaboradores em lote",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def importar_colaboradores(
     idempotency_key: Annotated[

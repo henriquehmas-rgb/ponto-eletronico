@@ -52,6 +52,22 @@ from app.schemas import contrato
 #: orfao de vinculo) -- o mesmo `DEFAULT` de `politicas_registro.ttl_offline_horas`.
 _TTL_PADRAO_HORAS = 72
 
+#: Achado da verificacao adversarial (F14/A4, `test_confianca_temporal.py`):
+#: acima deste atraso, a classificacao de confianca temporal cai para "baixa"
+#: e o sinal passa a pontuar no motor de score (`app.antifraude.motor`), em
+#: vez de so alimentar o evento de webhook. Proxy HEURISTICO por magnitude do
+#: atraso -- nao a reconciliacao completa dos tres relogios que o ADR-007
+#: descreve (essa reconciliacao completa exigiria guardar, por dispositivo,
+#: o instante em que o servidor o conheceu pela primeira vez, e comparar
+#: deltas monotonicos entre sincronizacoes; ainda nao existe, registrado em
+#: docs/backlog.md). Bem abaixo do TTL padrao (72h) de proposito: um item
+#: legitimo sincroniza muito antes do TTL estourar em operacao normal: um
+#: atraso desta magnitude e incomum mesmo sem ser evidencia definitiva de
+#: adulteracao -- por isso pontua (nao bloqueia; ADR-008 regra 7 so torna
+#: `mock_location` comprovado, HMAC invalido e assinatura invalida
+#: decisivos, nunca atraso por si so).
+_LIMIAR_ATRASO_SUSPEITO_MINUTOS = 24 * 60
+
 #: `dispositivos.tipo` -> canal de `politicas_registro`/`MarcacaoCriar`, para
 #: resolver a politica (TTL, geocerca, etc.) aplicavel ao item offline.
 _CANAL_POR_TIPO_DISPOSITIVO: dict[str, str] = {
@@ -270,6 +286,7 @@ async def _processar_item(
         )
 
     idempotency_key_item = f"{dispositivo.id}:{item.hmac}:{contador}"
+    atraso_minutos = max(0, int(atraso.total_seconds() // 60))
     try:
         resultado = await registrar_marcacao(
             sessao,
@@ -280,6 +297,7 @@ async def _processar_item(
             ip_origem=ip_origem,
             datahora_marcacao_forcada=datahora_captura,
             coletada_offline=True,
+            confianca_temporal_baixa=atraso_minutos > _LIMIAR_ATRASO_SUSPEITO_MINUTOS,
         )
     except ErroDeAplicacao as exc:
         sessao.add(
@@ -352,8 +370,12 @@ async def _processar_item(
         codigo_conflito="PONTO-MARC-007",
     )
 
-    atraso_minutos = max(0, int(atraso.total_seconds() // 60))
-    confianca_temporal = "alta" if item.tempo_monotonico_ms is not None else "media"
+    if atraso_minutos > _LIMIAR_ATRASO_SUSPEITO_MINUTOS:
+        confianca_temporal = "baixa"
+    elif item.tempo_monotonico_ms is not None:
+        confianca_temporal = "alta"
+    else:
+        confianca_temporal = "media"
     # Import tardio: fila_offline.id existe so depois do flush acima.
     fila_offline_id = (
         await sessao.execute(

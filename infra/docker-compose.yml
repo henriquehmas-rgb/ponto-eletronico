@@ -34,7 +34,15 @@ x-python-env: &python-env
   AMBIENTE: ${AMBIENTE:-prd}
   TZ: ${TZ:-America/Sao_Paulo}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?defina POSTGRES_USER}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?defina POSTGRES_DB}
+  # ponto_app_runtime (NUNCA POSTGRES_USER): a imagem oficial do Postgres sempre
+  # cria POSTGRES_USER como SUPERUSER, e RLS nunca se aplica a superusuario
+  # (ADR-001) -- a aplicacao precisa da role de LOGIN de privilegio minimo que
+  # a migration 0004_role_login_app cria, nunca da credencial administrativa.
+  # POSTGRES_USER/POSTGRES_PASSWORD continuam existindo, mas so para quem roda
+  # migration (Alembic, humano ou CI), nunca para os servicos deste bloco.
+  # NAO "ponto_app_login" de proposito: esse nome ja pertence a uma role de
+  # teste isolada de tests/f1/rbac/conftest.py, com senha propria.
+  DATABASE_URL: postgresql+asyncpg://ponto_app_runtime:${POSTGRES_APP_PASSWORD:?defina POSTGRES_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:?defina POSTGRES_DB}
   REDIS_URL: redis://:${REDIS_PASSWORD:?defina REDIS_PASSWORD}@redis:6379/${REDIS_DB:-0}
   MINIO_ENDPOINT: minio:9000
   MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?defina MINIO_ROOT_USER}
@@ -239,10 +247,20 @@ services:
       FACIAL_MODEL_VERSAO: ${FACIAL_MODEL_VERSAO:-arcface-r100-v1}
       FACIAL_LIMIAR_SIMILARIDADE: ${FACIAL_LIMIAR_SIMILARIDADE:-0.42}
       FACIAL_MTLS_CA_PATH: ${FACIAL_MTLS_CA_PATH:-}
+      # F14/A2 -- certificado/chave que o PROPRIO facial-svc apresenta como
+      # servidor TLS. Os tres (estes dois + FACIAL_MTLS_CA_PATH acima)
+      # precisam estar preenchidos para o mTLS ligar de verdade
+      # (`facial/servidor.py`); qualquer um vazio, sobe em HTTP puro.
+      FACIAL_TLS_CERT_PATH: ${FACIAL_TLS_CERT_PATH:-}
+      FACIAL_TLS_KEY_PATH: ${FACIAL_TLS_KEY_PATH:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
       - facial-models:/models
+      # Montagem opcional dos certificados de mTLS (F14/A2) -- so leitura.
+      # Vazio (padrao) nao monta nada; preencha FACIAL_CERTS_DIR e as tres
+      # variaveis acima para ligar mTLS de verdade neste deploy.
+      - ${FACIAL_CERTS_DIR:-./certs-facial-vazio}:/run/secrets/facial-tls:ro
     networks:
       - ponto-interna
     expose:
@@ -271,6 +289,7 @@ services:
       WEB_BASE_URL: https://ponto.${DOMINIO}
       DOCS_BASE_URL: https://docs.ponto.${DOMINIO}
       CORS_ORIGENS: ${CORS_ORIGENS:-https://ponto.${DOMINIO}}
+      PROXIES_CONFIAVEIS: ${PROXIES_CONFIAVEIS:-}
       INPI_NUMERO: ${INPI_NUMERO:-}
       CERT_ICP_PATH: ${CERT_ICP_PATH:-}
       CERT_ICP_SENHA: ${CERT_ICP_SENHA:-}

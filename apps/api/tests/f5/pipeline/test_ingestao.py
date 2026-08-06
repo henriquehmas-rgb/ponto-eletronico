@@ -88,9 +88,16 @@ async def test_todos_os_canais_aceitos_produzem_marcacao_pelo_mesmo_caminho(
     assert resultado.resposta.marcacao.nsr is not None and resultado.resposta.marcacao.nsr >= 1
     assert resultado.resposta.marcacao.canal == canal
     assert resultado.resposta.comprovante is not None
-    assert resultado.resposta.score_confianca == 100
-    assert resultado.resposta.classificacao_confianca == contrato.ClassificacaoConfianca1.alta
-    assert resultado.resposta.revisao_requerida is False
+    # Score/classificacao/revisao NAO sao mais asserados aqui (eram `== 100`/
+    # `alta`/`False` fixos quando o motor de confianca ainda era o stub de
+    # F5): F14 substituiu o corpo por um motor real (`app.antifraude.motor`)
+    # cuja politica DEFAULT (`exige_facial`/`exige_liveness` = `True`)
+    # penaliza a ausencia de biometria em qualquer canal deste teste, que
+    # nao envia foto -- o valor exato e territorio de
+    # `tests/f14/antifraude/test_motor_composicao.py`, nao deste teste, cujo
+    # proposito e so confirmar que todo canal produz marcacao pelo mesmo
+    # caminho (NSR, comprovante, idempotencia), nao validar score.
+    assert resultado.resposta.score_confianca is not None
 
 
 async def _seed_sessao_reautenticada(
@@ -535,8 +542,19 @@ async def test_web_sem_reautenticacao_recente_responde_auth_011(
 async def test_score_stub_nunca_bloqueia_nem_gera_revisao(
     sessao_f5: AsyncSession, contexto_f5: ContextoF5
 ) -> None:
-    """Asserção positiva exigida pelo PCF (T6): com o motor stub de A3, NENHUM
-    caso desta suite produz `PONTO-SCORE-*` nem `revisaoRequerida=true`."""
+    """Historico: asserção positiva exigida pelo PCF de F5 (T6) para a epoca
+    em que o motor de confianca era stub -- "com o motor stub de A3, NENHUM
+    caso desta suite produz `PONTO-SCORE-*` nem `revisaoRequerida=true`".
+
+    F14 substituiu o corpo do motor por composicao real
+    (`app.antifraude.motor`, ADR-008); a garantia que sobrevive nao e mais
+    "nunca gera revisao" (a politica DEFAULT exige biometria e este teste
+    nao envia foto, entao HOJE gera revisao de proposito) e sim a original
+    e mais forte, ja coberta por `test_todos_os_canais_aceitos_produzem_
+    marcacao_pelo_mesmo_caminho`: uma marcacao sem nenhum sinal decisivo de
+    fraude (mock location, camera virtual, emulador, root/dev bloqueado)
+    NUNCA levanta `PONTO-SCORE-*`/`PONTO-DISP-*`/`PONTO-GEO-003` -- sinaliza
+    para revisao humana, nunca bloqueia o registro."""
     sujeito = _sujeito(contexto_f5)
     corpo = _corpo(contexto_f5, canal="api", external_id="ext-score-stub")
     resultado = await ingestao.registrar_marcacao(
@@ -546,5 +564,4 @@ async def test_score_stub_nunca_bloqueia_nem_gera_revisao(
         idempotency_key=f"idem-{uuid.uuid4()}",
         sujeito=sujeito,
     )
-    assert resultado.resposta.score_confianca == 100
-    assert resultado.resposta.revisao_requerida is False
+    assert resultado.resposta.marcacao is not None, "nao deveria bloquear o registro."

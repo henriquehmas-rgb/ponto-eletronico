@@ -16,6 +16,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -96,6 +97,7 @@ async def listar_tipos_afastamento(
     operation_id="criarTipoAfastamento",
     summary="Criar tipo de afastamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_tipo_afastamento(
     idempotency_key: Annotated[
@@ -135,6 +137,7 @@ async def criar_tipo_afastamento(
     operation_id="atualizarTipoAfastamento",
     summary="Atualizar tipo de afastamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_tipo_afastamento(
     idempotency_key: Annotated[
@@ -262,6 +265,7 @@ async def listar_afastamentos(
     operation_id="criarAfastamento",
     summary="Criar afastamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_afastamento(
     idempotency_key: Annotated[
@@ -335,6 +339,7 @@ async def obter_afastamento(
     operation_id="atualizarAfastamento",
     summary="Atualizar afastamento",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_afastamento(
     idempotency_key: Annotated[
@@ -378,6 +383,7 @@ async def atualizar_afastamento(
     summary="Excluir afastamento",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_afastamento(
     idempotency_key: Annotated[

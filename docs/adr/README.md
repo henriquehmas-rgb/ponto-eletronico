@@ -46,3 +46,4 @@ Todo ADR segue a mesma estrutura, nesta ordem:
 | [011](ADR-011-tratamento-afastamento-retroativo-sem-efeito-numerico.md) | Débito técnico aceito: `Tratamento` de categoria `afastamento` (retroativo) não altera a apuração | Aceito | F4, F10, F11, F12 |
 | [012](ADR-012-formula-hash-registro-tipo-7-afd-nao-confirmada.md) | Débito técnico aceito: fórmula de concatenação do hash SHA-256 do registro tipo "7" do AFD não confirmada contra fonte primária suficiente | Aceito | F12 |
 | [013](ADR-013-sso-app-compartilhado-vs-por-tenant.md) | SSO: app OAuth/OIDC compartilhado por aplicação (Google/Entra ID), configuração de confiança por tenant sem tabela nova | Aceito | F13 |
+| [014](ADR-014-f14-antifraude-mobile-sem-f7.md) | F14 (antifraude/hardening/LGPD) prossegue sem F7; sinais nativo-móveis (attestation, RASP, mock location, certificate pinning) ficam pendentes até F7 existir | Aceito | F14, F7 |

@@ -52,7 +52,7 @@ async def _verificar_redis(url: str, timeout_s: float) -> tuple[bool, str]:
         import redis.asyncio as redis_assincrono
 
         async with asyncio.timeout(timeout_s):
-            cliente = redis_assincrono.from_url(url)
+            cliente = redis_assincrono.from_url(url)  # type: ignore[no-untyped-call]
             try:
                 await cliente.ping()
             finally:

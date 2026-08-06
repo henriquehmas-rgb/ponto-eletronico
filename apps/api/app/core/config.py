@@ -124,6 +124,30 @@ class Configuracao(BaseSettings):
     #: publico do tenant, vive em `tenant_configuracoes`, nunca aqui).
     sso_saml_estado_chave: SecretStr = SecretStr("")
 
+    # --- Hardening (F14/A2) ----------------------------------------------------
+    #: Limite de taxa para SESSAO HUMANA (JWT), companion de
+    #: `api_clients.rate_limit_por_minuto` (que so serve `ClienteAutenticado`,
+    #: OAuth/API-key -- ver `app.comum.limitador_taxa.exigir_limite_taxa_sessao`).
+    #: Nao existe coluna por usuario para isto hoje (RFC futura se precisar
+    #: variar por perfil/tenant); um teto global e aditivo, nunca mais
+    #: restritivo que o que ja funciona.
+    rate_limit_sessao_por_minuto: int = 300
+
+    #: Lista separada por virgula de IPs/CIDRs do(s) proxy(s) reverso(s) de
+    #: producao (Traefik, `infra/docker-compose.yml`). `X-Forwarded-For`/
+    #: `X-Real-IP` só sao aceitos quando o IP do socket imediato (o "peer" da
+    #: conexao TCP que chega no processo) esta nesta lista -- caso contrario o
+    #: cabecalho e ignorado e o IP do peer e usado como esta (nunca se confia
+    #: cegamente num cabecalho que qualquer cliente pode forjar). Vazio (padrao
+    #: de `dev`) desliga a confianca: todo `X-Forwarded-For` e ignorado.
+    proxies_confiaveis: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def lista_proxies_confiaveis(self) -> list[str]:
+        """`proxies_confiaveis` normalizada em lista, sem entradas vazias."""
+        return [ip.strip() for ip in self.proxies_confiaveis.split(",") if ip.strip()]
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def lista_cors_origens(self) -> list[str]:

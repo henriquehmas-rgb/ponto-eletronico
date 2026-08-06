@@ -6,6 +6,8 @@
 #   lint-python            ruff (lint + format) + mypy
 #   test-python            pytest com servico PostgreSQL 16 real
 #   contrato-schemathesis  Schemathesis contra a API real subida (F13/A1, T6)
+#   semgrep                Varredura estatica de seguranca (F14/A2)
+#   codeql                 Varredura estatica de seguranca (F14/A2)
 #   web                    eslint + tsc --noEmit + next build
 #   openapi                spectral lint sobre packages/contracts/openapi.yaml
 #   docker                 build das imagens (sem push)
@@ -446,6 +448,201 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
+  # (b2) Varredura estatica de seguranca -- Semgrep (F14/A2, hardening)
+  #
+  # Mesmo padrao do job `contrato-schemathesis` acima: sobe/analisa e publica
+  # achado, sem `|| true`/`continue-on-error` (achado novo reprova o build).
+  #
+  # `_ACHADOS_TRIADOS` (script Python abaixo) é a allowlist de achados JA
+  # revisados por A2 nesta fase e confirmados falso-positivo/risco aceito, com
+  # justificativa por escrito -- ver `docs/backlog.md` (2026-08-05) para o
+  # relatorio completo de cada um. Achado NOVO (fora desta lista) reprova o
+  # job; a lista so cresce por decisao consciente, nunca por conveniencia.
+  # ---------------------------------------------------------------------------
+  semgrep:
+    name: Seguranca · Semgrep
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Instala semgrep
+        run: pip install semgrep
+
+      - name: semgrep (Python -- apps/api, apps/device-gw, apps/facial-svc, apps/worker)
+        run: |
+          semgrep \
+            --config=p/security-audit --config=p/secrets \
+            --config=p/owasp-top-ten --config=p/python --config=p/sql-injection \
+            --metrics=off --severity=ERROR --severity=WARNING \
+            --exclude=".venv" --exclude="node_modules" --exclude="build" \
+            --exclude=".next" --exclude="__pycache__" \
+            --json --output semgrep-python.json \
+            apps/api/app apps/device-gw/gateway apps/facial-svc/facial apps/worker/worker
+
+      - name: semgrep (web -- TypeScript/React/Next.js)
+        if: needs.deteccao.outputs.tem_web == 'true'
+        run: |
+          semgrep \
+            --config=p/security-audit --config=p/secrets \
+            --config=p/owasp-top-ten --config=p/typescript --config=p/nextjs --config=p/react \
+            --metrics=off --severity=ERROR --severity=WARNING \
+            --exclude=".venv" --exclude="node_modules" --exclude="build" \
+            --exclude=".next" --exclude="__pycache__" \
+            --json --output semgrep-web.json \
+            apps/web/src
+
+      - name: Filtra achados triados e reprova em achado novo
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import sys
+
+          # Achados revisados por A2 (F14) e confirmados falso-positivo/risco
+          # aceito, com justificativa completa em `docs/backlog.md`
+          # (2026-08-05, entradas "F14 / A2"). (check_id, caminho, linha).
+          ACHADOS_TRIADOS = {
+              (
+                  "python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text",
+                  "apps/device-gw/gateway/dominio/terminais.py",
+                  79,
+              ),
+              (
+                  "python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text",
+                  "apps/device-gw/gateway/dominio/terminais.py",
+                  91,
+              ),
+          }
+
+          total_novos = 0
+          for arquivo in ("semgrep-python.json", "semgrep-web.json"):
+              try:
+                  dados = json.load(open(arquivo, encoding="utf-8"))
+              except FileNotFoundError:
+                  continue
+              for r in dados.get("results", []):
+                  chave = (r["check_id"], r["path"].replace("\\", "/"), r["start"]["line"])
+                  if chave in ACHADOS_TRIADOS:
+                      print(f"[triado, ignorado] {chave}")
+                      continue
+                  total_novos += 1
+                  print(f"::error file={r['path']},line={r['start']['line']}::{r['check_id']}: {r['extra']['message']}")
+
+          if total_novos:
+              print(f"\n{total_novos} achado(s) NOVO(S) de severidade ERROR/WARNING, fora da allowlist triada.")
+              sys.exit(1)
+          print("Nenhum achado novo -- so os ja triados (se algum) apareceram.")
+          PY
+
+      - name: Publica JSON bruto (para triagem futura)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-resultados
+          path: semgrep-*.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # (b3) Varredura estatica de seguranca -- CodeQL (F14/A2, hardening)
+  #
+  # Mesmo espirito do job `semgrep` acima (allowlist de achado ja triado,
+  # achado novo reprova). Suite explicita (`security-extended`), nunca a
+  # padrao do pack (evita filtro silencioso de query).
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: Seguranca · CodeQL
+    needs: deteccao
+    if: needs.deteccao.outputs.tem_python == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      matrix:
+        include:
+          - linguagem: python
+            fonte: apps/api
+          - linguagem: javascript-typescript
+            fonte: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inicializa CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.linguagem }}
+          source-root: ${{ matrix.fonte }}
+          queries: security-extended
+          config-file: .github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analisa
+        uses: github/codeql-action/analyze@v3
+        with:
+          output: codeql-resultados
+          upload: false
+
+      - name: Filtra achados triados e reprova em achado novo
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob
+          import json
+          import sys
+
+          # Achados revisados por A2 (F14) e confirmados falso-positivo, com
+          # justificativa completa em `docs/backlog.md` (2026-08-05, entradas
+          # "F14 / A2"). (ruleId, caminho-relativo-ao-repo, linha).
+          ACHADOS_TRIADOS = {
+              ("py/weak-sensitive-data-hashing", "apps/api/app/comum/autenticacao_cliente.py", 131),
+              ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/mfa/backup_codes.py", 34),
+              ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/tokens/oauth.py", 196),
+              ("py/url-redirection", "apps/api/app/routers/sso.py", 181),
+          }
+
+          total_novos = 0
+          for caminho_sarif in glob.glob("codeql-resultados/*.sarif"):
+              dados = json.load(open(caminho_sarif, encoding="utf-8"))
+              for run in dados.get("runs", []):
+                  for r in run.get("results", []):
+                      loc = r["locations"][0]["physicalLocation"]
+                      caminho = loc["artifactLocation"]["uri"]
+                      linha = loc["region"].get("startLine", 0)
+                      chave = (r["ruleId"], caminho, linha)
+                      if chave in ACHADOS_TRIADOS:
+                          print(f"[triado, ignorado] {chave}")
+                          continue
+                      total_novos += 1
+                      print(f"::error file={caminho},line={linha}::{r['ruleId']}")
+
+          if total_novos:
+              print(f"\n{total_novos} achado(s) NOVO(S), fora da allowlist triada.")
+              sys.exit(1)
+          print("Nenhum achado novo -- so os ja triados (se algum) apareceram.")
+          PY
+
+      - name: Publica SARIF bruto (para triagem futura)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-resultados-${{ matrix.linguagem }}
+          path: codeql-resultados
+          if-no-files-found: ignore
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
   # (c) Lint, tipos e build do web
   # ---------------------------------------------------------------------------
   web:
@@ -672,7 +869,19 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [deteccao, lint-python, test-python, contrato-schemathesis, web, openapi, docker, infra]
+    needs:
+      [
+        deteccao,
+        lint-python,
+        test-python,
+        contrato-schemathesis,
+        semgrep,
+        codeql,
+        web,
+        openapi,
+        docker,
+        infra,
+      ]
     runs-on: ubuntu-latest
     steps:
       - name: Consolida resultado

@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.comum.idempotencia_middleware import IdempotenciaRetrofitMiddleware
 from app.core.config import Configuracao, obter_configuracao
 from app.core.erros import registrar_tratadores
 from app.core.log import configurar_log, obter_logger
@@ -116,10 +117,17 @@ def criar_aplicacao(config: Configuracao | None = None) -> FastAPI:
     # A ordem importa: o ULTIMO adicionado e o PRIMEIRO a rodar. Request-id
     # precisa ser o mais externo para que qualquer falha ja saia correlacionada.
     # Execucao (do primeiro ao ultimo): RequestId -> Tenant -> Autenticacao ->
-    # RegistroDeAcesso. Autenticacao (F1/A1) publica `usuario_id` no contexto a
-    # partir do access token DEPOIS que o tenant foi resolvido e ANTES do
-    # registro de acesso, para que o log ja saia com usuario correlacionado
-    # (ver docs/backlog.md, item "F1 / A1").
+    # RegistroDeAcesso -> IdempotenciaRetrofit. Autenticacao (F1/A1) publica
+    # `usuario_id` no contexto a partir do access token DEPOIS que o tenant foi
+    # resolvido e ANTES do registro de acesso, para que o log ja saia com
+    # usuario correlacionado (ver docs/backlog.md, item "F1 / A1").
+    #
+    # `IdempotenciaRetrofitMiddleware` (F14/A2) e o MAIS INTERNO de proposito
+    # (adicionado primeiro): so age numa allowlist pequena de rotas de F1-F12
+    # (ver docstring do modulo) e precisa que `contexto.tenant_atual()` ja
+    # esteja publicado (por `TenantMiddleware`, que roda antes dele nesta
+    # ordem) para abrir a propria sessao com RLS aplicada.
+    app.add_middleware(IdempotenciaRetrofitMiddleware)
     app.add_middleware(RegistroDeAcessoMiddleware)
     app.add_middleware(AutenticacaoMiddleware)
     app.add_middleware(TenantMiddleware, config=config)

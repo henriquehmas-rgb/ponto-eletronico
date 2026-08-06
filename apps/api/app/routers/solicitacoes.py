@@ -18,6 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -126,6 +127,7 @@ async def listar_solicitacoes(
     operation_id="criarSolicitacao",
     summary="Criar solicitacao",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_solicitacao(
     idempotency_key: Annotated[
@@ -209,6 +211,7 @@ async def obter_solicitacao(
     operation_id="cancelarSolicitacao",
     summary="Cancelar solicitacao",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def cancelar_solicitacao(
     idempotency_key: Annotated[
@@ -316,6 +319,7 @@ async def listar_tipos_solicitacao(
     operation_id="criarTipoSolicitacao",
     summary="Criar tipo de solicitacao",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_tipo_solicitacao(
     idempotency_key: Annotated[

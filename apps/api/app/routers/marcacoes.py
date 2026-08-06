@@ -17,6 +17,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
+from app.antifraude import fila as fila_revisao
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -78,7 +80,7 @@ async def criar_marcacao(
         corpo=corpo,
         idempotency_key=idempotency_key,
         sujeito=sujeito,
-        ip_origem=request.client.host if request.client else None,
+        ip_origem=ip_confiavel_do_cliente(request),
     )
     if resultado.replay:
         response.headers["Idempotency-Replayed"] = "true"
@@ -278,6 +280,143 @@ async def obter_meta_marcacao(
 
 
 @roteador.post(
+    "/v1/marcacoes/{marcacaoId}/meta/decisao",
+    status_code=200,
+    operation_id="decidirRevisaoMarcacao",
+    summary="Decidir revisao antifraude da marcacao",
+    responses=RESPOSTAS_PADRAO,
+)
+async def decidir_revisao_marcacao(
+    idempotency_key: Annotated[
+        str,
+        Header(
+            alias="Idempotency-Key",
+            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
+        ),
+    ],
+    marcacao_id: Annotated[
+        UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
+    ],
+    corpo: contrato.DecisaoRevisaoRequisicao,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.aprovar"))],
+    sessao: SessaoDb,
+    x_tenant: Annotated[
+        str | None,
+        Header(
+            alias="X-Tenant",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
+        ),
+    ] = None,
+    x_request_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Request-Id",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
+        ),
+    ] = None,
+) -> contrato.MarcacaoMeta:
+    """Decidir revisao antifraude da marcacao (RFC-020). NUNCA altera a
+    marcacao em si (ADR-002) -- so os campos de revisao de `MarcacaoMeta`,
+    via `app.antifraude.fila.decidir_revisao`."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    meta = await fila_revisao.decidir_revisao(
+        sessao,
+        tenant_id=tenant_id,
+        marcacao_id=marcacao_id,
+        decisao=corpo.decisao.value,
+        observacao=corpo.observacao,
+        usuario_id=sujeito.usuario_id,
+    )
+    return consulta_marcacoes.serializar_meta_marcacao(meta)
+
+
+@roteador.get(
+    "/v1/marcacoes/revisao-pendente",
+    status_code=200,
+    operation_id="listarRevisaoPendente",
+    summary="Listar fila de revisao antifraude",
+    responses=RESPOSTAS_PADRAO,
+)
+async def listar_revisao_pendente(
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler_sensivel"))],
+    sessao: SessaoDb,
+    x_tenant: Annotated[
+        str | None,
+        Header(
+            alias="X-Tenant",
+            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
+        ),
+    ] = None,
+    x_request_id: Annotated[
+        str | None,
+        Header(
+            alias="X-Request-Id",
+            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
+        ),
+    ] = None,
+    cursor: Annotated[
+        str | None,
+        Query(
+            alias="cursor",
+            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina.",
+        ),
+    ] = None,
+    limite: Annotated[
+        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
+    ] = None,
+    empresa_id: Annotated[
+        UUID | None, Query(alias="empresaId", description="Filtra pelas marcacoes de uma empresa.")
+    ] = None,
+) -> contrato.ListaRevisaoPendente:
+    """Listar fila de revisao antifraude (RFC-020): marcacoes com
+    `revisaoStatus=pendente`, mais recentes primeiro. Cursor proprio (o
+    instante da marcacao anterior), independente do cursor generico de
+    `listarMarcacoes` -- ver `app.antifraude.fila.listar_pendentes`."""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    limite_efetivo = limite if limite is not None else 50
+    cursor_datahora = datetime.fromisoformat(cursor) if cursor else None
+
+    itens = await fila_revisao.listar_pendentes(
+        sessao,
+        tenant_id=tenant_id,
+        empresa_id=empresa_id,
+        limite=limite_efetivo + 1,
+        cursor_datahora=cursor_datahora,
+    )
+    tem_mais = len(itens) > limite_efetivo
+    pagina = itens[:limite_efetivo]
+    proximo_cursor = pagina[-1].datahora_marcacao.isoformat() if tem_mais and pagina else None
+
+    return contrato.ListaRevisaoPendente(
+        dados=[
+            contrato.ItemRevisaoPendente(
+                marcacaoId=item.marcacao_id,
+                colaboradorId=item.colaborador_id,
+                empresaId=item.empresa_id,
+                canal=contrato.Canal2(item.canal),
+                datahoraMarcacao=item.datahora_marcacao,
+                nsr=item.nsr,
+                scoreConfianca=item.score_confianca,
+                classificacaoConfianca=(
+                    contrato.ClassificacaoConfianca(item.classificacao_confianca)
+                    if item.classificacao_confianca is not None
+                    else None
+                ),
+                flagsIntegridade=item.flags_integridade,
+            )
+            for item in pagina
+        ],
+        paginacao=contrato.Paginacao(
+            proximoCursor=proximo_cursor,
+            cursorAnterior=None,
+            temMais=tem_mais,
+            limite=limite_efetivo,
+            totalEstimado=None,
+        ),
+    )
+
+
+@roteador.post(
     "/v1/marcacoes/sincronizar-offline",
     status_code=207,
     operation_id="sincronizarMarcacoesOffline",
@@ -321,7 +460,7 @@ async def sincronizar_marcacoes_offline(
         corpo=corpo,
         idempotency_key=idempotency_key,
         sujeito=sujeito,
-        ip_origem=request.client.host if request.client else None,
+        ip_origem=ip_confiavel_do_cliente(request),
     )
     return resposta
 

@@ -6658,6 +6658,72 @@ class MarcacaoMeta(BaseModel):
     """
 
 
+class DecisaoRevisao(StrEnum):
+    """
+    Decisao tomada sobre a revisao.
+    """
+
+    aprovada = "aprovada"
+    rejeitada = "rejeitada"
+
+
+class DecisaoRevisaoRequisicao(BaseModel):
+    """
+    Decisao do gestor sobre um item da fila de revisao antifraude (RFC-020). Schema proprio, nao reaproveita DecisaoRequisicao -- os valores de decisao batem com marcacoes_meta.revisao_status (Fase 0), e nao ha conceito de delegacao aqui.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    decisao: DecisaoRevisao
+    """
+    Decisao tomada sobre a revisao.
+    """
+    observacao: str | None = None
+    """
+    Observacao do gestor sobre a decisao.
+    """
+
+
+class ItemRevisaoPendente(BaseModel):
+    """
+    Uma marcacao pendente de revisao antifraude, com o minimo de contexto para o gestor decidir sem precisar de uma segunda consulta (RFC-020).
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    marcacao_id: UUID = Field(alias="marcacaoId")
+    """
+    Identificador da marcacao pendente de revisao.
+    """
+    colaborador_id: UUID | None = Field(None, alias="colaboradorId")
+    empresa_id: UUID = Field(alias="empresaId")
+    canal: Canal2
+    datahora_marcacao: AwareDatetime = Field(alias="datahoraMarcacao")
+    nsr: int
+    score_confianca: int | None = Field(None, alias="scoreConfianca")
+    classificacao_confianca: ClassificacaoConfianca | None = Field(
+        None, alias="classificacaoConfianca"
+    )
+    flags_integridade: dict[str, Any] = Field(alias="flagsIntegridade")
+    """
+    Sinais de integridade do ambiente de captura, mesmo formato de MarcacaoMeta.flagsIntegridade.
+    """
+
+
+class ListaRevisaoPendente(BaseModel):
+    """
+    Pagina de resultados de ItemRevisaoPendente.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    dados: list[ItemRevisaoPendente]
+    paginacao: Paginacao
+
+
 class CanalEntrega(StrEnum):
     """
     Canal por onde o comprovante foi disponibilizado.

@@ -18,6 +18,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -112,6 +113,7 @@ async def listar_terminais(
     operation_id="criarTerminal",
     summary="Criar terminal",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_terminal(
     idempotency_key: Annotated[
@@ -185,6 +187,7 @@ async def obter_terminal(
     operation_id="atualizarTerminal",
     summary="Atualizar terminal",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_terminal(
     idempotency_key: Annotated[
@@ -230,6 +233,7 @@ async def atualizar_terminal(
     summary="Excluir terminal",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_terminal(
     idempotency_key: Annotated[
@@ -343,6 +347,7 @@ async def listar_saude_terminal(
     operation_id="sincronizarTerminal",
     summary="Sincronizar terminal",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def sincronizar_terminal(
     idempotency_key: Annotated[

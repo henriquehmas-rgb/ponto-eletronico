@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from ponto_contracts import Escala
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -113,6 +114,7 @@ async def listar_escalas(
     operation_id="criarEscala",
     summary="Criar escala",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_escala(
     idempotency_key: Annotated[
@@ -184,6 +186,7 @@ async def obter_escala(
     operation_id="atualizarEscala",
     summary="Atualizar escala",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_escala(
     idempotency_key: Annotated[
@@ -225,6 +228,7 @@ async def atualizar_escala(
     summary="Excluir escala",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_escala(
     idempotency_key: Annotated[
@@ -264,6 +268,7 @@ async def excluir_escala(
     operation_id="atribuirEscalaVinculo",
     summary="Atribuir escala a vinculo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atribuir_escala_vinculo(
     idempotency_key: Annotated[
@@ -369,6 +374,7 @@ async def listar_turnos(
     operation_id="criarTurno",
     summary="Criar turno",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_turno(
     idempotency_key: Annotated[
@@ -408,6 +414,7 @@ async def criar_turno(
     operation_id="atualizarTurno",
     summary="Atualizar turno",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_turno(
     idempotency_key: Annotated[

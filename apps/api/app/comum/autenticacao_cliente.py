@@ -65,6 +65,7 @@ from fastapi import Header, Request
 from ponto_contracts import ApiClient, ApiKey, OauthToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.core.erros import ErroDeAplicacao
 from app.identidade.autenticacao.tenant import sessao_com_tenant_resolvido
 from app.identidade.tokens import oauth as oauth_mod
@@ -210,7 +211,14 @@ def exigir_escopo(escopo: str) -> Callable[..., Awaitable[ClienteAutenticado]]:
             if escopo not in escopos_concedidos:
                 raise ErroDeAplicacao("PONTO-PERM-003", detalhe=escopo)
 
-            ip_origem = request.client.host if request.client else None
+            # F14/A2, retrofit: `app.comum.ip_confiavel` honra
+            # `X-Forwarded-For`/`X-Real-IP` só quando a conexão vem do proxy
+            # reverso de produção -- sem isto, um cliente de integração que
+            # fala com a API por trás de `apps/web` (ou de qualquer proxy)
+            # sempre veria `ips_permitidos` comparado contra o IP do proxy,
+            # nunca o do chamador real, tornando a allowlist inútil nesse
+            # caminho.
+            ip_origem = ip_confiavel_do_cliente(request)
             oauth_mod.verificar_origem_permitida(cliente, ip_origem)
 
             return ClienteAutenticado(

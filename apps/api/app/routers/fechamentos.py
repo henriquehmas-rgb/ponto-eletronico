@@ -17,6 +17,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -106,6 +107,7 @@ async def listar_periodos(
     operation_id="criarPeriodo",
     summary="Criar periodo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_periodo(
     idempotency_key: Annotated[
@@ -145,6 +147,7 @@ async def criar_periodo(
     operation_id="criarFechamento",
     summary="Fechar periodo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_fechamento(
     idempotency_key: Annotated[
@@ -301,6 +304,7 @@ async def obter_fechamento(
     operation_id="conferirFechamento",
     summary="Conferir periodo antes de fechar",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def conferir_fechamento(
     idempotency_key: Annotated[
@@ -343,6 +347,7 @@ async def conferir_fechamento(
     operation_id="reabrirFechamento",
     summary="Reabrir periodo fechado",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def reabrir_fechamento(
     idempotency_key: Annotated[

@@ -17,6 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
 from app.biometria import dispositivos as servico
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -175,6 +176,7 @@ async def listar_dispositivos(
     operation_id="criarDispositivo",
     summary="Criar dispositivo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_dispositivo(
     idempotency_key: Annotated[
@@ -275,6 +277,7 @@ async def obter_dispositivo(
     operation_id="atualizarDispositivo",
     summary="Atualizar dispositivo",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_dispositivo(
     idempotency_key: Annotated[
@@ -345,6 +348,7 @@ async def atualizar_dispositivo(
     summary="Excluir dispositivo",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_dispositivo(
     idempotency_key: Annotated[
@@ -388,6 +392,7 @@ async def excluir_dispositivo(
     operation_id="vincularDispositivo",
     summary="Vincular dispositivo a colaborador",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def vincular_dispositivo(
     idempotency_key: Annotated[

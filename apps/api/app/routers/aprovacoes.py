@@ -19,6 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -120,6 +121,7 @@ async def listar_aprovacoes_pendentes(
     operation_id="decidirAprovacao",
     summary="Decidir etapa de aprovacao",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def decidir_aprovacao(
     idempotency_key: Annotated[
@@ -256,6 +258,7 @@ async def listar_delegacoes(
     operation_id="criarDelegacao",
     summary="Criar delegacao",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_delegacao(
     idempotency_key: Annotated[

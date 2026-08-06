@@ -1,26 +1,111 @@
-"""Rotas da tag `lgpd` do contrato. GERADO -- nao editar.
+"""Rotas da tag `lgpd` do contrato.
 
 Consentimentos versionados, registro de acesso a dado sensivel e atendimento aos direitos do titular.
 O registro do ponto se apoia em obrigacao legal; a biometria exige consentimento especifico.
 Pedido de eliminacao nao apaga marcacao: a guarda e obrigatoria.
 
-Regra de negocio destas operacoes entra na fase F14. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Implementado na F14 (agente A3). Cada rota so orquestra HTTP <-> `app.lgpd.*`
+(consentimentos, solicitacoes, acessos) -- a regra de negocio vive la, nao
+aqui. Ver docstring de cada modulo de servico para as decisoes de
+interpretacao do contrato tomadas nesta fase.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Path, Query, Response
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
-from app.core.erros import RESPOSTAS_PADRAO, NaoImplementado
+from app.core.erros import RESPOSTAS_PADRAO
+from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.db.sessao import SessaoDb
+from app.lgpd import acessos as servico_acessos
+from app.lgpd import consentimentos as servico_consentimentos
+from app.lgpd import solicitacoes as servico_solicitacoes
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["lgpd"])
+
+
+def _ip_do_cliente(request: Request) -> str | None:
+    """Mesma receita duplicada em `app/routers/auth.py`/`sso.py`: o
+    hardening de IP confiavel ponta a ponta (X-Forwarded-For so aceito da
+    origem do proxy reverso) e territorio de A2 nesta fase (PCF secao 5,
+    "mecanismo de IP confiavel"), ainda nao aplicado -- este modulo usa o IP
+    de conexao direta, mesma limitacao que o resto do sistema tem hoje."""
+    if request.client is None:
+        return None
+    return request.client.host
+
+
+def _consentimento_para_schema(c: Any) -> contrato.Consentimento:
+    return contrato.Consentimento(
+        id=c.id,
+        tenantId=c.tenant_id,
+        colaboradorId=c.colaborador_id,
+        finalidade=c.finalidade,
+        versaoTermo=c.versao_termo,
+        textoTermoRef=c.texto_termo_ref,
+        hashTermo=c.hash_termo,
+        status=c.status,
+        concedidoEm=c.concedido_em,
+        revogadoEm=c.revogado_em,
+        expiraEm=c.expira_em,
+        canal=c.canal,
+        ip=c.ip,
+        evidenciaRef=c.evidencia_ref,
+        criadoEm=c.criado_em,
+        criadoPor=c.criado_por,
+        atualizadoEm=c.atualizado_em,
+        atualizadoPor=c.atualizado_por,
+    )
+
+
+def _solicitacao_para_schema(s: Any) -> contrato.SolicitacaoTitular:
+    return contrato.SolicitacaoTitular(
+        id=s.id,
+        tenantId=s.tenant_id,
+        colaboradorId=s.colaborador_id,
+        usuarioId=s.usuario_id,
+        protocolo=s.protocolo,
+        requerenteNome=s.requerente_nome,
+        requerenteCpf=s.requerente_cpf,
+        requerenteEmail=s.requerente_email,
+        tipo=s.tipo,
+        descricao=s.descricao,
+        status=s.status,
+        prazoEm=s.prazo_em,
+        resposta=s.resposta,
+        respostaRef=s.resposta_ref,
+        respondidoEm=s.respondido_em,
+        respondidoPor=s.respondido_por,
+        criadoEm=s.criado_em,
+        criadoPor=s.criado_por,
+        atualizadoEm=s.atualizado_em,
+        atualizadoPor=s.atualizado_por,
+    )
+
+
+def _acesso_para_schema(a: Any) -> contrato.AcessoDadoSensivel:
+    return contrato.AcessoDadoSensivel(
+        id=a.id,
+        tenantId=a.tenant_id,
+        usuarioId=a.usuario_id,
+        colaboradorId=a.colaborador_id,
+        categoria=a.categoria,
+        entidade=a.entidade,
+        entidadeId=a.entidade_id,
+        finalidade=a.finalidade,
+        baseLegal=a.base_legal,
+        acao=a.acao,
+        quantidadeRegistros=a.quantidade_registros,
+        ip=a.ip,
+        origem=a.origem,
+        ocorridoEm=a.ocorrido_em,
+        criadoEm=a.criado_em,
+    )
 
 
 @roteador.get(
@@ -31,53 +116,39 @@ roteador = APIRouter(tags=["lgpd"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_consentimentos(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
-        ),
-    ] = None,
-    colaborador_id: Annotated[
-        UUID | None,
-        Query(alias="colaboradorId", description="Filtra pelos consentimentos de um colaborador."),
-    ] = None,
-    finalidade: Annotated[
-        str | None, Query(alias="finalidade", description="Filtra pela finalidade autorizada.")
-    ] = None,
-    status: Annotated[
-        str | None, Query(alias="status", description="Filtra pela situacao.")
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    colaborador_id: Annotated[UUID | None, Query(alias="colaboradorId")] = None,
+    finalidade: Annotated[str | None, Query(alias="finalidade")] = None,
+    status: Annotated[str | None, Query(alias="status")] = None,
 ) -> contrato.ListaConsentimento:
-    """Listar consentimentos
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("listarConsentimentos", fase="F14")
+    """Listar consentimentos"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, tem_mais, proximo = await servico_consentimentos.listar_consentimentos(
+        sessao,
+        tenant_id=tenant_id,
+        colaborador_id=colaborador_id,
+        finalidade=finalidade,
+        status=status,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    return contrato.ListaConsentimento(
+        dados=[_consentimento_para_schema(linha) for linha in linhas],
+        paginacao=contrato.Paginacao(
+            proximoCursor=proximo,
+            cursorAnterior=None,
+            temMais=tem_mais,
+            limite=limite or 50,
+            totalEstimado=None,
+        ),
+    )
 
 
 @roteador.post(
@@ -88,34 +159,33 @@ async def listar_consentimentos(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_consentimento(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
-        ),
-    ],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.ConsentimentoCriar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
+    request: Request,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.criar"))],
+    response: Response,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Consentimento:
-    """Registrar consentimento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("criarConsentimento", fase="F14")
+    """Registrar consentimento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    dados = servico_consentimentos.DadosConsentimentoCriar(
+        colaborador_id=corpo.colaborador_id,
+        finalidade=corpo.finalidade.value,
+        versao_termo=corpo.versao_termo,
+        texto_termo_ref=corpo.texto_termo_ref,
+        hash_termo=corpo.hash_termo,
+        canal=corpo.canal.value if corpo.canal is not None else None,
+        ip=corpo.ip or _ip_do_cliente(request),
+        evidencia_ref=corpo.evidencia_ref,
+        user_agent=request.headers.get("user-agent"),
+    )
+    consentimento = await servico_consentimentos.criar_consentimento(
+        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+    )
+    response.headers["Location"] = f"/v1/lgpd/consentimentos/{consentimento.id}"
+    return _consentimento_para_schema(consentimento)
 
 
 @roteador.delete(
@@ -127,36 +197,22 @@ async def criar_consentimento(
     response_class=Response,
 )
 async def revogar_consentimento(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
-        ),
-    ],
-    consentimento_id: Annotated[
-        UUID, Path(alias="consentimentoId", description="Identificador do consentimento.")
-    ],
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+    consentimento_id: Annotated[UUID, Path(alias="consentimentoId")],
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.excluir"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Response:
-    """Revogar consentimento
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("revogarConsentimento", fase="F14")
+    """Revogar consentimento"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    await servico_consentimentos.revogar_consentimento(
+        sessao,
+        tenant_id=tenant_id,
+        consentimento_id=consentimento_id,
+        usuario_id=sujeito.usuario_id,
+    )
+    return Response(status_code=204)
 
 
 @roteador.get(
@@ -167,58 +223,41 @@ async def revogar_consentimento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_solicitacoes_titular(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
-        ),
-    ] = None,
-    colaborador_id: Annotated[
-        UUID | None, Query(alias="colaboradorId", description="Filtra pelos pedidos de um titular.")
-    ] = None,
-    tipo: Annotated[
-        str | None, Query(alias="tipo", description="Filtra pelo direito exercido.")
-    ] = None,
-    status: Annotated[
-        str | None, Query(alias="status", description="Filtra pela situacao.")
-    ] = None,
-    vencendo: Annotated[
-        bool | None,
-        Query(
-            alias="vencendo", description="Lista apenas pedidos com prazo proximo do vencimento."
-        ),
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    colaborador_id: Annotated[UUID | None, Query(alias="colaboradorId")] = None,
+    tipo: Annotated[str | None, Query(alias="tipo")] = None,
+    status: Annotated[str | None, Query(alias="status")] = None,
+    vencendo: Annotated[bool | None, Query(alias="vencendo")] = None,
 ) -> contrato.ListaSolicitacaoTitular:
-    """Listar pedidos de titular
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("listarSolicitacoesTitular", fase="F14")
+    """Listar pedidos de titular"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, tem_mais, proximo = await servico_solicitacoes.listar_solicitacoes_titular(
+        sessao,
+        tenant_id=tenant_id,
+        colaborador_id=colaborador_id,
+        tipo=tipo,
+        status=status,
+        vencendo=vencendo,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    return contrato.ListaSolicitacaoTitular(
+        dados=[_solicitacao_para_schema(linha) for linha in linhas],
+        paginacao=contrato.Paginacao(
+            proximoCursor=proximo,
+            cursorAnterior=None,
+            temMais=tem_mais,
+            limite=limite or 50,
+            totalEstimado=None,
+        ),
+    )
 
 
 @roteador.post(
@@ -229,34 +268,33 @@ async def listar_solicitacoes_titular(
     responses=RESPOSTAS_PADRAO,
 )
 async def criar_solicitacao_titular(
-    idempotency_key: Annotated[
-        str,
-        Header(
-            alias="Idempotency-Key",
-            description="Chave de idempotencia da escrita, unica por cliente e por operacao logica, com validade de 24 horas. Repetir a chamada com a mesma chave e o mesmo corpo…",
-        ),
-    ],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.SolicitacaoTitularCriar,
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.criar"))],
+    response: Response,
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.SolicitacaoTitular:
-    """Registrar pedido de titular
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("criarSolicitacaoTitular", fase="F14")
+    """Registrar pedido de titular"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    dados = servico_solicitacoes.DadosSolicitacaoCriar(
+        colaborador_id=corpo.colaborador_id,
+        usuario_id=corpo.usuario_id,
+        requerente_nome=corpo.requerente_nome,
+        requerente_cpf=corpo.requerente_cpf,
+        requerente_email=corpo.requerente_email,
+        tipo=corpo.tipo.value,
+        descricao=corpo.descricao,
+        status_informado=corpo.status.value if corpo.status is not None else None,
+        resposta_informada=corpo.resposta,
+        resposta_ref_informada=corpo.resposta_ref,
+    )
+    solicitacao = await servico_solicitacoes.criar_solicitacao_titular(
+        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+    )
+    response.headers["Location"] = f"/v1/lgpd/solicitacoes-titular/{solicitacao.id}"
+    return _solicitacao_para_schema(solicitacao)
 
 
 @roteador.get(
@@ -267,59 +305,42 @@ async def criar_solicitacao_titular(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_acessos_sensiveis(
-    x_tenant: Annotated[
-        str | None,
-        Header(
-            alias="X-Tenant",
-            description="Slug ou UUID do tenant alvo. Obrigatorio quando o host nao identifica o tenant (chamadas a api.ponto.<dominio> por cliente de integracao). Em acesso por…",
-        ),
-    ] = None,
-    x_request_id: Annotated[
-        str | None,
-        Header(
-            alias="X-Request-Id",
-            description="Identificador de correlacao gerado pelo cliente. Quando ausente o servidor gera um e devolve no cabecalho de resposta de mesmo nome. Aparece na trilha de…",
-        ),
-    ] = None,
-    cursor: Annotated[
-        str | None,
-        Query(
-            alias="cursor",
-            description="Cursor opaco devolvido em paginacao.proximoCursor da pagina anterior. Ausente retorna a primeira pagina. O cursor codifica a ordenacao usada: trocar o…",
-        ),
-    ] = None,
-    limite: Annotated[
-        int | None, Query(alias="limite", description="Quantidade de itens por pagina.")
-    ] = None,
-    ordenar: Annotated[
-        str | None,
-        Query(
-            alias="ordenar",
-            description="Ordenacao no formato campo:direcao, separando multiplos criterios por virgula. Direcoes aceitas: asc e desc. Campos aceitos sao os documentados em cada…",
-        ),
-    ] = None,
-    usuario_id: Annotated[
-        UUID | None, Query(alias="usuarioId", description="Filtra pelos acessos de um usuario.")
-    ] = None,
-    colaborador_id: Annotated[
-        UUID | None,
-        Query(alias="colaboradorId", description="Filtra pelos acessos ao dado de um titular."),
-    ] = None,
-    categoria: Annotated[
-        str | None, Query(alias="categoria", description="Filtra pela categoria do dado.")
-    ] = None,
-    acao: Annotated[
-        str | None, Query(alias="acao", description="Filtra pela operacao realizada.")
-    ] = None,
-    de: Annotated[
-        datetime | None, Query(alias="de", description="Acessos a partir deste instante.")
-    ] = None,
-    ate: Annotated[
-        datetime | None, Query(alias="ate", description="Acessos ate este instante.")
-    ] = None,
+    sessao: SessaoDb,
+    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
+    x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
+    cursor: Annotated[str | None, Query(alias="cursor")] = None,
+    limite: Annotated[int | None, Query(alias="limite")] = None,
+    ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
+    usuario_id: Annotated[UUID | None, Query(alias="usuarioId")] = None,
+    colaborador_id: Annotated[UUID | None, Query(alias="colaboradorId")] = None,
+    categoria: Annotated[str | None, Query(alias="categoria")] = None,
+    acao: Annotated[str | None, Query(alias="acao")] = None,
+    de: Annotated[datetime | None, Query(alias="de")] = None,
+    ate: Annotated[datetime | None, Query(alias="ate")] = None,
 ) -> contrato.ListaAcessoDadoSensivel:
-    """Listar acessos a dados sensiveis
-
-    Fase 0 entrega andaime: a implementacao entra na fase F14.
-    """
-    raise NaoImplementado("listarAcessosSensiveis", fase="F14")
+    """Listar acessos a dados sensiveis"""
+    tenant_id = tenant_id_ou_erro(sujeito)
+    linhas, tem_mais, proximo = await servico_acessos.listar_acessos_sensiveis(
+        sessao,
+        tenant_id=tenant_id,
+        usuario_id=usuario_id,
+        colaborador_id=colaborador_id,
+        categoria=categoria,
+        acao=acao,
+        de=de,
+        ate=ate,
+        cursor=cursor,
+        limite=limite,
+        ordenar=ordenar,
+    )
+    return contrato.ListaAcessoDadoSensivel(
+        dados=[_acesso_para_schema(linha) for linha in linhas],
+        paginacao=contrato.Paginacao(
+            proximoCursor=proximo,
+            cursorAnterior=None,
+            temMais=tem_mais,
+            limite=limite or 50,
+            totalEstimado=None,
+        ),
+    )

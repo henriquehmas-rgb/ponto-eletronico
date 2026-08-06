@@ -2318,6 +2318,18 @@ CREATE TABLE politicas_registro (
     exige_reautenticacao          BOOLEAN NOT NULL DEFAULT TRUE,
     ttl_offline_horas             INTEGER NOT NULL DEFAULT 72 CHECK (ttl_offline_horas > 0),
     ativo                         BOOLEAN NOT NULL DEFAULT TRUE,
+    -- F14/A1 (ADR-008): peso de cada categoria de sinal na composicao ponderada
+    -- do score de confianca. Aditivo -- nenhuma coluna acima muda. Nao ha
+    -- CHECK de soma = 100: o motor de composicao (app.antifraude.motor)
+    -- renormaliza pelos pesos das categorias efetivamente disponiveis no
+    -- momento do registro (ver docstring daquele modulo), entao pesos que nao
+    -- somam 100 sao validos e continuam produzindo um score de 0 a 100.
+    peso_dispositivo              SMALLINT NOT NULL DEFAULT 25 CHECK (peso_dispositivo BETWEEN 0 AND 100),
+    peso_biometria                SMALLINT NOT NULL DEFAULT 25 CHECK (peso_biometria BETWEEN 0 AND 100),
+    peso_geolocalizacao           SMALLINT NOT NULL DEFAULT 25 CHECK (peso_geolocalizacao BETWEEN 0 AND 100),
+    peso_comportamento            SMALLINT NOT NULL DEFAULT 25 CHECK (peso_comportamento BETWEEN 0 AND 100),
+    perfil_confianca              TEXT NOT NULL DEFAULT 'equilibrado'
+                                  CHECK (perfil_confianca IN ('rigoroso','equilibrado','tolerante','personalizado')),
     criado_em                     TIMESTAMPTZ NOT NULL DEFAULT now(),
     criado_por                    UUID,
     atualizado_em                 TIMESTAMPTZ,
@@ -2332,6 +2344,11 @@ COMMENT ON COLUMN politicas_registro.limiar_revisao IS 'Score entre limiar_bloqu
 COMMENT ON COLUMN politicas_registro.politica_modo_desenvolvedor IS 'Comportamento diante de modo desenvolvedor ou depuracao USB ativos. Recomendacao: bloquear na sede, sinalizar em campo.';
 COMMENT ON COLUMN politicas_registro.exige_rede_permitida IS 'Quando verdadeiro, o IP de origem precisa estar em redes_permitidas. Uso tipico no canal web.';
 COMMENT ON COLUMN politicas_registro.ttl_offline_horas IS 'Prazo maximo para sincronizar um item da fila offline antes de ele virar ocorrencia.';
+COMMENT ON COLUMN politicas_registro.peso_dispositivo IS 'Peso (0-100) da categoria "integridade do dispositivo" (attestation, root/RASP, modo desenvolvedor, reputacao historica) na composicao do score de confianca (ADR-008). F14.';
+COMMENT ON COLUMN politicas_registro.peso_biometria IS 'Peso (0-100) da categoria "biometria" (similaridade facial, prova de vida) na composicao do score de confianca. F14.';
+COMMENT ON COLUMN politicas_registro.peso_geolocalizacao IS 'Peso (0-100) da categoria "geolocalizacao" (geocerca, distancia, mock location) na composicao do score de confianca. F14.';
+COMMENT ON COLUMN politicas_registro.peso_comportamento IS 'Peso (0-100) da categoria "comportamento" (velocidade impossivel, coerencia geografica entre marcacoes) na composicao do score de confianca. F14.';
+COMMENT ON COLUMN politicas_registro.perfil_confianca IS 'Perfil de calibracao vigente (ADR-008, consequencia d): rigoroso, equilibrado, tolerante ou personalizado (quando os pesos/limiares divergem de qualquer perfil pronto). Rotulo informativo para o gestor, nao interpretado pelo motor.';
 
 CREATE UNIQUE INDEX uq_politicas_registro ON politicas_registro (
     tenant_id, empresa_id,

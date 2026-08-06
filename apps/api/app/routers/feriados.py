@@ -16,6 +16,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -105,6 +106,7 @@ async def listar_feriado_conjuntos(
     operation_id="criarFeriadoConjunto",
     summary="Criar conjunto de feriados",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_feriado_conjunto(
     idempotency_key: Annotated[
@@ -144,6 +146,7 @@ async def criar_feriado_conjunto(
     operation_id="atualizarFeriadoConjunto",
     summary="Atualizar conjunto de feriados",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_feriado_conjunto(
     idempotency_key: Annotated[
@@ -187,6 +190,7 @@ async def atualizar_feriado_conjunto(
     summary="Excluir conjunto de feriados",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_feriado_conjunto(
     idempotency_key: Annotated[
@@ -311,6 +315,7 @@ async def listar_feriados(
     operation_id="criarFeriado",
     summary="Criar feriado",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_feriado(
     idempotency_key: Annotated[
@@ -351,6 +356,7 @@ async def criar_feriado(
     summary="Excluir feriado",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_feriado(
     idempotency_key: Annotated[

@@ -150,8 +150,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
 # Sem `--proxy-headers`: este servico nao fica atras do Traefik e nao deve
 # aceitar cabecalho de encaminhamento de ninguem. Ele so e alcancavel pela rede
 # interna, e o IP de origem que interessa e o do container que chamou.
-CMD uvicorn facial.main:app \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --workers ${UVICORN_WORKERS} \
-    --no-access-log
+#
+# `python -m facial.servidor` (F14/A2, hardening) em vez de `uvicorn` cru:
+# liga TLS/mTLS de verdade quando FACIAL_TLS_CERT_PATH/FACIAL_TLS_KEY_PATH/
+# FACIAL_MTLS_CA_PATH estao todos configurados (ver facial/servidor.py) --
+# sem eles, sobe em HTTP puro, comportamento identico ao `uvicorn` cru de
+# antes desta fase.
+CMD ["python", "-m", "facial.servidor"]

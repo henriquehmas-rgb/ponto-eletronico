@@ -30,7 +30,6 @@ externo -- o tenant e recuperado do `state` assinado que `iniciarSso` emitiu
 
 from __future__ import annotations
 
-import ipaddress
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -39,6 +38,7 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao, NaoImplementado
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -62,18 +62,13 @@ ProvedorCallback = Literal["google", "entra_id"]
 
 
 def _ip_do_cliente(request: Request) -> str | None:
-    """Mesma receita de `app/routers/auth.py:_ip_do_cliente` -- duplicada
-    deliberadamente (helper privado de poucas linhas, nao vale acoplar dois
-    routers de agentes diferentes por causa dela; ver a mesma nota em
-    `app/routers/admin.py:_para_schema`)."""
-    if request.client is None:
-        return None
-    candidato = request.client.host
-    try:
-        ipaddress.ip_address(candidato)
-    except ValueError:
-        return None
-    return candidato
+    """F14/A2, retrofit: agora delega a `app.comum.ip_confiavel` (honra
+    `X-Forwarded-For`/`X-Real-IP` só quando a conexão vem do proxy reverso
+    de produção -- ver docstring daquele módulo). Achado nomeado no PCF
+    (`docs/backlog.md` 2026-08-03): o login federado alcança este código via
+    `fetch` servidor-a-servidor de `apps/web`, então sem isto o IP gravado
+    era sempre o do proxy, nunca o do usuário final."""
+    return ip_confiavel_do_cliente(request)
 
 
 def _user_agent(request: Request) -> str | None:

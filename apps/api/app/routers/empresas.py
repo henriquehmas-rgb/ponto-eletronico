@@ -13,6 +13,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
@@ -125,6 +126,7 @@ async def listar_empresas(
     operation_id="criarEmpresa",
     summary="Criar empresa",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_empresa(
     sessao: SessaoDb,
@@ -223,6 +225,7 @@ async def obter_empresa(
     operation_id="atualizarEmpresa",
     summary="Atualizar empresa",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_empresa(
     sessao: SessaoDb,
@@ -271,6 +274,7 @@ async def atualizar_empresa(
     summary="Excluir empresa",
     responses=RESPOSTAS_PADRAO,
     response_class=Response,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def excluir_empresa(
     sessao: SessaoDb,

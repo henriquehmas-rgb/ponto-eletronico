@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { URL_API_INTERNA, type Esquema } from "@/lib/api";
+import { corpoDeclaradoComoJson, requisicaoDeMesmaOrigem } from "@/lib/sessao/servidor/csrf";
 import {
   cabecalhosDeEscrita,
   montarRespostaAutenticada,
@@ -16,13 +17,36 @@ import {
  * navegador chamar `POST /v1/auth/login` direto.
  *
  * Mesmo padrão de forma de `src/app/api/health/route.ts`.
+ *
+ * **CSRF de login (F14/A2, retrofit).** Achado da F13 (fechamento,
+ * `docs/backlog.md` 2026-08-03): a MESMA classe de vulnerabilidade já
+ * corrigida em `api/auth/sso/**` (`lib/sessao/servidor/csrf.ts`) também se
+ * aplica aqui -- um formulário cross-site com `enctype="text/plain"` monta
+ * um corpo que `Request.json()` aceita como JSON válido independente do
+ * `Content-Type` declarado, então sem esta checagem um site de terceiros
+ * conseguiria induzir o navegador da vítima a autenticar como o ATACANTE
+ * (login-CSRF: a vítima digitaria a PRÓPRIA credencial num formulário
+ * induzido, mas a resposta plantaria um cookie de sessão vinculado ao tenant/
+ * conta que o atacante escolheu no corpo forjado). Mesmo padrão já testado
+ * de `api/auth/sso/concluir/route.ts`.
  */
 export const dynamic = "force-dynamic";
 
 type LoginRequisicao = Esquema<"LoginRequisicao">;
 type LoginResposta = Esquema<"LoginResposta">;
 
+function respostaOrigemInvalida(): NextResponse {
+  return NextResponse.json(
+    { type: "about:blank", title: "Origem da requisição não confere", status: 403, codigo: "PONTO-PERM-006" },
+    { status: 403 },
+  );
+}
+
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
+  if (!requisicaoDeMesmaOrigem(requisicao) || !corpoDeclaradoComoJson(requisicao)) {
+    return respostaOrigemInvalida();
+  }
+
   let corpo: LoginRequisicao;
   try {
     corpo = (await requisicao.json()) as LoginRequisicao;

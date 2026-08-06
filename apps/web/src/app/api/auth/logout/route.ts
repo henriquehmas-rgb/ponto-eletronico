@@ -6,6 +6,7 @@ import {
   NOME_COOKIE_REFRESH,
   NOME_COOKIE_TENANT,
 } from "@/lib/sessao/servidor/cookie";
+import { corpoDeclaradoComoJson, requisicaoDeMesmaOrigem } from "@/lib/sessao/servidor/csrf";
 import { cabecalhosDeEscrita } from "@/lib/sessao/servidor/upstream";
 
 /**
@@ -19,6 +20,11 @@ import { cabecalhosDeEscrita } from "@/lib/sessao/servidor/upstream";
  * partir do token validado — mas defesa em profundidade para a chamada sem
  * `Authorization` (`accessToken` já ausente da memória, por exemplo após um
  * F5).
+ *
+ * **CSRF de logout (F14/A2, retrofit).** Menor severidade que login/refresh
+ * (o pior caso é um site terceiro forçar o encerramento da sessão da
+ * vítima -- incômodo, não vazamento), mas mesma checagem por consistência
+ * de padrão com as outras duas rotas de sessão (`lib/sessao/servidor/csrf.ts`).
  */
 export const dynamic = "force-dynamic";
 
@@ -26,7 +32,18 @@ interface CorpoLogout {
   todasAsSessoes?: boolean;
 }
 
+function respostaOrigemInvalida(): NextResponse {
+  return NextResponse.json(
+    { type: "about:blank", title: "Origem da requisição não confere", status: 403, codigo: "PONTO-PERM-006" },
+    { status: 403 },
+  );
+}
+
 export async function POST(requisicao: NextRequest): Promise<NextResponse> {
+  if (!requisicaoDeMesmaOrigem(requisicao) || !corpoDeclaradoComoJson(requisicao)) {
+    return respostaOrigemInvalida();
+  }
+
   const refreshToken = requisicao.cookies.get(NOME_COOKIE_REFRESH)?.value;
   const tenantDoCookie = requisicao.cookies.get(NOME_COOKIE_TENANT)?.value || undefined;
   const autorizacao = requisicao.headers.get("authorization");

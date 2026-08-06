@@ -17,6 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query
 from pydantic import BaseModel
 
+from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core import contexto
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao, NaoImplementado
 from app.core.seguranca import Sujeito, exigir_permissao
@@ -164,6 +165,7 @@ async def listar_tenants(
     operation_id="criarTenant",
     summary="Criar tenant",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_tenant(
     idempotency_key: Annotated[
@@ -248,6 +250,7 @@ async def obter_tenant(
     operation_id="atualizarTenant",
     summary="Atualizar tenant",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def atualizar_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],
@@ -351,6 +354,7 @@ async def listar_configuracoes_tenant(
     operation_id="definirConfiguracaoTenant",
     summary="Definir configuracao do tenant",
     responses=RESPOSTAS_PADRAO,
+    dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def definir_configuracao_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],

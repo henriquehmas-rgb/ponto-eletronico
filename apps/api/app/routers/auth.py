@@ -33,7 +33,6 @@ da fase (mesmo padrao de `app/routers/admin.py`).
 
 from __future__ import annotations
 
-import ipaddress
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -44,6 +43,7 @@ from ponto_contracts import Tenant as TenantOrm
 from ponto_contracts import Usuario as UsuarioOrm
 from pydantic import BaseModel
 
+from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.core import contexto
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
 from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
@@ -86,22 +86,13 @@ def _para_schema(schema_cls: type[BaseModel], origem: Any, **extras: Any) -> Any
 
 
 def _ip_do_cliente(request: Request) -> str | None:
-    """Endereco do cliente, ou `None` quando o transporte nao expoe um IP real.
-
-    `sessoes.ip`/`api_clients`/`oauth_tokens.ip` sao `INET` no Postgres: um
-    valor que nao e IP valido (por exemplo `"testclient"`, o host padrao do
-    `starlette.testclient.TestClient` sem transporte de rede de verdade) falha
-    no cast do driver com `DataError`, nao com uma mensagem do dominio. Melhor
-    gravar `NULL` do que quebrar a escrita por causa de um dado auxiliar.
-    """
-    if request.client is None:
-        return None
-    candidato = request.client.host
-    try:
-        ipaddress.ip_address(candidato)
-    except ValueError:
-        return None
-    return candidato
+    """Endereco do cliente final (F14/A2, retrofit -- `app.comum.ip_confiavel`
+    honra `X-Forwarded-For`/`X-Real-IP` só quando a conexão vem do proxy
+    reverso de produção, `Configuracao.proxies_confiaveis`; nunca de um
+    cabeçalho que qualquer chamador pode forjar). Mantido como wrapper local
+    (nome já usado por todo o módulo) para não tocar nenhum outro ponto de
+    chamada."""
+    return ip_confiavel_do_cliente(request)
 
 
 def _user_agent(request: Request) -> str | None:

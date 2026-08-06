@@ -41,7 +41,10 @@ transacao inteira, que e responsabilidade de `app.db.sessao.obter_sessao`):
 13. Reautenticacao recente (`sessoes.reautenticado_em`), so para
     `canal='web'` e `exigeReautenticacao`.
 14. Score de confianca (`app.marcacao.confianca.motor.avaliar_confianca`,
-    stub permissivo de A3 nesta fase).
+    composicao ponderada real desde a F14/A1, ADR-008 -- sinal decisivo pode
+    levantar `PONTO-GEO-003`/`PONTO-SCORE-004`/`PONTO-DISP-003/004/005`
+    antes mesmo de chegar ao score; score composto abaixo do limiar de
+    bloqueio levanta `PONTO-SCORE-001` logo a seguir).
 15. `app.marcacao.dominio.registro.persistir_marcacao` (A1): NSR, CRC-16,
     hash encadeado, `marcacoes` + `nsr_emissoes`.
 16. `marcacoes_meta`, registro das chaves de idempotencia, comprovante
@@ -72,6 +75,11 @@ from ponto_contracts import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.antifraude import explicabilidade as antifraude_explicabilidade
+from app.antifraude.geografia import calcular_deslocamento
+from app.antifraude.motor import ContextoDecisao, ResultadoScore
+from app.antifraude.politicas import PesosScore, PoliticaAntifraude
+from app.antifraude.reputacao import avaliar_reputacao_dispositivo
 from app.core.erros import ErroDeAplicacao
 from app.core.seguranca import Sujeito
 from app.marcacao.confianca.motor import ResultadoConfianca, SinaisRegistro, avaliar_confianca
@@ -113,12 +121,27 @@ _POLITICA_PADRAO: dict[str, Any] = {
     "bloquear_vpn_proxy": False,
     "exige_reautenticacao": True,
     "ttl_offline_horas": 72,
+    # F14/A1 (ADR-008, migration 0003_antifraude_pesos_score): copiado
+    # literalmente do DEFAULT da coluna em schema.sql -- perfil "equilibrado".
+    "peso_dispositivo": 25,
+    "peso_biometria": 25,
+    "peso_geolocalizacao": 25,
+    "peso_comportamento": 25,
+    "perfil_confianca": "equilibrado",
 }
 
 
 @dataclass(frozen=True, slots=True)
 class _PoliticaEfetiva:
-    """`PoliticaRegistro` ja resolvida -- linha do banco ou `_POLITICA_PADRAO`."""
+    """`PoliticaRegistro` ja resolvida -- linha do banco ou `_POLITICA_PADRAO`.
+
+    Os campos abaixo de "F14/A1" foram acrescentados por este agente: ja
+    existiam como coluna em `politicas_registro` desde a Fase 0
+    (`politica_root`/`politica_modo_desenvolvedor`/`politica_mock_location`/
+    `exige_attestation`/`exige_facial`/`exige_liveness`/`limiar_facial`) ou
+    foram criados pela migration `0003_antifraude_pesos_score` deste agente
+    (`peso_*`/`perfil_confianca`) -- nenhum e novo NA TABELA, so nesta
+    projecao Python, que antes desta fase nao os lia."""
 
     exige_geocerca: bool
     exige_rede_permitida: bool
@@ -127,6 +150,16 @@ class _PoliticaEfetiva:
     politica_fora_geocerca: str
     exige_reautenticacao: bool
     ttl_offline_horas: int
+    # F14/A1 (ADR-008) -- ver docstring da classe.
+    politica_root: str
+    politica_modo_desenvolvedor: str
+    politica_mock_location: str
+    exige_attestation: bool
+    exige_facial: bool
+    exige_liveness: bool
+    limiar_facial: float
+    pesos: PesosScore
+    perfil_confianca: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +214,20 @@ async def _politica_efetiva(
             politica_fora_geocerca=_POLITICA_PADRAO["politica_fora_geocerca"],
             exige_reautenticacao=_POLITICA_PADRAO["exige_reautenticacao"],
             ttl_offline_horas=_POLITICA_PADRAO["ttl_offline_horas"],
+            politica_root=_POLITICA_PADRAO["politica_root"],
+            politica_modo_desenvolvedor=_POLITICA_PADRAO["politica_modo_desenvolvedor"],
+            politica_mock_location=_POLITICA_PADRAO["politica_mock_location"],
+            exige_attestation=_POLITICA_PADRAO["exige_attestation"],
+            exige_facial=_POLITICA_PADRAO["exige_facial"],
+            exige_liveness=_POLITICA_PADRAO["exige_liveness"],
+            limiar_facial=float(_POLITICA_PADRAO["limiar_facial"]),
+            pesos=PesosScore(
+                dispositivo=_POLITICA_PADRAO["peso_dispositivo"],
+                biometria=_POLITICA_PADRAO["peso_biometria"],
+                geolocalizacao=_POLITICA_PADRAO["peso_geolocalizacao"],
+                comportamento=_POLITICA_PADRAO["peso_comportamento"],
+            ),
+            perfil_confianca=_POLITICA_PADRAO["perfil_confianca"],
         )
     return _PoliticaEfetiva(
         exige_geocerca=linha.exige_geocerca,
@@ -190,6 +237,20 @@ async def _politica_efetiva(
         politica_fora_geocerca=linha.politica_fora_geocerca,
         exige_reautenticacao=linha.exige_reautenticacao,
         ttl_offline_horas=linha.ttl_offline_horas,
+        politica_root=linha.politica_root,
+        politica_modo_desenvolvedor=linha.politica_modo_desenvolvedor,
+        politica_mock_location=linha.politica_mock_location,
+        exige_attestation=linha.exige_attestation,
+        exige_facial=linha.exige_facial,
+        exige_liveness=linha.exige_liveness,
+        limiar_facial=float(linha.limiar_facial),
+        pesos=PesosScore(
+            dispositivo=linha.peso_dispositivo,
+            biometria=linha.peso_biometria,
+            geolocalizacao=linha.peso_geolocalizacao,
+            comportamento=linha.peso_comportamento,
+        ),
+        perfil_confianca=linha.perfil_confianca,
     )
 
 
@@ -361,24 +422,38 @@ async def _verificar_reautenticacao(
         raise ErroDeAplicacao("PONTO-AUTH-011")
 
 
-def _sinais_do_corpo(corpo: contrato.MarcacaoCriar) -> SinaisRegistro:
+def _sinais_do_corpo(
+    corpo: contrato.MarcacaoCriar,
+    *,
+    dentro_geocerca: bool | None,
+    distancia_geocerca_metros: float | None,
+    velocidade_desde_ultima_kmh: float | None,
+) -> SinaisRegistro:
     """Monta `SinaisRegistro` a partir dos campos do corpo, tal como
     informados pelo cliente (nenhum e verificado criptograficamente nesta
-    fase -- ver docstring de `app.marcacao.confianca.motor`)."""
+    fase -- ver docstring de `app.marcacao.confianca.motor`), mais os sinais
+    que o PROPRIO `registrar_marcacao` ja calculou nesta chamada (geocerca) ou
+    que `app.antifraude.geografia` calculou por consulta ao banco
+    (velocidade). `score_facial`/`liveness_aprovado`/`attestation_veredito`
+    continuam sem fonte real nesta fase: `facial-svc` (`/verificar`,
+    `/liveness`) segue como stub 501 desde a Fase 0 (achado registrado em
+    `docs/backlog.md`) e nao ha verificacao de attestation no servidor sem F7
+    (ADR-014) -- `nao_aplicavel`/`None`, nunca um valor inventado.
+    """
     flags = corpo.flags_integridade or {}
     return SinaisRegistro(
-        dentro_geocerca=None,
-        distancia_geocerca_metros=None,
+        dentro_geocerca=dentro_geocerca,
+        distancia_geocerca_metros=distancia_geocerca_metros,
         precisao_insuficiente=False,
         score_facial=None,
         liveness_aprovado=None,
-        attestation_veredito="indisponivel",
+        attestation_veredito="nao_aplicavel",
         root_detectado=flags.get("rootDetectado"),
         emulador_detectado=flags.get("emuladorDetectado"),
         modo_desenvolvedor=flags.get("modoDesenvolvedor"),
         mock_location=flags.get("mockLocation"),
         camera_virtual=flags.get("cameraVirtual"),
-        velocidade_desde_ultima_kmh=None,
+        velocidade_desde_ultima_kmh=velocidade_desde_ultima_kmh,
         flags_integridade=dict(flags),
     )
 
@@ -480,13 +555,20 @@ async def registrar_marcacao(
     ip_origem: str | None = None,
     datahora_marcacao_forcada: dt.datetime | None = None,
     coletada_offline: bool = False,
+    confianca_temporal_baixa: bool = False,
 ) -> ResultadoRegistro:
     """Corpo de `criarMarcacao`. Ver docstring do modulo para a ordem exata.
 
     `datahora_marcacao_forcada`/`coletada_offline` existem para o fluxo
     offline (T7, `app.marcacao.pipeline.offline.sincronizar_lote`): o
     servidor carimba o relogio nesse caso tambem, so que com o instante REAL
-    da captura, preservado do aparelho, nunca com "agora"."""
+    da captura, preservado do aparelho, nunca com "agora".
+
+    `confianca_temporal_baixa` (F14/A1, achado da verificacao adversarial
+    F14/A4): tambem vem do fluxo offline -- atraso implausivel entre a
+    captura declarada e a sincronizacao (ver `app.marcacao.pipeline.offline`)
+    alimenta o motor de score como sinal real de comportamento, em vez de
+    ficar restrito ao evento de webhook."""
     if not idempotency_key:
         raise ErroDeAplicacao("PONTO-IDEM-001")
 
@@ -585,6 +667,7 @@ async def registrar_marcacao(
 
     avisos: list[str] = []
     dentro_geocerca: bool | None = None
+    distancia_geocerca_metros: float | None = None
     if politica.exige_geocerca and corpo.latitude is not None and corpo.longitude is not None:
         unidade = (
             (
@@ -617,6 +700,7 @@ async def registrar_marcacao(
                 raise ErroDeAplicacao("PONTO-GEO-002")
             if resultado_geocerca.tem_geocerca:
                 dentro_geocerca = resultado_geocerca.dentro
+                distancia_geocerca_metros = resultado_geocerca.distancia_metros
                 if not resultado_geocerca.dentro:
                     if politica.politica_fora_geocerca == "bloquear":
                         raise ErroDeAplicacao("PONTO-GEO-001")
@@ -641,15 +725,82 @@ async def registrar_marcacao(
     if politica.exige_reautenticacao and canal == "web":
         await _verificar_reautenticacao(sessao, tenant_id=tenant_id, usuario_id=sujeito.usuario_id)
 
-    sinais = _sinais_do_corpo(corpo)
+    # F14/A1 (ADR-008): sinais que so o servidor pode calcular por consulta
+    # ao banco -- velocidade implicita desde a marcacao anterior do MESMO
+    # colaborador (`app.antifraude.geografia`) e reputacao do dispositivo por
+    # estado conhecido + historico (`app.antifraude.reputacao`). Ambos
+    # `nao_aplicavel`/`None` quando a origem do sinal nao existe (primeira
+    # marcacao do colaborador, ou canal sem dispositivo pessoal) -- nunca um
+    # valor inventado (ADR-014).
+    deslocamento = await calcular_deslocamento(
+        sessao,
+        tenant_id=tenant_id,
+        colaborador_id=colaborador.id,
+        datahora_atual=datahora_marcacao,
+        latitude_atual=corpo.latitude,
+        longitude_atual=corpo.longitude,
+    )
+    reputacao_dispositivo = await avaliar_reputacao_dispositivo(
+        sessao, tenant_id=tenant_id, dispositivo_id=corpo.dispositivo_id
+    )
+
+    sinais = _sinais_do_corpo(
+        corpo,
+        dentro_geocerca=dentro_geocerca,
+        distancia_geocerca_metros=distancia_geocerca_metros,
+        velocidade_desde_ultima_kmh=deslocamento.velocidade_kmh,
+    )
+    politica_antifraude = PoliticaAntifraude(
+        pesos=politica.pesos,
+        perfil_confianca=politica.perfil_confianca,
+        politica_root=politica.politica_root,
+        politica_modo_desenvolvedor=politica.politica_modo_desenvolvedor,
+        politica_mock_location=politica.politica_mock_location,
+        exige_attestation=politica.exige_attestation,
+        exige_facial=politica.exige_facial,
+        exige_liveness=politica.exige_liveness,
+        limiar_facial=politica.limiar_facial,
+    )
+    # Sinal decisivo (ADR-008 regra 7) levanta `ErroDeAplicacao` de dentro de
+    # `avaliar_confianca` -- PONTO-GEO-003/SCORE-004/DISP-003/004/005, cada
+    # um com `expoe_regra` ja fixado no catalogo (a maioria `false`). Nenhum
+    # `detalhe`/`erros_campo` e passado por este pipeline para esses codigos:
+    # so `contexto_log`, que nunca chega na resposta HTTP.
     resultado_confianca: ResultadoConfianca = avaliar_confianca(
-        sinais, limiar_bloqueio=politica.limiar_bloqueio, limiar_revisao=politica.limiar_revisao
+        sinais,
+        limiar_bloqueio=politica.limiar_bloqueio,
+        limiar_revisao=politica.limiar_revisao,
+        politica=politica_antifraude,
+        contexto=ContextoDecisao(
+            reputacao_dispositivo=reputacao_dispositivo,
+            velocidade_kmh=deslocamento.velocidade_kmh,
+            velocidade_impossivel=deslocamento.impossivel,
+            confianca_temporal_baixa=confianca_temporal_baixa,
+        ),
     )
     if resultado_confianca.score < politica.limiar_bloqueio:
         raise ErroDeAplicacao("PONTO-SCORE-001")
     revisao_requerida = resultado_confianca.score < politica.limiar_revisao
     revisao_status = "pendente" if revisao_requerida else "nao_requer"
     avisos.extend(resultado_confianca.avisos)
+
+    flags_integridade_gravadas = antifraude_explicabilidade.mesclar_flags_com_explicabilidade(
+        dict(corpo.flags_integridade or {}),
+        # `resultado_confianca.explicabilidade` ja e a tupla de
+        # `ContribuicaoSinal` que `montar_bloco_explicabilidade` espera;
+        # reconstroi um `ResultadoScore` so para reaproveitar aquela funcao de
+        # serializacao sem duplica-la aqui (a projecao `ResultadoConfianca` do
+        # `avaliar_confianca` congelado nao carrega classe suficiente sozinha).
+        ResultadoScore(
+            score=resultado_confianca.score,
+            classificacao=resultado_confianca.classificacao,
+            avisos=resultado_confianca.avisos,
+            explicabilidade=resultado_confianca.explicabilidade,
+        ),
+        limiar_bloqueio=politica.limiar_bloqueio,
+        limiar_revisao=politica.limiar_revisao,
+        perfil_confianca=politica.perfil_confianca,
+    )
 
     dados = DadosMarcacao(
         rep_p_id=rep_p.id,
@@ -683,18 +834,19 @@ async def registrar_marcacao(
             precisao_metros=corpo.precisao_metros,
             unidade_geocerca_id=unidade_id,
             dentro_geocerca=dentro_geocerca,
-            distancia_geocerca_metros=None,
+            distancia_geocerca_metros=distancia_geocerca_metros,
             score_facial=None,
             liveness_metodo=str(corpo.liveness_metodo) if corpo.liveness_metodo else None,
             score_confianca=resultado_confianca.score,
             classificacao_confianca=resultado_confianca.classificacao,
-            flags_integridade=dict(corpo.flags_integridade or {}),
-            attestation_veredito="indisponivel",
+            flags_integridade=flags_integridade_gravadas,
+            attestation_veredito=sinais.attestation_veredito,
             root_detectado=sinais.root_detectado,
             emulador_detectado=sinais.emulador_detectado,
             modo_desenvolvedor=sinais.modo_desenvolvedor,
             mock_location=sinais.mock_location,
             camera_virtual=sinais.camera_virtual,
+            velocidade_desde_ultima_kmh=deslocamento.velocidade_kmh,
             wifi_bssid=corpo.wifi_bssid,
             ip=ip_origem,
             revisao_status=revisao_status,

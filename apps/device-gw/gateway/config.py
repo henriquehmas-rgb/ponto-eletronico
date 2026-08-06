@@ -97,6 +97,20 @@ class Configuracao(BaseSettings):
     #: tiver terminal Control iD -- ver nota em `docs/backlog.md`.
     api_key_marcacoes: SecretStr = SecretStr("")
 
+    # --- facial-svc (F14/A2, hardening -- cliente mTLS pronto para quando uma
+    # fase futura ligar a chamada de verdade; ver `gateway/dominio/
+    # cliente_facial.py`) ------------------------------------------------------
+    #: URL interna do facial-svc. Mesmo padrao de `api_base_url`.
+    facial_svc_url: str = "http://facial-svc:8000"
+    #: Certificado/chave que ESTE processo (device-gw) apresenta como CLIENTE
+    #: mTLS ao falar com o facial-svc, e a CA usada para verificar o
+    #: certificado QUE o facial-svc apresenta como servidor. Os tres vazios
+    #: (padrao) -- `montar_cliente_facial_svc` recusa construir o cliente
+    #: mTLS nesse caso (nunca cai silenciosamente para conexao sem mTLS).
+    facial_mtls_cert_path: str = ""
+    facial_mtls_key_path: str = ""
+    facial_mtls_ca_path: str = ""
+
     # --- Observabilidade -------------------------------------------------------
     sentry_dsn: str = ""
     otel_exporter_otlp_endpoint: str = ""

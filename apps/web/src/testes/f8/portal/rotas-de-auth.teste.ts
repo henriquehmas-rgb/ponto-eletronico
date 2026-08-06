@@ -5,7 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * Testa os três Route Handlers de T1 (`api/auth/{login,refresh,logout}`) e o
  * de MFA diretamente, mockando `fetch` global — nenhum teste aqui sobe a API
  * real (T1, "Pronto quando").
+ *
+ * `sec-fetch-site: same-origin` em toda requisição "legítima" (F14/A2,
+ * retrofit de CSRF -- mesmo achado e mesmo padrão de
+ * `src/testes/f13/sso/rota-concluir-saml.teste.ts`): sem esse cabeçalho as
+ * três rotas agora recusam com `403 PONTO-PERM-006` antes de chegar em
+ * qualquer lógica de negócio -- os testes de rejeição de CSRF, no fim de
+ * cada bloco `describe`, provam isso.
  */
+
+const CABECALHOS_MESMA_ORIGEM = { "sec-fetch-site": "same-origin" } as const;
 
 function respostaJson(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
@@ -58,7 +67,7 @@ describe("POST /api/auth/login", () => {
     const requisicao = new NextRequest("http://localhost:3000/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "maria@exemplo.com", senha: "senha-correta-123" }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
@@ -95,7 +104,7 @@ describe("POST /api/auth/login", () => {
     const requisicao = new NextRequest("http://localhost:3000/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "maria@exemplo.com", senha: "senha-correta-123" }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
@@ -125,7 +134,7 @@ describe("POST /api/auth/login", () => {
     const requisicao = new NextRequest("http://localhost:3000/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email: "maria@exemplo.com", senha: "errada" }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
@@ -161,11 +170,40 @@ describe("POST /api/auth/login", () => {
         senha: "senha-correta-123",
         tenant: "acme",
       }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     await POST(requisicao);
     expect(mockFetch).toHaveBeenCalled();
+  });
+
+  it("CSRF: requisição cross-site (sem sec-fetch-site nem Origin de mesma origem) é recusada com 403 antes de chamar a API (F14/A2)", async () => {
+    const { POST } = await import("@/app/api/auth/login/route");
+    const requisicao = new NextRequest("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "vitima@exemplo.com", senha: "qualquer" }),
+      headers: { "content-type": "application/json", origin: "https://atacante.exemplo" },
+    });
+
+    const resposta = await POST(requisicao);
+    const corpo = (await resposta.json()) as Record<string, unknown>;
+
+    expect(resposta.status).toBe(403);
+    expect(corpo.codigo).toBe("PONTO-PERM-006");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("CSRF: corpo disfarçado de JSON por um <form enctype=\"text/plain\"> cross-site (Content-Type não é application/json) é recusado com 403 (F14/A2)", async () => {
+    const { POST } = await import("@/app/api/auth/login/route");
+    const requisicao = new NextRequest("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email: "vitima@exemplo.com", senha: "qualquer" }),
+      headers: { "content-type": "text/plain", ...CABECALHOS_MESMA_ORIGEM },
+    });
+
+    const resposta = await POST(requisicao);
+    expect(resposta.status).toBe(403);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
@@ -185,6 +223,7 @@ describe("POST /api/auth/refresh", () => {
     const { POST } = await import("@/app/api/auth/refresh/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/refresh", {
       method: "POST",
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
@@ -210,7 +249,7 @@ describe("POST /api/auth/refresh", () => {
     const { POST } = await import("@/app/api/auth/refresh/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/refresh", {
       method: "POST",
-      headers: { cookie: "ponto_refresh_token=refresh-antigo; ponto_tenant=acme" },
+      headers: { cookie: "ponto_refresh_token=refresh-antigo; ponto_tenant=acme", "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
@@ -242,7 +281,7 @@ describe("POST /api/auth/refresh", () => {
     const { POST } = await import("@/app/api/auth/refresh/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/refresh", {
       method: "POST",
-      headers: { cookie: "ponto_refresh_token=refresh-antigo; ponto_tenant=acme" },
+      headers: { cookie: "ponto_refresh_token=refresh-antigo; ponto_tenant=acme", "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     await POST(requisicao);
@@ -263,13 +302,32 @@ describe("POST /api/auth/refresh", () => {
     const { POST } = await import("@/app/api/auth/refresh/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/refresh", {
       method: "POST",
-      headers: { cookie: "ponto_refresh_token=refresh-ja-usado; ponto_tenant=acme" },
+      headers: { cookie: "ponto_refresh_token=refresh-ja-usado; ponto_tenant=acme", "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
     expect(resposta.status).toBe(401);
     expect(resposta.cookies.get("ponto_refresh_token")?.value).toBe("");
     expect(resposta.cookies.get("ponto_tenant")?.value).toBe("");
+  });
+
+  it("CSRF: requisição cross-site (mesmo com o cookie httpOnly anexado automaticamente pelo navegador) é recusada com 403 antes de chamar a API (F14/A2)", async () => {
+    const { POST } = await import("@/app/api/auth/refresh/route");
+    const requisicao = new NextRequest("http://localhost:3000/api/auth/refresh", {
+      method: "POST",
+      headers: {
+        cookie: "ponto_refresh_token=refresh-valido; ponto_tenant=acme",
+        "content-type": "application/json",
+        origin: "https://atacante.exemplo",
+      },
+    });
+
+    const resposta = await POST(requisicao);
+    const corpo = (await resposta.json()) as Record<string, unknown>;
+
+    expect(resposta.status).toBe(403);
+    expect(corpo.codigo).toBe("PONTO-PERM-006");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 
@@ -287,7 +345,10 @@ describe("POST /api/auth/logout", () => {
 
   it("limpa os dois cookies e devolve 204 mesmo sem cookie prévio", async () => {
     const { POST } = await import("@/app/api/auth/logout/route");
-    const requisicao = new NextRequest("http://localhost:3000/api/auth/logout", { method: "POST" });
+    const requisicao = new NextRequest("http://localhost:3000/api/auth/logout", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
+    });
 
     const resposta = await POST(requisicao);
     expect(resposta.status).toBe(204);
@@ -305,7 +366,7 @@ describe("POST /api/auth/logout", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/logout", {
       method: "POST",
-      headers: { cookie: "ponto_refresh_token=refresh-abc; ponto_tenant=acme" },
+      headers: { cookie: "ponto_refresh_token=refresh-abc; ponto_tenant=acme", "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     await POST(requisicao);
@@ -318,11 +379,30 @@ describe("POST /api/auth/logout", () => {
     const { POST } = await import("@/app/api/auth/logout/route");
     const requisicao = new NextRequest("http://localhost:3000/api/auth/logout", {
       method: "POST",
-      headers: { cookie: "ponto_refresh_token=refresh-abc" },
+      headers: { cookie: "ponto_refresh_token=refresh-abc", "content-type": "application/json", ...CABECALHOS_MESMA_ORIGEM },
     });
 
     const resposta = await POST(requisicao);
     expect(resposta.status).toBe(204);
     expect(resposta.cookies.get("ponto_refresh_token")?.value).toBe("");
+  });
+
+  it("CSRF: requisição cross-site é recusada com 403 antes de chamar a API (F14/A2)", async () => {
+    const { POST } = await import("@/app/api/auth/logout/route");
+    const requisicao = new NextRequest("http://localhost:3000/api/auth/logout", {
+      method: "POST",
+      headers: {
+        cookie: "ponto_refresh_token=refresh-abc; ponto_tenant=acme",
+        "content-type": "application/json",
+        origin: "https://atacante.exemplo",
+      },
+    });
+
+    const resposta = await POST(requisicao);
+    const corpo = (await resposta.json()) as Record<string, unknown>;
+
+    expect(resposta.status).toBe(403);
+    expect(corpo.codigo).toBe("PONTO-PERM-006");
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

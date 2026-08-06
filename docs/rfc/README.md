@@ -207,6 +207,7 @@ Proposta ──► Decidida ──► Implementada
 | [017](RFC-017-tag-integracoes-sem-endpoint-de-item-unico.md) | A tag `integracoes` não tem endpoint de item único: sem `GET /v1/importacoes/{id}` e sem forma de recuperar o resultado de uma exportação de folha | ✅ Decidida | 03/08/2026 | F13 |
 | [018](RFC-018-sso-sem-superficie-de-contrato.md) | SSO (Google Workspace, Entra ID, SAML 2.0) não tem nenhuma superfície de contrato: nem tag, nem caminho, nem escopo | ✅ Decidida | 03/08/2026 | F13 |
 | [019](RFC-019-vinculo-de-navegador-no-state-oidc.md) | `state` do OIDC não é vinculado ao navegador que iniciou o fluxo — login-CSRF (achado de revisão adversarial) | ✅ Decidida | 03/08/2026 | F13 |
+| [020](RFC-020-fila-revisao-marcacoes-suspeitas-sem-endpoint.md) | Fila de revisão do gestor (marcações suspeitas) não tem superfície HTTP no contrato — `marcacoes_meta.revisao_status` existe desde a Fase 0, mas não há filtro de listagem nem operação de decisão | ✅ Decidida | 06/08/2026 | F14 |
 
 > Ao abrir uma RFC nova, acrescente a linha aqui **no mesmo commit**. Um índice
 > desatualizado faz o próximo agente escolher um número já usado.

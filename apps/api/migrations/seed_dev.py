@@ -232,6 +232,11 @@ CATALOGO_PERMISSOES: tuple[tuple[str, str, tuple[str, ...], bool, str], ...] = (
     ("biometria", "biometrias", (APROVAR,), True, "Credenciais biometricas"),
     ("fechamento", "fechamentos", (REABRIR,), False, "Fechamento de periodo"),
     ("marcacao", "marcacoes", (LER_SENSIVEL,), True, "Meta antifraude da marcacao"),
+    # --- F14 (RFC-020, decidida no fechamento): decisao da fila de revisao
+    # antifraude (aprovar/rejeitar). Reaproveita a acao `aprovar` ja liberada
+    # no CHECK de `permissoes.acao` -- mesma semantica de `tratamentos.aprovar`
+    # (uma permissao gate a decisao inteira, nao uma acao nova por RFC-002).
+    ("marcacao", "marcacoes", (APROVAR,), True, "Decisao da fila de revisao antifraude"),
     ("relatorio", "relatorios", (CRIAR,), False, "Relatorios gerenciais"),
     ("integracao", "webhooks", (EXECUTAR,), False, "Webhooks"),
     (
@@ -363,7 +368,11 @@ MATRIZ_PERFIS: dict[str, dict[str, tuple[str, ...]]] = {
     "gestor": {
         "pessoas": (LER,),
         "jornada": (LER, CRIAR, EDITAR, APROVAR),
-        "marcacao": (LER,),
+        # F14 (RFC-020): LER_SENSIVEL/APROVAR aqui sao o que abrem a fila de
+        # revisao antifraude (`obterMetaMarcacao`, `listarRevisaoPendente`,
+        # `decidirRevisaoMarcacao`) para o gestor -- persona explicita do PCF
+        # da F14, secao "Painel de marcacoes suspeitas".
+        "marcacao": (LER, LER_SENSIVEL, APROVAR),
         "apuracao": (LER, CRIAR, EDITAR, APROVAR),
         "banco_horas": (LER,),
         "workflow": (LER, CRIAR, APROVAR),
