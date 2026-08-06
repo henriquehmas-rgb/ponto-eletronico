@@ -303,6 +303,13 @@ jobs:
       - name: pytest
         shell: bash
         run: |
+          # +e explicito: o shell "bash" do Actions roda com -e por padrao
+          # (bash --noprofile --norc -eo pipefail {0}), o que abortava o
+          # laco inteiro no primeiro app que falhasse -- worker/device-gw/
+          # facial-svc nunca chegavam a rodar (achado real: primeira
+          # validacao apos o fix de colisao de coleta, exit code do laco so
+          # tinha um "::group::pytest api" e nada depois).
+          set +e
           set -uo pipefail
           # Cada app roda em processo isolado, com cwd == raiz do app: e o
           # unico jeito de o pytest respeitar o [tool.pytest.ini_options] de
@@ -597,6 +604,12 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      # O passo `analyze` da CodeQL Action consulta a API de Actions (status
+      # do workflow run, usado para telemetria/categorizacao do SARIF) --
+      # sem isto, falha com "Resource not accessible by integration" e o job
+      # inteiro vira "configuration error" (achado real: primeira execucao
+      # manual do CI em 12 dias, ver commit que corrige a colisao de pytest).
+      actions: read
     strategy:
       matrix:
         include:
