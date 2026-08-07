@@ -75,9 +75,28 @@ logger = obter_logger("idempotencia_middleware")
 
 ProximoMiddleware = Callable[[Request], Awaitable[Response]]
 
-#: Amostra representativa (F14/A2) -- ver docstring do módulo. `(método,
-#: caminho)` EXATO (nenhuma rota aqui tem parâmetro de path, de propósito:
-#: mantém o casamento O(1), sem regex, sem risco de casar caminho errado).
+#: Amostra representativa (F14/A2), expandida em 2026-08-07 (task de backlog
+#: "idempotência genérica ainda falta em ~120 rotas") -- ver docstring do
+#: módulo. `(método, caminho)` EXATO (nenhuma rota aqui tem parâmetro de
+#: path, de propósito: mantém o casamento O(1), sem regex, sem risco de
+#: casar caminho errado). Toda rota abaixo já EXIGE `Idempotency-Key` via
+#: `Depends(exigir_idempotencia())` no próprio router (contrato inalterado
+#: por esta expansão, só a garantia de dedup real passa a valer) -- expansão
+#: mantém o mesmo critério de seleção original (criação simples, corpo JSON
+#: pequeno, sem upload/streaming, path sem parâmetro), e exclui
+#: deliberadamente: rotas de autenticação/sessão/SSO (login, logout, MFA,
+#: refresh, recuperação de senha, emissão de token OAuth -- semântica de
+#: "sempre gera algo novo", não de criação deduplicável), geração de arquivo
+#: fiscal (`fiscal/aej`, `fiscal/afd`, `fiscal/rep-ps`, `.../assinar` --
+#: crítico de conformidade legal, fora do escopo de um retrofit mecânico),
+#: rotas de importação/sincronização em lote (`colaboradores/importar`,
+#: `marcacoes/sincronizar-offline`, `importacoes` -- corpo potencialmente
+#: grande), ações que não são "criar um recurso" (`apuracoes/recalcular`,
+#: `banco-horas/simular` -- disparo de processamento, não criação), e rotas
+#: que já têm idempotência própria (`marcacoes.py`/F5, `webhooks.py`/F13) ou
+#: ainda são `501` (`tenants.py`). PUT/PATCH/DELETE ficam de fora desta
+#: expansão -- já são idempotentes por semântica HTTP, ganho marginal menor,
+#: e misturar métodos desvia do critério original de "criação simples".
 ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
     {
         ("POST", "/v1/colaboradores"),  # F2
@@ -90,6 +109,31 @@ ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
         ("POST", "/v1/horarios"),  # F3
         ("POST", "/v1/afastamentos"),  # F9b
         ("POST", "/v1/dispositivos"),  # F6
+        ("POST", "/v1/admin/perfis"),  # F1
+        ("POST", "/v1/admin/usuarios"),  # F1
+        ("POST", "/v1/banco-horas/contas"),  # F4
+        ("POST", "/v1/banco-horas/politicas"),  # F4
+        ("POST", "/v1/banco-horas/quitacoes"),  # F4
+        ("POST", "/v1/cargos"),  # F2
+        ("POST", "/v1/centros-custo"),  # F2
+        ("POST", "/v1/delegacoes"),  # F10
+        ("POST", "/v1/equipes"),  # F9b
+        ("POST", "/v1/fechamentos"),  # F10
+        ("POST", "/v1/feriado-conjuntos"),  # F3
+        ("POST", "/v1/integracoes/folha"),  # F13
+        ("POST", "/v1/jornadas"),  # F3
+        ("POST", "/v1/lgpd/consentimentos"),  # F14
+        ("POST", "/v1/lgpd/solicitacoes-titular"),  # F14
+        ("POST", "/v1/periodos"),  # F10
+        ("POST", "/v1/relatorios/agendamentos"),  # F11
+        ("POST", "/v1/solicitacoes"),  # F10
+        ("POST", "/v1/terminais"),  # F6
+        ("POST", "/v1/tipos-afastamento"),  # F9b
+        ("POST", "/v1/tipos-solicitacao"),  # F10
+        ("POST", "/v1/tratamentos"),  # F4
+        ("POST", "/v1/turnos"),  # F3
+        ("POST", "/v1/vinculos"),  # F2
+        ("POST", "/v1/biometrias"),  # F14
     }
 )
 
