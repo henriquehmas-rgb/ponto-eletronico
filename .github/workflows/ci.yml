@@ -260,6 +260,14 @@ jobs:
       # sempre cria como superuser de verdade, entao a mesma URL do
       # DATABASE_URL serve.
       PONTO_TEST_DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
+      # Senha da role de LOGIN de privilegio minimo criada pela migration
+      # 0004_role_login_app (ponto_app_runtime, SEM BYPASSRLS -- a mesma role
+      # que producao usa desde a F14). Valor descartavel, so para esta
+      # execucao. Depois que "Migrations Alembic" roda (criando a role sob o
+      # superusuario acima), o step seguinte troca DATABASE_URL/
+      # DATABASE_URL_SYNC pra esta role -- so a partir dai, nao antes (a
+      # propria migration precisa de privilegio de CREATE ROLE).
+      POSTGRES_APP_PASSWORD: senha-descartavel-de-ci-ponto-app-runtime-3f8b21
       REDIS_URL: redis://localhost:6379/0
       # Mesmo padrao de PONTO_TEST_DATABASE_URL, agora para Redis: F10 em
       # diante tem fixtures proprias que leem PONTO_TEST_REDIS_URL (default
@@ -429,6 +437,34 @@ jobs:
             echo "::notice::alembic.ini ainda nao existe; etapa pulada nesta execucao."
           fi
 
+      # Achado real, 2026-08-07: ate aqui, DATABASE_URL/DATABASE_URL_SYNC
+      # sempre apontaram para o POSTGRES_USER do servico acima (`ponto`),
+      # que a imagem oficial do Postgres cria como SUPERUSUARIO -- RLS nunca
+      # se aplica a superusuario, mesmo com FORCE ROW LEVEL SECURITY em toda
+      # tabela (ADR-001). Isso mascarava qualquer bug que só se manifesta sob
+      # RLS de verdade: o engine GLOBAL que `app.db.sessao.fabrica_de_
+      # sessoes()` cacheia em modulo (usado por qualquer codigo que abre a
+      # PROPRIA sessao sem passar pela fixture de banco exclusivo por fase --
+      # ex. `worker.tarefas.relatorios.executar_relatorio`, ver
+      # `apps/api/tests/f11/agendamentos/test_worker_executar_relatorio.py`)
+      # sempre rodou sob o superusuario, mesmo quando o TESTE em si conectava
+      # sob uma role de LOGIN propria (`sessao_f11` etc.) para suas proprias
+      # asserções -- foi exatamente essa lacuna que deixou passar o bug real
+      # de producao de `executar_relatorio` (RLS perdendo o tenant apos
+      # commit) invisivel em CI. A partir daqui (depois que a migration acima
+      # ja criou `ponto_app_runtime` via 0004_role_login_app, com privilegio
+      # de superusuario), troca para a MESMA role de LOGIN minima que
+      # producao usa desde a F14 -- sem BYPASSRLS, so o que `ponto_app`
+      # concede. PONTO_TEST_DATABASE_URL continua superusuario de proposito:
+      # os ~21 conftest.py de banco exclusivo por fase (F2-F14) usam essa
+      # conexao pra CREATE DATABASE/CREATE ROLE das suas proprias fixtures,
+      # privilegio que ponto_app_runtime nao tem nem deveria ter.
+      - name: Troca DATABASE_URL para a role de runtime (sem BYPASSRLS)
+        run: |
+          set -euo pipefail
+          echo "DATABASE_URL=postgresql+asyncpg://ponto_app_runtime:${POSTGRES_APP_PASSWORD}@localhost:5432/ponto_test" >> "$GITHUB_ENV"
+          echo "DATABASE_URL_SYNC=postgresql+psycopg://ponto_app_runtime:${POSTGRES_APP_PASSWORD}@localhost:5432/ponto_test" >> "$GITHUB_ENV"
+
       - name: pytest
         shell: bash
         run: |
@@ -542,6 +578,12 @@ jobs:
       # (infra/.env.example) -- aqui e so valor descartavel para o teste.
       SSO_ESTADO_CHAVE_SECRETA: chave-descartavel-de-ci-oidc-nao-usar-em-producao-7c3d9
       SSO_SAML_ESTADO_CHAVE: chave-descartavel-de-ci-saml-nao-usar-em-producao-4b1e6
+      # Mesma senha/role de runtime do job test-python (ver comentario la) --
+      # aqui e ainda mais direto: a API sobe de VERDADE (uvicorn), entao todo
+      # request que o schemathesis manda passa pelo caminho de producao. Sem
+      # trocar DATABASE_URL depois da migration, a API inteira rodaria sob
+      # superusuario (RLS sempre inerte) durante todo o fuzzing.
+      POSTGRES_APP_PASSWORD: senha-descartavel-de-ci-ponto-app-runtime-3f8b21
       # `app/routers/saude.py::obter_saude` publica `commit: config.commit or None`
       # -- fora do Dockerfile (que injeta a ARG COMMIT de verdade, ver
       # apps/api/Dockerfile) a variavel fica vazia e vira `null`, mas o contrato
@@ -591,6 +633,15 @@ jobs:
       - name: Migrations Alembic
         working-directory: apps/api
         run: alembic upgrade head
+
+      # Ver comentario equivalente no job test-python: a partir daqui a API
+      # sobe sob a role de LOGIN minima que producao usa desde a F14
+      # (ponto_app_runtime, sem BYPASSRLS), nao mais sob o superusuario que a
+      # migration acima precisou.
+      - name: Troca DATABASE_URL para a role de runtime (sem BYPASSRLS)
+        run: |
+          set -euo pipefail
+          echo "DATABASE_URL=postgresql+asyncpg://ponto_app_runtime:${POSTGRES_APP_PASSWORD}@localhost:5432/ponto_test" >> "$GITHUB_ENV"
 
       - name: Sobe a API em segundo plano
         working-directory: apps/api
