@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import uuid
 from typing import Any
 
@@ -33,6 +34,15 @@ from app.relatorios.catalogo import (
 from tests.f11.conftest import ContextoF11
 
 _NOME_DATASET = "teste_execucao_apuracao"
+
+#: Mesmo padrao de `tests/f10/espelhos/conftest.py::redis_teste_url_f10`:
+#: achado real, 2026-08-07 -- as duas ocorrencias abaixo tinham uma URL de
+#: desenvolvimento local hardcoded (tunel SSH, porta 16379 com credencial),
+#: nunca alcancavel do CI. Aqui a fila PRECISA aceitar a conexao de verdade
+#: (os testes afirmam `status == "enfileirado"`), entao nao da pra usar o
+#: mesmo truque de "redis://unused/0" que outros testes deste arquivo usam
+#: de proposito para provar que a fila NAO e' chamada no caminho sincrono.
+_REDIS_URL_TESTE = os.environ.get("PONTO_TEST_REDIS_URL", "redis://localhost:6379/0")
 
 
 def _construtor(
@@ -148,7 +158,7 @@ async def test_assincrono_pedido_explicitamente_enfileira(
         "teste-execucao-leve",
         parametros,
         usuario_id=contexto_f11.usuario_rh_id,
-        redis_url="redis://:18286d9fc9bc1b4979f081871c11f878632be6db6d6ad1b8@127.0.0.1:16379/0",
+        redis_url=_REDIS_URL_TESTE,
     )
     assert execucao.status == "enfileirado"
     assert execucao.progresso == 0
@@ -169,7 +179,7 @@ async def test_relatorio_definicao_assincrono_true_nunca_toca_o_dataset(
         "espelho-jornada",
         parametros,
         usuario_id=contexto_f11.usuario_rh_id,
-        redis_url="redis://:18286d9fc9bc1b4979f081871c11f878632be6db6d6ad1b8@127.0.0.1:16379/0",
+        redis_url=_REDIS_URL_TESTE,
     )
     assert execucao.status == "enfileirado"
 

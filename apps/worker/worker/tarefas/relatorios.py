@@ -288,8 +288,23 @@ async def _contar_total(sessao: AsyncSession, bruta: Any) -> int:
 async def _atualizar_progresso(
     sessao: AsyncSession, execucao: RelatorioExecucao, progresso: int
 ) -> None:
+    """Grava o progresso e RE-PUBLICA `app.tenant_id` na sessao logo em
+    seguida -- achado real (StaleDataError, ver `executar_relatorio`):
+    `aplicar_tenant` usa `SET LOCAL` (escopo por transacao, `app/db/
+    sessao.py`), e `commit()` encerra a transacao corrente. Sem republicar
+    aqui, toda leitura/escrita seguinte desta MESMA sessao (o proximo lote
+    do laco em `_executar`, ou os commits finais de `executar_relatorio`)
+    roda sob RLS sem tenant nenhum -- falha fechada: SELECT devolve zero
+    linhas silenciosamente, UPDATE por chave primaria não encontra a linha
+    e o ORM levanta `StaleDataError` (nao ha `version_id_col` nesta tabela;
+    o erro vem do proprio rowcount de UPDATE/DELETE que o SQLAlchemy sempre
+    confere). Mesmo cuidado que `tests/f11/conftest.py::sessao_f11` ja
+    documenta para o padrao de teste equivalente."""
+    import app.db.sessao as _sessao_db  # type: ignore[import-not-found]
+
     execucao.progresso = max(0, min(100, progresso))
     await sessao.commit()
+    await _sessao_db.aplicar_tenant(sessao, str(execucao.tenant_id))
 
 
 async def _executar(
@@ -495,6 +510,14 @@ async def executar_relatorio(
         execucao.status = "processando"
         execucao.progresso = 0
         await sessao.commit()
+        # `commit()` acima encerra a transacao em que `aplicar_tenant` (SET
+        # LOCAL, `app/db/sessao.py`) publicou `app.tenant_id` -- sem
+        # republicar, `_executar` (que le o dataset sob RLS) e os commits de
+        # falha/sucesso abaixo rodam sem tenant nenhum. Mesmo achado
+        # documentado em `_atualizar_progresso` acima (achado real:
+        # `StaleDataError` reproduzido em CI/local, ver git blame desta
+        # linha).
+        await aplicar_tenant(sessao, tenant_id)
 
         try:
             conteudo, content_type, total_linhas = await _executar(
@@ -555,6 +578,11 @@ async def executar_relatorio(
         await sessao.commit()
 
         if execucao.agendamento_id is not None:
+            # Mesmo achado dos outros pontos deste arquivo: `commit()` acima
+            # encerra a transacao que publicava `app.tenant_id` -- sem
+            # republicar, a leitura de `RelatorioAgendamento` e o commit
+            # final dentro de `_entregar_agendamento` rodam sem tenant.
+            await aplicar_tenant(sessao, tenant_id)
             await _entregar_agendamento(sessao, execucao, execucao.agendamento_id)
 
         logger.info(
