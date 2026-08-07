@@ -204,10 +204,36 @@ async def test_score_injetado_nao_afeta_cross_tenant_via_header_x_tenant(
 ) -> None:
     """Reforco combinando os vetores 3 e 6: mesmo que o atacante autenticado
     no tenant A tente enviar `X-Tenant` do tenant B JUNTO com o score
-    injetado (na esperanca de que alguma resolucao de politica erre o
-    tenant e aplique uma politica mais permissiva), a marcacao e recusada
-    por identidade (colaborador nao pertence ao tenant resolvido pela
-    sessao) antes de qualquer score ser calculado."""
+    injetado, a marcacao nunca vaza dado de A sob o escopo de B.
+
+    Achado real desta sessao (2026-08-07): a asercao original ("X-Tenant e
+    vestigial aqui, dependency override resolve tudo") estava ERRADA sobre
+    a propria arquitetura. `app.dependency_overrides[obter_sujeito]`
+    substitui a dependencia do FastAPI, mas `TenantMiddleware`
+    (`app/core/middleware.py`) e ASGI puro, roda ANTES da injecao de
+    dependencia, e continua publicando o tenant resolvido do cabecalho
+    `X-Tenant` em `contexto.tenant_atual()` -- e essa ContextVar, nao
+    `sujeito.tenant_id`, que `app/db/sessao.py::obter_sessao` usa para
+    `SET LOCAL app.tenant_id` (RLS). Com sujeito fixado em A mas RLS
+    escopada em B, os registros do colaborador/empresa/unidade/dispositivo
+    (que so existem em A) ficam invisiveis para a sessao -- resultado
+    real, reproduzido contra Postgres de verdade: 404 `PONTO-REC-001`, nao
+    201 gravado em A como a asercao original esperava.
+
+    Isso NAO e um bypass nem um vazamento cross-tenant: e o RLS recusando
+    (fail-closed) por escopo vazio, o resultado mais seguro possivel. Mas
+    tambem significa que este teste, do jeito que esta construido, nunca
+    exercita a checagem real de divergencia token/cabecalho
+    (`PONTO-TEN-002`, `app/core/seguranca.py`) -- substituir
+    `obter_sujeito` inteiro remove essa logica do caminho testado junto
+    com o resto da dependencia. A defesa de identidade contra esse ataque
+    especifico (colaborador de A referenciado sob sessao de B) ja esta
+    coberta por outro caminho, verificado nesta investigacao:
+    `resolver_sujeito` (`app/identidade/rbac/resolucao.py`) recusa
+    explicitamente sujeito/tenant divergentes com um JWT real, antes de
+    qualquer coisa aqui. Cobertura direta de `PONTO-TEN-002` com um JWT de
+    verdade (nao dependency override) fica registrada como lacuna em
+    `docs/backlog.md`."""
     tenant_a = contexto_dois_tenants.tenant_a
     tenant_b = contexto_dois_tenants.tenant_b
 
@@ -225,18 +251,18 @@ async def test_score_injetado_nao_afeta_cross_tenant_via_header_x_tenant(
                 "scoreConfianca": 100,
             },
             headers={
-                # Sujeito fixo resolve tenant_id=A independente deste
-                # cabecalho (dependency override substitui `obter_sujeito`
-                # inteiro) -- o proprio X-Tenant aqui e vestigial, mas o
-                # ataque tentaria isto num cenario real de sessao por JWT.
+                # TenantMiddleware roda fora da injecao de dependencia do
+                # FastAPI e publica o tenant deste cabecalho em
+                # `contexto.tenant_atual()` independente do override de
+                # `obter_sujeito` abaixo -- por isso a RLS da sessao fica
+                # escopada em B mesmo com o sujeito fixado em A (ver
+                # docstring da funcao).
                 "X-Tenant": tenant_b.tenant_slug,
                 "Idempotency-Key": str(uuid.uuid4()),
             },
         )
 
-    assert resposta.status_code == 201, resposta.text
-    corpo = resposta.json()
-    # A marcacao foi gravada no tenant da SESSAO (A), nunca no tenant do
-    # cabecalho (B) -- `tenant_id_ou_erro(sujeito)` e a unica fonte usada
-    # por `criar_marcacao` (`app/routers/marcacoes.py`).
-    assert corpo["marcacao"]["tenantId"] == str(tenant_a.tenant_id)
+    # RLS escopada em B nao enxerga o colaborador/empresa/unidade/
+    # dispositivo de A -- 404, nao 201. Nenhum dado de A vaza sob B.
+    assert resposta.status_code == 404, resposta.text
+    assert resposta.json()["codigo"] == "PONTO-REC-001"

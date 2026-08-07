@@ -261,6 +261,15 @@ jobs:
       # DATABASE_URL serve.
       PONTO_TEST_DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
       REDIS_URL: redis://localhost:6379/0
+      # Mesmo padrao de PONTO_TEST_DATABASE_URL, agora para Redis: F10 em
+      # diante tem fixtures proprias que leem PONTO_TEST_REDIS_URL (default
+      # de desenvolvimento local, porta 16379, se ausente) em vez de
+      # REDIS_URL -- nunca setada aqui, mesma causa raiz.
+      PONTO_TEST_REDIS_URL: redis://localhost:6379/0
+      # Semeadura do sandbox (F13/A?, app/integracoes/sandbox/semear.py)
+      # recusa rodar sem senha explicita do admin de demonstracao (nunca um
+      # default hardcoded). Valor descartavel, so para esta execucao de CI.
+      PONTO_SANDBOX_ADMIN_SENHA: senha-descartavel-de-ci-nao-usar-em-producao-8f2a1c
       # MinIO (F10/A2): a imagem oficial `minio/minio` NAO sobe sozinha
       # dentro do bloco nativo `services:` (ver step "Sobe o MinIO" abaixo
       # para o motivo) -- por isso nao ha um bloco `services.minio` acima,
