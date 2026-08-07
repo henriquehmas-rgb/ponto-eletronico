@@ -1206,5 +1206,8 @@ jobs:
       - name: Roda infra/deploy-hml.sh localmente (ja estamos na VPS)
         # O proprio script faz `git fetch`/`reset --hard origin/main` a
         # partir de /docker/ponto-eletronico -- nao precisa de actions/
-        # checkout aqui.
-        run: /docker/ponto-eletronico/infra/deploy-hml.sh
+        # checkout aqui. O script e a arvore de trabalho sao donos de root
+        # (permissao original do forced-command SSH); `ghrunner` roda so
+        # via um sudoers scoped exclusivamente a este caminho exato
+        # (/etc/sudoers.d/ghrunner-deploy-hml na VPS), nao sudo irrestrito.
+        run: sudo -n /docker/ponto-eletronico/infra/deploy-hml.sh
