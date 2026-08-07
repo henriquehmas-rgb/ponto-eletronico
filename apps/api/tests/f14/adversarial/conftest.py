@@ -91,9 +91,9 @@ def _aplica_migracao(url_banco: URL) -> None:
     # pelo job do CI apontando para outro banco) e a migracao silenciosamente
     # aplica no banco ERRADO -- achado real, 2026-08-07, descoberto ao investigar
     # "relation ... does not exist" na primeira execucao real do CI.
-    ambiente["DATABASE_URL_SYNC"] = url_banco.set(
-        drivername="postgresql+psycopg"
-    ).render_as_string(hide_password=False)
+    ambiente["DATABASE_URL_SYNC"] = url_banco.set(drivername="postgresql+psycopg").render_as_string(
+        hide_password=False
+    )
     resultado = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=str(RAIZ_API),

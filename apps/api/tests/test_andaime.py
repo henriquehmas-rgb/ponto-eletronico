@@ -231,10 +231,18 @@ def test_parametro_de_caminho_invalido_devolve_erros_campo(cliente: TestClient) 
 
 
 def test_cabecalho_obrigatorio_ausente(cliente: TestClient) -> None:
-    """POST sem `Idempotency-Key` falha antes de chegar ao handler."""
+    """POST sem `Idempotency-Key` falha antes de chegar ao handler.
+
+    `PONTO-IDEM-001`, nao `PONTO-VAL-011`: `IdempotenciaRetrofitMiddleware`
+    (F13, `app/comum/idempotencia_middleware.py`) recusa pela ausencia do
+    cabecalho ANTES de resolver tenant/sessao -- so cai no `PONTO-VAL-011`
+    de `obter_sessao` quando o `Idempotency-Key` esta presente mas o tenant
+    nao resolve (ver comentario do proprio middleware). Achado real: a
+    asercao original nao acompanhou a mudanca de precedencia quando o
+    middleware entrou (2026-08-07)."""
     resposta = cliente.post("/v1/empresas", json={})
     assert resposta.status_code == 400
-    assert resposta.json()["codigo"] == "PONTO-VAL-011"
+    assert resposta.json()["codigo"] == "PONTO-IDEM-001"
 
 
 def test_todo_codigo_usado_existe_no_catalogo() -> None:

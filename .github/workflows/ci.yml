@@ -261,9 +261,68 @@ jobs:
       # DATABASE_URL serve.
       PONTO_TEST_DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
       REDIS_URL: redis://localhost:6379/0
+      # MinIO (F10/A2): a imagem oficial `minio/minio` NAO sobe sozinha
+      # dentro do bloco nativo `services:` (ver step "Sobe o MinIO" abaixo
+      # para o motivo) -- por isso nao ha um bloco `services.minio` acima,
+      # como ha para postgres/redis. MINIO_ROOT_USER/MINIO_ROOT_PASSWORD
+      # viram as credenciais root do servidor MinIO; os MESMOS valores sao
+      # reaproveitados como MINIO_ACCESS_KEY/MINIO_SECRET_KEY (nome que
+      # `app.core.config.Configuracao` le) porque, num MinIO standalone
+      # descartavel de CI, o usuario root JA E' a access key/secret key --
+      # nao ha criacao separada de usuario de aplicacao aqui.
+      MINIO_ROOT_USER: ponto
+      MINIO_ROOT_PASSWORD: ponto_ci_minio
+      MINIO_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: ponto
+      MINIO_SECRET_KEY: ponto_ci_minio
+      MINIO_BUCKET: ponto
+      MINIO_SECURE: "false"
 
     steps:
       - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # MinIO sobe como container solto (`docker run`), nao no bloco
+      # `services:` nativo. Motivo: a imagem oficial `minio/minio` nao tem
+      # CMD default que sobe o servidor sozinho -- ela EXIGE o argumento
+      # posicional `server /data` (sem isso, o container so imprime o help
+      # e sai). O bloco `services:` do Actions (mesmo usado acima para
+      # postgres/redis) so aceita `image`/`env`/`ports`/`options`/`volumes`
+      # -- `options` vira flags de `docker create` (equivalente a
+      # `--health-cmd` etc.), mas NAO ha como anexar COMMAND/ARGS depois do
+      # nome da imagem por ali; `--entrypoint` sozinho tambem nao resolve,
+      # porque so troca o executavel, sem poder informar os argumentos
+      # posicionais (`/data --console-address ":9001"`) que o entrypoint do
+      # MinIO precisa receber. Confirmado publicamente (sem solucao nativa):
+      # github.com/orgs/community/discussions/26688. Por isso o MinIO sobe
+      # aqui, manualmente, com espera de saude explicita e cleanup (`if:
+      # always()`) no fim do job. Mesma tag de imagem do `infra/
+      # docker-compose.yml`, para nao testar contra uma versao diferente da
+      # que roda em producao/homologacao.
+      # -----------------------------------------------------------------
+      - name: Sobe o MinIO (bloco `services:` nao aceita override de `command`)
+        run: |
+          set -euo pipefail
+          docker run -d --name minio-ci \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
+            -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z \
+            server /data --console-address ":9001"
+
+      - name: Aguarda o MinIO ficar saudavel
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO pronto."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MinIO nao respondeu em /minio/health/live a tempo."
+          docker logs minio-ci || true
+          exit 1
 
       - uses: actions/setup-python@v5
         with:
@@ -297,6 +356,56 @@ jobs:
             pip install -e "$dir[dev]" || pip install -e "$dir"
             echo "::endgroup::"
           done
+
+      - name: Cria o bucket "ponto" no MinIO
+        # Nada em `apps/api/tests/f10/**` cria o bucket default antes de
+        # usar -- ao contrario de F12/F13/F14 (que chamam
+        # `armazenamento.garantir_bucket()` explicitamente em fixture/setup
+        # antes de qualquer `salvar_objeto`), os testes de F10
+        # (`test_armazenamento.py::test_garantir_bucket_padrao_ja_existe`,
+        # `test_espelho.py` via `salvar_objeto`) assumem que o bucket
+        # padrao (`MINIO_BUCKET`) "ja e' provisionado pelo ambiente de
+        # verificacao" (docstring do proprio teste). Em producao isso e' um
+        # passo do bootstrap de `infra/`; aqui, e' este step. Usa o SDK
+        # `minio` (ja dependencia de `apps/api`, instalada no step acima),
+        # nao o binario `mc`, para nao introduzir uma segunda forma de
+        # falar com o MinIO alem da que a propria aplicacao usa.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import sys
+          import time
+
+          from minio import Minio
+          from minio.error import S3Error
+
+          cliente = Minio(
+              os.environ["MINIO_ENDPOINT"],
+              access_key=os.environ["MINIO_ACCESS_KEY"],
+              secret_key=os.environ["MINIO_SECRET_KEY"],
+              secure=os.environ.get("MINIO_SECURE", "false").lower() == "true",
+          )
+          bucket = os.environ.get("MINIO_BUCKET", "ponto")
+
+          ultimo_erro: Exception | None = None
+          for tentativa in range(1, 6):
+              try:
+                  if cliente.bucket_exists(bucket):
+                      print(f"bucket '{bucket}' ja existe.")
+                  else:
+                      cliente.make_bucket(bucket)
+                      print(f"bucket '{bucket}' criado.")
+                  break
+              except S3Error as exc:
+                  ultimo_erro = exc
+                  print(f"tentativa {tentativa}/5 falhou: {exc}", file=sys.stderr)
+                  time.sleep(2)
+          else:
+              print(f"::error::nao foi possivel criar/verificar o bucket '{bucket}': {ultimo_erro}")
+              sys.exit(1)
+          PY
 
       - name: Migrations Alembic (aplica e reverte)
         shell: bash
@@ -360,6 +469,10 @@ jobs:
           path: coverage-*.xml
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Encerra o MinIO
+        if: always()
+        run: docker rm -f minio-ci || true
 
   # ---------------------------------------------------------------------------
   # (b2) Schemathesis contra o contrato, com a API real subida (F13/A1, T6)
