@@ -1188,14 +1188,23 @@ jobs:
     name: Deploy · hml (aplicar)
     needs: [deploy-hml]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    # Achado real, 2026-08-07: os runners hospedados do GitHub (ubuntu-latest)
+    # nunca conseguem abrir TCP na porta 22 da VPS -- "dial tcp ***:22: i/o
+    # timeout", confirmado que nao e bloqueio do SO da VPS (ufw inativo,
+    # iptables sem regra, sshd escutando normal, SSH direto desta maquina
+    # funciona) -- e um firewall de rede do provedor de hospedagem barrando
+    # os ranges de IP dos runners do GitHub. Resolvido trocando para um
+    # runner self-hosted rodando na propria VPS (usuario dedicado `ghrunner`,
+    # sem privilegio de root, so no grupo `docker`; label `ponto-vps` restringe
+    # este job a rodar so nele): elimina a necessidade de SSH vindo de fora
+    # por completo, sem depender de manter uma allowlist de IPs dinamica do
+    # GitHub. A chave SSH restrita (`PONTO_DEPLOY_SSH_KEY`, forced-command)
+    # fica sem uso neste job, mas nao foi removida do servidor -- continua
+    # disponivel como via manual de disparo fora do CI.
+    runs-on: [self-hosted, ponto-vps]
     steps:
-      - name: Dispara infra/deploy-hml.sh na VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.PONTO_DEPLOY_HOST }}
-          username: root
-          key: ${{ secrets.PONTO_DEPLOY_SSH_KEY }}
-          # O comando aqui e IGNORADO pelo servidor -- o forced-command do
-          # authorized_keys sempre roda infra/deploy-hml.sh, nunca isto.
-          script: echo "disparando deploy-hml.sh (forced-command do lado do servidor)"
+      - name: Roda infra/deploy-hml.sh localmente (ja estamos na VPS)
+        # O proprio script faz `git fetch`/`reset --hard origin/main` a
+        # partir de /docker/ponto-eletronico -- nao precisa de actions/
+        # checkout aqui.
+        run: /docker/ponto-eletronico/infra/deploy-hml.sh
