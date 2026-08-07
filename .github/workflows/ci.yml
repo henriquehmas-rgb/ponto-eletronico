@@ -249,6 +249,17 @@ jobs:
       TZ: America/Sao_Paulo
       DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
       DATABASE_URL_SYNC: postgresql+psycopg://ponto:ponto_ci@localhost:5432/ponto_test
+      # F5 em diante usam um padrao proprio de fixture (conexao "superusuario"
+      # via PONTO_TEST_DATABASE_URL, pra poder criar roles de LOGIN sem
+      # BYPASSRLS por sessao de teste -- testar RLS conectado como
+      # superusuario nao prova nada). Nunca foi setada aqui: toda essa
+      # familia de fixtures (26 conftest.py, f1 a f14) caia no default de
+      # desenvolvimento local de cada uma (tunel SSH pra VPS, porta 15432 ou
+      # equivalente) -- nunca alcancavel do runner do CI. "ponto" e o
+      # POSTGRES_USER do servico acima, que a imagem oficial do Postgres
+      # sempre cria como superuser de verdade, entao a mesma URL do
+      # DATABASE_URL serve.
+      PONTO_TEST_DATABASE_URL: postgresql+asyncpg://ponto:ponto_ci@localhost:5432/ponto_test
       REDIS_URL: redis://localhost:6379/0
 
     steps:
