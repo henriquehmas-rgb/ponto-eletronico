@@ -667,27 +667,30 @@ jobs:
           # `openapi: 3.1.0` e a serie 3.x do schemathesis so suporta 3.1 via
           # essa flag -- sem ela, falha antes de carregar o schema.
           #
-          # --exclude-checks content_type_conformance,status_code_conformance:
-          # dois achados JA investigados a fundo e documentados em
-          # docs/backlog.md (fechamento F13/F14, 2026-08-03/06), nao
-          # regressoes novas. content_type_conformance (~97% das falhas cruas
-          # do fuzzing): o proprio ASGI (uvicorn/h11) rejeita cabecalho HTTP
-          # fuzzado que viola RFC 7230 (Idempotency-Key/Authorization/X-API-Key
-          # com byte invalido) ANTES de qualquer codigo da aplicacao rodar --
-          # nao ha como uma camada da aplicacao envolver uma requisicao que o
-          # parser HTTP ja recusou, e a propria investigacao original ja
-          # recomendou excluir este check ao automatizar em CI.
-          # status_code_conformance: toda rota X-Tenant-dependente pode
-          # devolver 404 PONTO-TEN-001 (tenant invalido), mas o contrato nao
-          # declara esse 404 sistematicamente em toda operacao -- gap real de
-          # completude do contrato, ja registrado como trabalho futuro
-          # ("janela de manutencao de contrato dedicada", nao uma fase de
-          # produto), nao um bug de comportamento (o comportamento da API
-          # esta correto). Os demais checks (not_a_server_error,
-          # response_schema_conformance, response_headers_conformance,
-          # negative_data_rejection, ignored_auth) continuam bloqueando --
-          # esses SIM pegam bug de verdade (ver os dois 500 reais de SSO
-          # corrigidos na mesma sessao deste comentario).
+          # --exclude-checks content_type_conformance: achado JA investigado
+          # a fundo e documentado em docs/backlog.md (fechamento F13,
+          # 2026-08-03), nao regressao nova. content_type_conformance (~97%
+          # das falhas cruas do fuzzing): o proprio ASGI (uvicorn/h11)
+          # rejeita cabecalho HTTP fuzzado que viola RFC 7230 (Idempotency-
+          # Key/Authorization/X-API-Key com byte invalido) ANTES de qualquer
+          # codigo da aplicacao rodar -- nao ha como uma camada da aplicacao
+          # envolver uma requisicao que o parser HTTP ja recusou, e a propria
+          # investigacao original ja recomendou excluir este check ao
+          # automatizar em CI.
+          #
+          # status_code_conformance voltou a ficar ATIVO em 2026-08-07: o gap
+          # que motivava a exclusao (nem toda operacao X-Tenant-dependente
+          # declarava o 404 PONTO-TEN-001 que TenantMiddleware pode devolver
+          # pra QUALQUER caminho /v1/...) foi fechado de verdade -- as 229
+          # operacoes do contrato agora declaram `404: $ref: .../Erro404`
+          # (verificado, nao so as ~5 que ja tinham antes). Se este check
+          # voltar a reprovar aqui, e sinal de que uma operacao NOVA nao
+          # herdou o padrao -- corrigir o contrato, nao reexcluir o check.
+          # Os demais checks (not_a_server_error, response_schema_
+          # conformance, response_headers_conformance, negative_data_
+          # rejection, ignored_auth) continuam bloqueando -- esses SIM pegam
+          # bug de verdade (ver os dois 500 reais de SSO corrigidos na mesma
+          # sessao deste comentario).
           #
           # --exclude-operation-id listarTenants/criarTenant: as duas SAO
           # 501 PONTO-INT-005 de proposito (`app/routers/tenants.py`) -- a
@@ -702,7 +705,7 @@ jobs:
           schemathesis run packages/contracts/openapi.yaml \
             --base-url http://localhost:8000 \
             --checks all \
-            --exclude-checks content_type_conformance,status_code_conformance \
+            --exclude-checks content_type_conformance \
             --exclude-operation-id listarTenants \
             --exclude-operation-id criarTenant \
             --experimental=openapi-3.1
