@@ -100,11 +100,35 @@ def _obter_cliente_redis() -> Redis:
 
 async def _encerrar_cliente_redis() -> None:
     """Só para teste: descarta o cliente cacheado entre suítes que apontam
-    para Redis diferentes."""
+    para Redis diferentes.
+
+    Best-effort de propósito. Nem toda suíte que cria este cliente global
+    (qualquer rota atrás de `exigir_limite_taxa`/`exigir_limite_taxa_sessao`,
+    inclusive fora deste módulo -- ex.: `tests/f13/webhooks/test_endpoint_
+    http_e2e.py::test_criar_webhook_ponta_a_ponta_via_api_key`, achado real
+    em 2026-08-07) tem uma fixture de limpeza como esta. Com
+    `asyncio_default_fixture_loop_scope = "function"`, o event loop daquele
+    teste já fechou por completo quando UM TESTE FUTURO (de outra suíte, ex.
+    `tests/f14/hardening`) tenta encerrar o cliente herdado: `aclose()`
+    tenta reagendar callback nesse loop antigo via `loop.call_soon(...)` e
+    explode com `RuntimeError: Event loop is closed` -- não é falha de
+    verdade, é constatação de que o socket subjacente já morreu junto com o
+    loop antigo, não há nada de útil a fechar. Descartamos a referência de
+    qualquer forma: o próximo uso cria um cliente novo, preso ao loop do
+    teste atual."""
     global _cliente_redis
-    if _cliente_redis is not None:
-        await _cliente_redis.aclose()
-        _cliente_redis = None
+    if _cliente_redis is None:
+        return
+    cliente, _cliente_redis = _cliente_redis, None
+    try:
+        await cliente.aclose()
+    except RuntimeError as exc:
+        if "Event loop is closed" not in str(exc):
+            raise
+        logger.warning(
+            "descartando cliente Redis de teste preso a um event loop"
+            " ja fechado (aclose() nao pode reagendar callback nele)"
+        )
 
 
 def _cabecalhos(limite: int, restante: int, reset_em: int) -> dict[str, str]:
