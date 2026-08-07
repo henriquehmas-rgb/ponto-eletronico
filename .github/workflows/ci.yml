@@ -542,6 +542,14 @@ jobs:
       # (infra/.env.example) -- aqui e so valor descartavel para o teste.
       SSO_ESTADO_CHAVE_SECRETA: chave-descartavel-de-ci-oidc-nao-usar-em-producao-7c3d9
       SSO_SAML_ESTADO_CHAVE: chave-descartavel-de-ci-saml-nao-usar-em-producao-4b1e6
+      # `app/routers/saude.py::obter_saude` publica `commit: config.commit or None`
+      # -- fora do Dockerfile (que injeta a ARG COMMIT de verdade, ver
+      # apps/api/Dockerfile) a variavel fica vazia e vira `null`, mas o contrato
+      # declara `commit` como `string` obrigatoria (nao nullable). Achado real,
+      # 2026-08-07: aqui o job sobe a API direto via uvicorn (sem build de
+      # imagem), entao nunca teria COMMIT setado sem isto -- github.sha e um
+      # valor real e disponivel de graca, nao um placeholder descartavel.
+      COMMIT: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -629,10 +637,23 @@ jobs:
           # negative_data_rejection, ignored_auth) continuam bloqueando --
           # esses SIM pegam bug de verdade (ver os dois 500 reais de SSO
           # corrigidos na mesma sessao deste comentario).
+          #
+          # --exclude-operation-id listarTenants/criarTenant: as duas SAO
+          # 501 PONTO-INT-005 de proposito (`app/routers/tenants.py`) -- a
+          # role de conexao da aplicacao (`ponto_app`) nao tem BYPASSRLS e
+          # listar/criar tenant e necessariamente cross-tenant, entao ficam
+          # 501 ate uma fase decidir o desenho do acesso do suporte da SEEG
+          # (ver docs/backlog.md, item "F1 / A2"). not_a_server_error nao
+          # distingue 501 documentado de bug -- excluir so estas duas
+          # operacoes evita marcar como falha algo que e comportamento
+          # correto e ja rastreado, sem abrir mao do check nas demais ~215
+          # operacoes do contrato.
           schemathesis run packages/contracts/openapi.yaml \
             --base-url http://localhost:8000 \
             --checks all \
             --exclude-checks content_type_conformance,status_code_conformance \
+            --exclude-operation-id listarTenants \
+            --exclude-operation-id criarTenant \
             --experimental=openapi-3.1
 
       - name: Encerra a API
