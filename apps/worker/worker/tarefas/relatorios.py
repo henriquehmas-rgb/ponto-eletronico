@@ -477,10 +477,11 @@ async def executar_relatorio(
             formato=formato,
         )
 
-    # Import tardio de `app.*` (ADR-009) -- primeira ocorrencia textual do
-    # modulo carrega o `# type: ignore`, mesmo padrao de `worker/tarefas/
-    # fechamento.py`/`worker/notificacoes_verificacao.py`.
-    from app.db.sessao import aplicar_tenant, fabrica_de_sessoes  # type: ignore[import-not-found]
+    # Import tardio de `app.*` (ADR-009) -- a primeira ocorrencia textual do
+    # modulo (`_atualizar_progresso`, acima neste arquivo) ja carrega o
+    # `# type: ignore`; mypy resolve o modulo a partir dali, entao repetir o
+    # ignore aqui vira "unused-ignore" (achado real, 2026-08-07).
+    from app.db.sessao import aplicar_tenant, fabrica_de_sessoes
     from ponto_contracts import RelatorioDefinicao as _RelatorioDefinicao
     from ponto_contracts import RelatorioExecucao as _RelatorioExecucao
 
