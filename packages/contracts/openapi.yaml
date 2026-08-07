@@ -1306,6 +1306,8 @@ paths:
               examples:
                 padrao:
                   $ref: '#/components/examples/ExemploTenant'
+        '400':
+          $ref: '#/components/responses/Erro400'
         '403':
           $ref: '#/components/responses/Erro403'
         '404':
@@ -1316,7 +1318,7 @@ paths:
           $ref: '#/components/responses/Erro500'
         '501':
           $ref: '#/components/responses/Erro501'
-      x-erros: [PONTO-INT-001, PONTO-INT-005, PONTO-RATE-001, PONTO-TEN-001, PONTO-TEN-003]
+      x-erros: [PONTO-INT-001, PONTO-INT-005, PONTO-RATE-001, PONTO-TEN-001, PONTO-TEN-003, PONTO-VAL-011]
   /v1/tenants:
     get:
       tags:
