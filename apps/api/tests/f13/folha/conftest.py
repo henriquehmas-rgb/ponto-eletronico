@@ -68,6 +68,14 @@ def _garantir_banco_exclusivo(url_admin: URL) -> URL:
 def _aplica_migracao(url_admin_banco: URL) -> None:
     ambiente = dict(os.environ)
     ambiente["DATABASE_URL"] = url_admin_banco.render_as_string(hide_password=False)
+    # alembic/env.py prioriza DATABASE_URL_SYNC sobre DATABASE_URL --
+    # sem isto, o subprocess herda o DATABASE_URL_SYNC do ambiente (setado
+    # pelo job do CI apontando para outro banco) e a migracao silenciosamente
+    # aplica no banco ERRADO -- achado real, 2026-08-07, descoberto ao investigar
+    # "relation ... does not exist" na primeira execucao real do CI.
+    ambiente["DATABASE_URL_SYNC"] = url_admin_banco.set(
+        drivername="postgresql+psycopg"
+    ).render_as_string(hide_password=False)
     resultado = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=str(RAIZ_API),
