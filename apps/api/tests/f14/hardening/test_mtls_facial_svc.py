@@ -255,6 +255,11 @@ def _handshake_cliente(
     fecha) ou deixa a exceção de `ssl`/`socket` propagar quando o servidor
     recusa o handshake."""
     contexto = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    # minimum_version tambem pinado em TLS 1.2 (nao so o maximum): sem isso
+    # o contexto aceita negociar ate TLS 1.0/1.1, protocolos obsoletos que o
+    # CodeQL sinaliza (py/insecure-protocol) -- mesma escolha defensiva de
+    # `servidor_mtls` acima e de `facial/servidor.py` em producao.
+    contexto.minimum_version = ssl.TLSVersion.TLSv1_2
     contexto.maximum_version = ssl.TLSVersion.TLSv1_2
     contexto.load_verify_locations(cafile=ca)
     if cert:

@@ -659,13 +659,24 @@ jobs:
 
           # Achados revisados por A2 (F14) e confirmados falso-positivo, com
           # justificativa completa em `docs/backlog.md` (2026-08-05, entradas
-          # "F14 / A2"). (ruleId, caminho-relativo-ao-repo, linha).
+          # "F14 / A2"; 2026-08-07 para os dois de log-injection). (ruleId,
+          # caminho-relativo-ao-repo, linha).
           ACHADOS_TRIADOS = {
               ("py/weak-sensitive-data-hashing", "apps/api/app/comum/autenticacao_cliente.py", 131),
               ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/mfa/backup_codes.py", 34),
               ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/tokens/oauth.py", 196),
               ("py/url-redirection", "apps/api/app/routers/sso.py", 181),
+              ("py/log-injection", "apps/api/app/comum/armazenamento.py", 89),
+              ("py/log-injection", "apps/api/app/comum/armazenamento.py", 127),
           }
+
+          # source-root (${{ matrix.fonte }}) faz o CodeQL relatar o URI do
+          # achado relativo a ele (ex.: "app/comum/foo.py"), nao relativo a
+          # raiz do repo -- sem este prefixo, NENHUM achado triado bate com a
+          # allowlist acima e todo achado (inclusive os ja revisados) conta
+          # como novo (achado real: os 3 achados de weak-sensitive-data-hashing
+          # ja triados apareciam como "novos" toda execucao por causa disso).
+          prefixo_fonte = "${{ matrix.fonte }}"
 
           total_novos = 0
           for caminho_sarif in glob.glob("codeql-resultados/*.sarif"):
@@ -673,7 +684,7 @@ jobs:
               for run in dados.get("runs", []):
                   for r in run.get("results", []):
                       loc = r["locations"][0]["physicalLocation"]
-                      caminho = loc["artifactLocation"]["uri"]
+                      caminho = f"{prefixo_fonte}/{loc['artifactLocation']['uri']}"
                       linha = loc["region"].get("startLine", 0)
                       chave = (r["ruleId"], caminho, linha)
                       if chave in ACHADOS_TRIADOS:
