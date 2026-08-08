@@ -11,22 +11,18 @@ este módulo só exercita, ponta a ponta, o caminho HTTP-equivalente completo
 dia mudar, chamando `apurar_dia` (F4, A1) apenas como leitura/observação do
 efeito, nunca reimplementando cálculo.
 
-**Achado, não corrigido aqui (fora do ownership desta fase sobre
-`apps/api/app/apuracao/**`, F4 congelada):** `app.apuracao.dominio.servico`
-(módulo `apurar_dia`) documenta explicitamente, no próprio docstring, que
-`Tratamento` de categoria `afastamento` **não tem efeito numérico** no
-cálculo do dia (`falta_minutos`/`trabalhado_minutos` etc. inalterados) — só
-`inclusao_marcacao`/`desconsideracao_marcacao`/`abono` são consumidos por
-`apurar_dia`. Isso diverge do que o PCF desta fase (§2.2) descreve para a
-categoria `afastamento` ("correção retroativa de um dia já apurado, o mesmo
-padrão de qualquer outro tratamento") sem detalhar qual seria o efeito
-observável esperado. O teste `test_afastamento_retroativo...` abaixo prova o
-que É verdade hoje (o `Tratamento` é criado e aprovado corretamente,
-referenciando `tipo_afastamento_id`, via o despachante genérico de A1 e
-`decidir_tratamento`/F4, sem nenhuma linha de `INSERT`/`UPDATE` direto desta
-fase em `apuracoes_dia`/`tratamentos`) — não afirma que `falta_minutos` muda,
-porque, pela leitura do código real de F4, não muda. Achado equivalente já
-registrado em `docs/backlog.md` (2026-07-28, F10/A4, T13).
+**Achado original (28/07/2026), corrigido em 07/08/2026 (ADR-011)**:
+`app.apuracao.dominio.servico::apurar_dia` não dava efeito numérico a
+`Tratamento` de categoria `afastamento` — o `Tratamento` era criado e
+aprovado corretamente, mas `falta_minutos`/`tipo_dia` ficavam inalterados.
+Corrigido: um `Tratamento` de categoria `afastamento` aprovado/aplicado
+agora abona o dia inteiro (mesmo efeito de um `abono` sem `minutos_ajuste`)
+e força `tipo_dia = 'afastamento'` na gravação, mesma precedência que
+`_afastamento_vigente` já tem no resolvedor de F3 para o caso futuro/vigente
+(que, achado adicional da mesma investigação, também nunca tinha esse
+efeito numérico — corrigido junto). O teste
+`test_afastamento_retroativo...` abaixo agora prova os dois: criação/
+aprovação do `Tratamento` (como antes) E o efeito na apuração (novo).
 """
 
 from __future__ import annotations
@@ -165,12 +161,23 @@ async def test_abono_falta_aprovado_zera_a_falta_da_apuracao(
 async def test_afastamento_retroativo_cria_e_aprova_tratamento_via_despachante_de_a1(
     sessao_f10: AsyncSession, contexto_f10: ContextoF10
 ) -> None:
-    """Ver achado no docstring do módulo: prova que o `Tratamento` retroativo
-    é criado e aprovado corretamente pelo despachante genérico de A1 + F4
-    (reaproveitamento, critério de aceite 7), sem afirmar que `falta_minutos`
-    muda -- pela leitura real de `app/apuracao/dominio/servico.py`, uma
-    categoria `afastamento` não é consumida numericamente por `apurar_dia`."""
+    """Ver docstring do módulo (ADR-011, corrigido em 07/08/2026): prova que
+    o `Tratamento` retroativo é criado e aprovado corretamente pelo
+    despachante genérico de A1 + F4 (reaproveitamento, critério de aceite 7)
+    E que a apuração do dia reflete o afastamento (falta zerada, `tipo_dia`
+    forçado para `'afastamento'`) -- mesmo padrão de
+    `test_abono_falta_aprovado_zera_a_falta_da_apuracao` acima."""
     _limpar_barramento_f4()
+
+    # Apura o dia ANTES de qualquer tratamento: sem marcacoes, a jornada
+    # util de 480 min vira falta integral -- mesma logica do teste de abono
+    # acima, prova que o dia comeca "normal" antes da correcao retroativa.
+    apuracao_antes = await apurar_dia(
+        sessao_f10, contexto_f10.tenant_id, contexto_f10.vinculo_id, _SEGUNDA
+    )
+    assert apuracao_antes.falta_minutos == 480
+    assert apuracao_antes.tipo_dia == "util"
+    await sessao_f10.flush()
 
     tipo_afastamento_retroativo = TipoAfastamento(
         tenant_id=contexto_f10.tenant_id,
@@ -242,8 +249,67 @@ async def test_afastamento_retroativo_cria_e_aprova_tratamento_via_despachante_d
     assert tratamento.tipo_afastamento_id == tipo_afastamento_retroativo.id
     assert tratamento.tipo_tratamento_id == tipo_tratamento.id
 
+    # `decidir_tratamento` (F4) ja agenda `recalcular_periodo` -- a falta
+    # que existia antes do afastamento deve ter sumido, e o dia passa a ser
+    # rotulado como afastamento (ADR-011).
+    apuracao_depois = await apurar_dia(
+        sessao_f10, contexto_f10.tenant_id, contexto_f10.vinculo_id, _SEGUNDA
+    )
+    assert apuracao_depois.falta_minutos == 0
+    assert apuracao_depois.abono_minutos == 480
+    assert apuracao_depois.tipo_dia == "afastamento"
+
     eventos_ajuste = [
         e for e in eventos_tratamento.BARRAMENTO_INTERNO if e["tipo"] == "ajuste.aprovado"
     ]
     assert len(eventos_ajuste) == 1
     assert eventos_ajuste[0]["dados"]["tratamentoId"] == str(tratamento.id)
+
+
+async def test_afastamento_vigente_via_tabela_afastamentos_tambem_zera_a_falta(
+    sessao_f10: AsyncSession, contexto_f10: ContextoF10
+) -> None:
+    """Achado adicional da mesma investigação (ADR-011, 07/08/2026): o
+    caminho "de fábrica" (afastamento futuro/vigente, resolvido por
+    `app.jornada.resolvedor.servico::_afastamento_vigente` via a tabela
+    `afastamentos` -- SEM passar por `Tratamento` nenhum) já rotulava
+    `tipoDia = 'afastamento'` desde a Fase 0, mas também nunca zerava a
+    falta -- nenhum teste de F3/F4 exercitava esse caminho até `apurar_dia`.
+    Corrigido junto com o caso retroativo acima (mesmo `if` em
+    `apurar_dia`). Diferente dos dois testes acima, este não passa por
+    `Tratamento`/workflow de aprovação nenhum -- `Afastamento` é inserido
+    direto, exatamente como uma fase futura (F9b/painel RH) já faz hoje."""
+    _limpar_barramento_f4()
+
+    from ponto_contracts import Afastamento
+
+    tipo_afastamento = TipoAfastamento(
+        tenant_id=contexto_f10.tenant_id,
+        codigo=f"FERIAS-{secrets.token_hex(5)}",
+        nome="Ferias (teste T13, afastamento vigente)",
+        categoria="ferias",
+        ativo=True,
+    )
+    sessao_f10.add(tipo_afastamento)
+    await sessao_f10.flush()
+
+    afastamento = Afastamento(
+        tenant_id=contexto_f10.tenant_id,
+        colaborador_id=contexto_f10.colaborador_id,
+        vinculo_id=contexto_f10.vinculo_id,
+        tipo_afastamento_id=tipo_afastamento.id,
+        data_inicio=_SEGUNDA,
+        data_fim=_SEGUNDA,
+        periodo_parcial=False,
+        status="aprovado",
+        origem="manual",
+    )
+    sessao_f10.add(afastamento)
+    await sessao_f10.commit()
+
+    apuracao = await apurar_dia(
+        sessao_f10, contexto_f10.tenant_id, contexto_f10.vinculo_id, _SEGUNDA
+    )
+    assert apuracao.tipo_dia == "afastamento"
+    assert apuracao.falta_minutos == 0
+    assert apuracao.abono_minutos == 480

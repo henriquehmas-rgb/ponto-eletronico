@@ -1,6 +1,6 @@
 # ADR-011 — Débito técnico aceito: `Tratamento` de categoria `afastamento` (retroativo) não altera a apuração
 
-**Status:** Aceito · 28/07/2026
+**Status:** Aceito 28/07/2026 · **Corrigido 07/08/2026** (ver "Atualização" no fim do documento)
 **Decisores:** Orquestrador, ao revisar o achado de A4 durante o fechamento da
 F10; escalado como ADR (não RFC) porque não há mudança de contrato nem de
 schema envolvida — é uma lacuna de comportamento em código Python já
@@ -139,3 +139,52 @@ toda solicitação de afastamento aprovada já reflete corretamente na apuraçã
 (c) O teste de A4 (`test_abono_e_retroativo.py`) documenta o comportamento
 real (não fabrica um "efeito" que não existe) — deve ser revisitado e
 estendido, não substituído, quando a correção acontecer.
+
+## Atualização — 07/08/2026, corrigido
+
+F12 (AFD/AEJ) concluída (30/07/2026) sem nenhuma dependência de uma
+distinção `afastamento` vs `abono` — confirmado lendo `apps/api/app/fiscal/
+afd/*.py`: o gerador do AFD trabalha em cima de marcações/eventos, não do
+`tipo_dia`/`resultado` de `apuracoes_dia`. A principal razão para adiar a
+decisão (§"Decisão", item 3: "essa distinção semântica deve ser decidida
+junto com quem planejar F12") deixou de se aplicar.
+
+**Achado adicional, investigando a correção**: o efeito numérico que faltava
+não era exclusivo do caminho retroativo (`Tratamento`) — o caminho "de
+fábrica" (afastamento futuro/vigente, resolvido por
+`app.jornada.resolvedor.servico::_afastamento_vigente` via a tabela
+`afastamentos`, existente desde a Fase 0) **também** rotulava `tipoDia =
+'afastamento'` mas nunca zerava `falta_minutos`: a fórmula `falta_minutos =
+max(0, previsto - trabalhado - abono)` (`app/apuracao/dominio/calculo.py`)
+roda igual para todo `tipo_dia`, e nada preenchia `abono_minutos` quando o
+dia era um afastamento resolvido por F3. Nenhum teste de F3 nem F4 mencionava
+"afastamento" — o caminho nunca foi exercitado de ponta a ponta até
+`apurar_dia`. Ou seja: a premissa original deste ADR ("essa justificativa é
+verdadeira para o caso que a F4 tinha em mente") estava **incorreta** — o
+caso "de fábrica" também estava quebrado, só ninguém tinha notado porque
+nunca foi testado.
+
+**Correção implementada** (`app/apuracao/dominio/servico.py`,
+`apurar_dia`/`_carregar_marcacoes_e_tratamentos`): reaproveitando o valor já
+existente no `CHECK` de `apuracoes_dia.tipo_dia` (`'afastamento'`, sem
+migration nova), qualquer dia que resolva como afastamento — via F3
+(`resolucao.tipo_dia == "afastamento"`) OU via um `Tratamento` aprovado/
+aplicado de categoria `afastamento` cobrindo a data — passa a abonar o dia
+inteiro (mesmo efeito de um `abono` sem `minutos_ajuste`) e a gravar
+`tipo_dia = 'afastamento'`, com a mesma precedência que
+`_afastamento_vigente` já tem sobre feriado/escala/jornada no resolvedor.
+`calcular_dia` (função pura, já com 17 critérios de F4 verificados) **não
+foi tocada** — a mudança inteira fica na orquestração de `apurar_dia`, que
+decide o `abono_minutos`/`tipo_dia` de entrada.
+
+Testes: `tests/f10/afastamentos_workflow/test_abono_e_retroativo.py`
+estendido (não substituído, como a mitigação (c) acima já previa) com
+asserções de `falta_minutos`/`tipo_dia`/`abono_minutos` antes e depois da
+aprovação do `Tratamento` retroativo, mais um teste novo cobrindo o caminho
+"de fábrica" (`Afastamento` inserido direto, sem `Tratamento`/workflow).
+
+A mitigação operacional (b) — "RH deve usar `abono_falta` em vez de
+`afastamento` para correção retroativa" — **não é mais necessária** a partir
+deste commit; ambos os tipos têm o mesmo efeito numérico hoje, e cada um
+mantém seu registro semântico próprio (`abono_falta` vs afastamento
+documental) para relatórios/auditoria.

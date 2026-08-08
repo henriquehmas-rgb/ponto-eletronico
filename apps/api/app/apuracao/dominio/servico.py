@@ -28,14 +28,20 @@ impura; `app.apuracao.dominio.calculo.calcular_dia` continua pura):
    cruza a meia-noite) e os tratamentos aprovados/aplicados do dia.
 4. Aplica `inclusao_marcacao` (marcacao ficticia no pareamento) e
    `desconsideracao_marcacao` (remove a marcacao referenciada) ANTES de
-   parear; aplica `abono` como `abono_minutos`. As demais categorias
-   (`justificativa`, `afastamento`, `ajuste_intervalo`, `compensacao`,
-   `ajuste_saldo`) NAO tem efeito numerico nesta funcao -- `afastamento` ja
-   e insumo de F3 (via `afastamentos`), `compensacao`/`ajuste_saldo` afetam
-   o banco de horas (A2), nao a apuracao de minutos, e `ajuste_intervalo`/
-   `justificativa` ficam registrados como achado no relatorio da fase (sem
-   especificacao precisa o bastante no PCF para formalizar sem arriscar
-   inventar regra).
+   parear; aplica `abono` como `abono_minutos`. `afastamento` (ADR-011,
+   corrigido em 2026-08-07) tambem passa a abonar o dia inteiro -- mesmo
+   efeito de um `abono` sem `minutos_ajuste` -- e forca `tipo_dia =
+   'afastamento'` na gravacao, cobrindo os dois caminhos que hoje produzem
+   esse `tipo_dia`: o resolvido por F3 (`afastamentos`, dia futuro/vigente,
+   ja tinha o rotulo mas nunca zerava a falta -- achado real, nunca testado
+   de ponta a ponta) e o `Tratamento` retroativo de F10 (correcao sobre dia
+   ja apurado, o gap original que o ADR-011 documentou). As demais
+   categorias (`justificativa`, `ajuste_intervalo`, `compensacao`,
+   `ajuste_saldo`) continuam SEM efeito numerico nesta funcao --
+   `compensacao`/`ajuste_saldo` afetam o banco de horas (A2), nao a
+   apuracao de minutos, e `ajuste_intervalo`/`justificativa` ficam
+   registrados como achado no relatorio da fase (sem especificacao precisa
+   o bastante no PCF para formalizar sem arriscar inventar regra).
 5. Chama `app.apuracao.dominio.calculo.calcular_dia` (pura).
 6. Calcula `hash_entrada` (SHA-256 de um dicionario canonico dos insumos:
    marcacoes, tratamentos consumidos, resolucao da jornada, configuracao de
@@ -104,6 +110,7 @@ CODIGO_OCORRENCIA_SEM_JORNADA_VIGENTE = "sem_marcacao"
 _CATEGORIA_INCLUSAO_MARCACAO = "inclusao_marcacao"
 _CATEGORIA_DESCONSIDERACAO_MARCACAO = "desconsideracao_marcacao"
 _CATEGORIA_ABONO = "abono"
+_CATEGORIA_AFASTAMENTO = "afastamento"
 #: Status de tratamento considerados "aplicaveis" na apuracao -- aprovado e
 #: ainda nao consumido, ou ja aplicado por uma apuracao anterior (precisa
 #: continuar sendo lido para o recalculo permanecer deterministico).
@@ -260,6 +267,7 @@ class _InsumosDoDia:
     tratamentos_consumidos: list[Tratamento]
     abono_minutos_explicito: int
     abono_dia_inteiro: bool
+    afastamento_dia_inteiro: bool
     tem_tratamento: bool
 
 
@@ -327,9 +335,17 @@ async def _carregar_marcacoes_e_tratamentos(
     ids_desconsiderados: set[UUID] = set()
     abono_explicito_minutos = 0
     abono_dia_inteiro = False
+    afastamento_dia_inteiro = False
 
     for tratamento, categoria in linhas_tratamento:
-        if categoria == _CATEGORIA_INCLUSAO_MARCACAO and tratamento.datahora_proposta is not None:
+        if categoria == _CATEGORIA_AFASTAMENTO:
+            # ADR-011: correcao retroativa (dia ja apurado como 'util' sem
+            # afastamento em vigor). Mesmo efeito numerico de um `abono` sem
+            # `minutos_ajuste` -- o `tipo_dia` final e' resolvido pelo
+            # chamador (`apurar_dia`), nao aqui.
+            afastamento_dia_inteiro = True
+            tratamentos_consumidos.append(tratamento)
+        elif categoria == _CATEGORIA_INCLUSAO_MARCACAO and tratamento.datahora_proposta is not None:
             marcacoes_para_pareamento.append(
                 MarcacaoParaPareamento(
                     id=None,
@@ -366,6 +382,7 @@ async def _carregar_marcacoes_e_tratamentos(
         tratamentos_consumidos=tratamentos_consumidos,
         abono_minutos_explicito=abono_explicito_minutos,
         abono_dia_inteiro=abono_dia_inteiro,
+        afastamento_dia_inteiro=afastamento_dia_inteiro,
         tem_tratamento=tem_tratamento,
     )
 
@@ -714,9 +731,26 @@ async def apurar_dia(
         sessao, tenant_id, vinculo_id, janela_inicio, janela_fim, data
     )
 
+    # ADR-011: um Tratamento retroativo de categoria `afastamento` forca
+    # `tipo_dia = 'afastamento'` mesmo quando a resolucao de F3 (escala/
+    # jornada/feriado, sem visibilidade sobre correcoes posteriores) tinha
+    # resolvido outro tipo -- mesma precedencia que `_afastamento_vigente`
+    # ja tem no proprio resolvedor (acima de feriado/escala/jornada).
+    if insumos.afastamento_dia_inteiro and resolucao.tipo_dia != "afastamento":
+        resolucao = resolucao.model_copy(update={"tipo_dia": "afastamento"})
+
     previsto_minutos = resolucao.carga_prevista_minutos or 0
+    # Dia de afastamento (resolvido por F3 via `afastamentos` OU forcado
+    # acima por um Tratamento retroativo) abona o dia inteiro -- mesmo
+    # efeito de um `abono` sem `minutos_ajuste`. Achado real, 2026-08-07: o
+    # caminho de F3 ja rotulava `tipo_dia='afastamento'` desde a Fase 0, mas
+    # nunca tinha esse efeito numerico aqui -- nenhum teste de F3/F4
+    # exercitava esse caminho ate `apurar_dia` (ver ADR-011).
+    dia_de_afastamento = resolucao.tipo_dia == "afastamento"
     abono_minutos = (
-        previsto_minutos if insumos.abono_dia_inteiro else insumos.abono_minutos_explicito
+        previsto_minutos
+        if (insumos.abono_dia_inteiro or dia_de_afastamento)
+        else insumos.abono_minutos_explicito
     )
 
     jornada: Jornada | None = None
