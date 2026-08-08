@@ -245,7 +245,13 @@ async def test_afastamento_retroativo_cria_e_aprova_tratamento_via_despachante_d
             select(Tratamento).where(Tratamento.solicitacao_id == solicitacao.id)
         )
     ).scalar_one()
-    assert tratamento.status == "aprovado"
+    # 'aplicado' (nao so 'aprovado'): com o fix do ADR-011, o Tratamento
+    # passa a ter efeito numerico e entra em `tratamentos_consumidos` --
+    # `apurar_dia` promove o status quando o hash muda, mesmo padrao ja
+    # visto no teste de abono acima. Antes do fix, `afastamento` nunca era
+    # consumido e ficava preso em 'aprovado' (o que o achado original
+    # documentava).
+    assert tratamento.status in ("aprovado", "aplicado")
     assert tratamento.tipo_afastamento_id == tipo_afastamento_retroativo.id
     assert tratamento.tipo_tratamento_id == tipo_tratamento.id
 
@@ -305,7 +311,12 @@ async def test_afastamento_vigente_via_tabela_afastamentos_tambem_zera_a_falta(
         origem="manual",
     )
     sessao_f10.add(afastamento)
-    await sessao_f10.commit()
+    # flush(), nao commit(): SET LOCAL app.tenant_id (RLS) vale so pra
+    # transacao corrente -- um commit() aqui encerraria a transacao e a
+    # chamada a apurar_dia logo abaixo, na MESMA sessao, rodaria sem tenant
+    # nenhum publicado (achado real, ja documentado nesta sessao para
+    # apps/worker/worker/tarefas/relatorios.py: mesmo padrao de bug).
+    await sessao_f10.flush()
 
     apuracao = await apurar_dia(
         sessao_f10, contexto_f10.tenant_id, contexto_f10.vinculo_id, _SEGUNDA
