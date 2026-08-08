@@ -60,8 +60,18 @@ def _hash_do_marcador(marcador: str) -> str:
 
 
 async def apurar_dia_fake(
-    sessao: AsyncSession, tenant_id: UUID, vinculo_id: UUID, data: dt.date
+    sessao: AsyncSession,
+    tenant_id: UUID,
+    vinculo_id: UUID,
+    data: dt.date,
+    *,
+    cache_resolucao: object | None = None,
 ) -> contrato.ApuracaoDia:
+    # `cache_resolucao` (ADR-010) e aceito e IGNORADO de proposito: o
+    # substituto nao chama o resolvedor de F3, entao nao tem o que cachear --
+    # so precisa espelhar a assinatura real para `recalcular_periodo` poder
+    # passar o cache como faz em producao.
+    del cache_resolucao
     marcador = _MARCADORES.get((vinculo_id, data), "default")
     hash_entrada = _hash_do_marcador(marcador)
 

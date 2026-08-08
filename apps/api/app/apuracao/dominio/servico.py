@@ -94,7 +94,12 @@ from app.apuracao.dominio.calculo import (
 )
 from app.apuracao.dominio.pareamento import MarcacaoParaPareamento, parear_marcacoes
 from app.core.erros import ErroDeAplicacao
-from app.jornada.resolvedor.servico import CODIGO_SEM_REGRA, resolver_jornada_do_dia
+from app.jornada.resolvedor.servico import (
+    CODIGO_SEM_REGRA,
+    CacheResolucao,
+    obter_jornada,
+    resolver_jornada_do_dia,
+)
 from app.schemas import contrato
 
 CODIGO_RECURSO_NAO_ENCONTRADO = "PONTO-REC-001"
@@ -424,7 +429,7 @@ async def _gravar_nao_apurado(
     novo_hash = _hash_insumos(
         {"erro": CODIGO_SEM_REGRA, "vinculoId": str(vinculo.id), "data": data.isoformat()}
     )
-    linha, mudou = await _upsert_apuracao_dia(
+    linha, mudou, linha_nova = await _upsert_apuracao_dia(
         sessao,
         tenant_id=tenant_id,
         vinculo=vinculo,
@@ -449,6 +454,7 @@ async def _gravar_nao_apurado(
                 "(PONTO-APUR-002); dia gravado como nao_apurado."
             ),
             detalhes={"motivo": CODIGO_SEM_REGRA},
+            apuracao_recem_criada=linha_nova,
         )
     return await _montar_schema_resposta(sessao, linha)
 
@@ -465,12 +471,20 @@ async def _upsert_apuracao_dia(
     tem_tratamento: bool = False,
     status_forcado: str | None = None,
     tipo_dia_forcado: str | None = None,
-) -> tuple[ApuracaoDiaOrm, bool]:
+) -> tuple[ApuracaoDiaOrm, bool, bool]:
     """`INSERT ... ON CONFLICT (tenant_id, vinculo_id, data) DO UPDATE`
     (`uq_apuracoes_dia`), com o `UPDATE` condicionado a `hash_entrada`
     diferente -- e o que torna a segunda chamada com o mesmo hash um NO-OP
     real no banco (nao so uma decisao da aplicacao). Devolve
-    `(linha, mudou)`."""
+    `(linha, mudou, linha_nova)`.
+
+    `linha_nova` distingue INSERT de UPDATE sem nenhuma consulta extra:
+    `versao` e gravada como `1` no INSERT e como `versao + 1` no
+    `DO UPDATE`, entao `versao == 1` depois do upsert **so** e possivel
+    quando a linha acabou de nascer (com um `id` novo). Quem usa isso e
+    `_sincronizar_ocorrencia`: para um `apuracao_dia_id` recem-criado nao
+    pode existir ocorrencia anterior apontando para ele, e a consulta de
+    "ja existe uma aberta?" pode ser pulada com seguranca."""
     agora = dt.datetime.now(tz=dt.UTC)
     r = resultado
     if tipo_dia_forcado is not None:
@@ -559,10 +573,19 @@ async def _upsert_apuracao_dia(
             ApuracaoDiaOrm.hash_entrada != insercao.excluded.hash_entrada,
             ApuracaoDiaOrm.hash_entrada.is_(None),
         ),
-    ).returning(ApuracaoDiaOrm.id)
+    ).returning(ApuracaoDiaOrm.id, ApuracaoDiaOrm.versao)
 
     resultado_execucao = await sessao.execute(upsert)
-    linha_id = resultado_execucao.scalar_one_or_none()
+    linha_gravada = resultado_execucao.first()
+    linha_id = linha_gravada[0] if linha_gravada is not None else None
+    # `versao` SEMPRE vem do `RETURNING`, nunca do objeto ORM relido abaixo:
+    # este upsert e' Core/DML, e o `SELECT` seguinte devolve a instancia que
+    # ja estiver na identity map da sessao SEM reler as colunas -- num
+    # segundo `apurar_dia` para o MESMO `(vinculo, dia)` na MESMA sessao,
+    # `linha.versao` ainda seria o valor da primeira carga (achado real,
+    # 2026-08-08: `tests/f10/afastamentos_workflow` quebrou exatamente
+    # assim). O `RETURNING` e' o unico valor pos-escrita confiavel aqui.
+    versao_gravada = int(linha_gravada[1]) if linha_gravada is not None else None
     mudou = linha_id is not None
     await sessao.flush()
 
@@ -576,7 +599,7 @@ async def _upsert_apuracao_dia(
                 )
             )
         ).scalar_one()
-        return linha_existente, False
+        return linha_existente, False, False
 
     # `scalar_one()` (nao `sessao.get`, que devolveria `Any | None` sem
     # estreitar o tipo): a INSERT/UPDATE acima, na MESMA transacao, acabou
@@ -585,7 +608,7 @@ async def _upsert_apuracao_dia(
     linha = (
         await sessao.execute(sa.select(ApuracaoDiaOrm).where(ApuracaoDiaOrm.id == linha_id))
     ).scalar_one()
-    return linha, True
+    return linha, True, versao_gravada == 1
 
 
 async def _sincronizar_componentes(
@@ -629,23 +652,30 @@ async def _sincronizar_ocorrencia(
     severidade: str,
     descricao: str,
     detalhes: dict[str, Any] | None = None,
+    apuracao_recem_criada: bool = False,
 ) -> None:
     """Abre uma ocorrencia nova se nao houver uma ja ABERTA/EM_TRATAMENTO
     igual (mesmo `apuracao_dia_id` + `codigo`) -- ocorrencia nunca e
     corrigida sozinha (nem por este modulo), so o humano resolve; por isso
-    nunca fechamos/atualizamos uma ocorrencia existente aqui."""
-    existente = (
-        await sessao.execute(
-            sa.select(Ocorrencia.id).where(
-                Ocorrencia.tenant_id == tenant_id,
-                Ocorrencia.apuracao_dia_id == apuracao_dia_id,
-                Ocorrencia.codigo == codigo,
-                Ocorrencia.status.in_(("aberta", "em_tratamento")),
+    nunca fechamos/atualizamos uma ocorrencia existente aqui.
+
+    `apuracao_recem_criada=True` (ADR-010) pula a consulta de existencia: a
+    linha de `apuracoes_dia` acabou de ser INSERIDA com um `id` novo, entao
+    nenhuma ocorrencia pode referencia-la ainda. E' um atalho de execucao,
+    nao uma regra diferente -- o resultado gravado e identico."""
+    if not apuracao_recem_criada:
+        existente = (
+            await sessao.execute(
+                sa.select(Ocorrencia.id).where(
+                    Ocorrencia.tenant_id == tenant_id,
+                    Ocorrencia.apuracao_dia_id == apuracao_dia_id,
+                    Ocorrencia.codigo == codigo,
+                    Ocorrencia.status.in_(("aberta", "em_tratamento")),
+                )
             )
-        )
-    ).scalar_one_or_none()
-    if existente is not None:
-        return
+        ).scalar_one_or_none()
+        if existente is not None:
+            return
 
     nova = Ocorrencia(
         tenant_id=tenant_id,
@@ -709,14 +739,28 @@ async def _montar_schema_resposta(
 
 
 async def apurar_dia(
-    sessao: AsyncSession, tenant_id: UUID, vinculo_id: UUID, data: dt.date
+    sessao: AsyncSession,
+    tenant_id: UUID,
+    vinculo_id: UUID,
+    data: dt.date,
+    *,
+    cache_resolucao: CacheResolucao | None = None,
 ) -> contrato.ApuracaoDia:
-    """Assinatura fixada no PCF da fase (secao 4). Ver docstring do modulo
-    para a sequencia completa."""
+    """Assinatura fixada no PCF da fase (secao 4): os quatro parametros
+    posicionais nao mudam. `cache_resolucao` e um parametro OPCIONAL
+    somente-nomeado acrescentado por ADR-010 -- quando `recalcular_periodo`
+    o fornece, as leituras que nao variam de um dia para o seguinte do mesmo
+    vinculo (resolucao de escala/jornada/horario/fuso/afastamento/feriado)
+    saem do cache em vez de voltar ao banco. Sem ele (default `None`), o
+    caminho executado e exatamente o de antes. Ver docstring do modulo para a
+    sequencia completa e o de `app.jornada.resolvedor.servico` para o cache.
+    """
     vinculo = await obter_vinculo(sessao, vinculo_id)
 
     try:
-        resolucao = await resolver_jornada_do_dia(sessao, tenant_id, vinculo_id, data)
+        resolucao = await resolver_jornada_do_dia(
+            sessao, tenant_id, vinculo_id, data, cache=cache_resolucao
+        )
     except ErroDeAplicacao as exc:
         if exc.codigo != CODIGO_SEM_REGRA:
             raise
@@ -755,7 +799,9 @@ async def apurar_dia(
 
     jornada: Jornada | None = None
     if resolucao.jornada_id is not None:
-        jornada = await sessao.get(Jornada, resolucao.jornada_id)
+        # Mesma linha que o resolvedor acabou de ler: com `cache_resolucao`
+        # esta e' a MESMA leitura memoizada, nao uma segunda ida ao banco.
+        jornada = await obter_jornada(sessao, resolucao.jornada_id, cache_resolucao)
     config = _montar_configuracao(jornada)
 
     resultado_pareamento = parear_marcacoes(insumos.marcacoes_para_pareamento)
@@ -781,7 +827,7 @@ async def apurar_dia(
         }
     )
 
-    linha, mudou = await _upsert_apuracao_dia(
+    linha, mudou, linha_nova = await _upsert_apuracao_dia(
         sessao,
         tenant_id=tenant_id,
         vinculo=vinculo,
@@ -794,6 +840,7 @@ async def apurar_dia(
 
     if mudou:
         await _sincronizar_componentes(sessao, linha.id, tenant_id, resultado)
+        codigos_ja_abertos: set[str] = set()
         for ocorrencia_detectada in resultado.ocorrencias:
             await _sincronizar_ocorrencia(
                 sessao,
@@ -805,7 +852,15 @@ async def apurar_dia(
                 severidade=ocorrencia_detectada.severidade,
                 descricao=ocorrencia_detectada.descricao,
                 detalhes=ocorrencia_detectada.detalhes,
+                # So pula a consulta de existencia para o PRIMEIRO codigo de
+                # cada tipo: se `calcular_dia` devolver duas ocorrencias com
+                # o MESMO codigo, a segunda tem de enxergar a que esta funcao
+                # acabou de abrir nesta mesma transacao.
+                apuracao_recem_criada=(
+                    linha_nova and ocorrencia_detectada.codigo not in codigos_ja_abertos
+                ),
             )
+            codigos_ja_abertos.add(ocorrencia_detectada.codigo)
         await _promover_tratamentos_aplicados(sessao, insumos.tratamentos_consumidos)
 
     return await _montar_schema_resposta(sessao, linha)

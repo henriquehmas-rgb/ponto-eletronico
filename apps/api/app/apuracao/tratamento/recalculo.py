@@ -227,6 +227,17 @@ async def recalcular_periodo(
     # import de todo o pacote `app.apuracao.tratamento` para quem so precisa
     # do CRUD (T8) ou da decisao (T9) sem recalculo de fato.
     from app.apuracao.dominio.servico import apurar_dia
+    from app.jornada.resolvedor.servico import CacheResolucao
+
+    # ADR-010: cache de vida curta das leituras que NAO mudam de um dia para
+    # o seguinte do mesmo vinculo (escala/jornada vigente, `jornada_dias`,
+    # horario, fuso da unidade, afastamentos do colaborador, conjunto de
+    # feriados da unidade). Criado UMA vez por chamada e descartado com ela
+    # -- nunca guardado entre chamadas/transacoes, porque nao enxerga escrita
+    # concorrente. Entidades compartilhadas (jornada, horario, feriados)
+    # tambem sao reaproveitadas ENTRE vinculos do mesmo escopo, por isso o
+    # cache e' desta funcao e nao do laco interno de dias.
+    cache_resolucao = CacheResolucao()
 
     vinculos = await _resolver_vinculos(
         sessao,
@@ -240,6 +251,12 @@ async def recalcular_periodo(
 
     resultado = ResultadoRecalculo()
     dias = [inicio + dt.timedelta(days=n) for n in range((fim - inicio).days + 1)]
+
+    # `_resolver_vinculos` ja aplicou `excluido_em IS NULL`, o mesmo filtro de
+    # `app.jornada.modelagem.vinculo_jornadas.obter_vinculo` -- semear o cache
+    # com estas linhas evita reler `vinculos` uma vez por vinculo la dentro.
+    for vinc in vinculos:
+        cache_resolucao.vinculos[vinc.id] = vinc
 
     for vinc in vinculos:
         resultado.vinculos_processados += 1
@@ -274,7 +291,9 @@ async def recalcular_periodo(
                 componentes_antes,
             ) = await _estado_anterior(sessao, tenant_id, vinc.id, dia)
 
-            apuracao = await apurar_dia(sessao, tenant_id, vinc.id, dia)
+            apuracao = await apurar_dia(
+                sessao, tenant_id, vinc.id, dia, cache_resolucao=cache_resolucao
+            )
             await sessao.flush()
 
             resultado.dias_processados += 1
