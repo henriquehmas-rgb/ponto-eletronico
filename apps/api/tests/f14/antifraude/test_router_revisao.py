@@ -15,8 +15,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.autenticacao_cliente import ContextoAcesso
 from app.core.erros import ErroDeAplicacao
 from app.core.seguranca import Sujeito
 from app.routers.marcacoes import decidir_revisao_marcacao, listar_revisao_pendente
@@ -34,6 +36,13 @@ async def _sujeito_gestor(contexto: ContextoF14A1) -> Sujeito:
     )
 
 
+def _acesso(sujeito: Sujeito) -> ContextoAcesso:
+    # Retrofit de 2026-08-08: os handlers de `app/routers/marcacoes.py`
+    # passaram a receber `ContextoAcesso`, nao mais `Sujeito` direto -- ver
+    # `app/comum/autenticacao_cliente.py`.
+    return ContextoAcesso(tenant_id=sujeito.tenant_id, sujeito=sujeito)
+
+
 async def test_listar_revisao_pendente_serializa_item_com_enums_corretos(
     sessao_f14a1: AsyncSession, contexto_f14a1: ContextoF14A1
 ) -> None:
@@ -41,7 +50,8 @@ async def test_listar_revisao_pendente_serializa_item_com_enums_corretos(
     gestor = await _sujeito_gestor(contexto_f14a1)
 
     pagina = await listar_revisao_pendente(
-        sujeito=gestor,
+        acesso=_acesso(gestor),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,
@@ -67,7 +77,8 @@ async def test_listar_revisao_pendente_pagina_por_cursor(
     gestor = await _sujeito_gestor(contexto_f14a1)
 
     pagina_1 = await listar_revisao_pendente(
-        sujeito=gestor,
+        acesso=_acesso(gestor),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,
@@ -80,7 +91,8 @@ async def test_listar_revisao_pendente_pagina_por_cursor(
     assert pagina_1.paginacao.proximo_cursor is not None
 
     pagina_2 = await listar_revisao_pendente(
-        sujeito=gestor,
+        acesso=_acesso(gestor),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,
@@ -109,7 +121,8 @@ async def test_decidir_revisao_marcacao_devolve_meta_atualizada(
             decisao=contrato.DecisaoRevisao.aprovada,
             observacao="Confirmado com o colaborador.",
         ),
-        sujeito=gestor,
+        acesso=_acesso(gestor),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,
@@ -121,7 +134,8 @@ async def test_decidir_revisao_marcacao_devolve_meta_atualizada(
     assert meta.revisao_observacao == "Confirmado com o colaborador."
 
     pendentes_apos = await listar_revisao_pendente(
-        sujeito=gestor,
+        acesso=_acesso(gestor),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,
@@ -146,7 +160,8 @@ async def test_decidir_revisao_marcacao_ja_decidida_propaga_erro_de_aplicacao(
             idempotency_key="teste-decisao-http-" + uuid.uuid4().hex,
             marcacao_id=resposta.marcacao.id,
             corpo=contrato.DecisaoRevisaoRequisicao(decisao=contrato.DecisaoRevisao.rejeitada),
-            sujeito=gestor,
+            acesso=_acesso(gestor),
+            response=Response(),
             sessao=sessao_f14a1,
             x_tenant=None,
             x_request_id=None,
@@ -177,7 +192,8 @@ async def test_listar_revisao_pendente_nao_mistura_tenant(
     # (= outro_tenant aqui) em `fila.listar_pendentes` -- as duas camadas
     # concordam em excluir a marcacao, cada uma bastaria sozinha.
     pendentes = await listar_revisao_pendente(
-        sujeito=sujeito_outro_tenant,
+        acesso=_acesso(sujeito_outro_tenant),
+        response=Response(),
         sessao=sessao_f14a1,
         x_tenant=None,
         x_request_id=None,

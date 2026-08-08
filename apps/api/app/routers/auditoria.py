@@ -4,6 +4,14 @@ Trilha de auditoria append-only e encadeada por hash: cada linha carrega o
 hash da anterior, o que torna remocao silenciosa detectavel e verificavel sob
 demanda. Regra de negocio implementada na F1/A3 (T10) -- ver
 `app.identidade.auditoria.servico` e `app.identidade.auditoria.hash_chain`.
+
+Autenticacao dupla (retrofit de 2026-08-08): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita ate agora. `Depends(exigir_permissao(...))`
+trocado por `Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E'
+tentada primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+Mesmo padrao ja provado em `app/routers/empresas.py`/`webhooks.py`.
 """
 
 from __future__ import annotations
@@ -14,17 +22,29 @@ from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from pydantic import BaseModel
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.identidade.auditoria import hash_chain, servico
 from app.identidade.rbac._contrato import contrato as _contrato_orm
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["auditoria"])
+
+# Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
+# chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
+# estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="auditoria.ler", escopo="auditoria:ler")
+_ACESSO_EXECUTAR = exigir_permissao_ou_escopo(
+    permissao="auditoria.executar", escopo="auditoria:ler"
+)
 
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
 
@@ -45,7 +65,8 @@ def _para_schema(schema_cls: type[_SchemaT], origem: Any, **extras: Any) -> _Sch
 )
 async def listar_auditoria(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("auditoria.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -61,7 +82,8 @@ async def listar_auditoria(
     ate: Annotated[datetime | None, Query(alias="ate")] = None,
 ) -> contrato.ListaRegistroAuditoria:
     """Listar trilha de auditoria."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await servico.listar_auditoria(
         sessao,
         tenant_id=tenant_id,
@@ -91,13 +113,15 @@ async def listar_auditoria(
 )
 async def obter_registro_auditoria(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("auditoria.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     registro_id: Annotated[UUID, Path(alias="registroId")],
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.RegistroAuditoria:
     """Obter registro de auditoria."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     registro = await servico.obter_registro_auditoria(
         sessao, tenant_id=tenant_id, registro_id=registro_id
     )
@@ -113,7 +137,8 @@ async def obter_registro_auditoria(
 )
 async def verificar_cadeia_auditoria(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("auditoria.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXECUTAR)],
+    response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.VerificacaoCadeiaRequisicao,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
@@ -126,7 +151,8 @@ async def verificar_cadeia_auditoria(
     hash so precisa da faixa de sequencia; a janela de tempo e resolvida aqui
     para a faixa de sequencia correspondente.
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     sequencia_de = corpo.sequencia_de
     sequencia_ate = corpo.sequencia_ate
     if corpo.de is not None or corpo.ate is not None:

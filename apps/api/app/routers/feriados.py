@@ -6,6 +6,16 @@ Feriados moveis nao guardam data: sao calculados por regra a partir da Pascoa do
 Regra de negocio implementada na fase F3 (agente A2, ownership deste arquivo --
 ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
 `app.jornada.calendario.feriados`; este modulo so traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -16,14 +26,32 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.jornada.calendario import feriados as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["feriados"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_FERIADOS_LER = exigir_permissao_ou_escopo(permissao="feriados.ler", escopo="jornadas:ler")
+_ACESSO_FERIADOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="feriados.criar", escopo="jornadas:escrever"
+)
+_ACESSO_FERIADOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="feriados.editar", escopo="jornadas:escrever"
+)
+_ACESSO_FERIADOS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="feriados.excluir", escopo="jornadas:escrever"
+)
 
 
 @roteador.get(
@@ -34,8 +62,9 @@ roteador = APIRouter(tags=["feriados"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_feriado_conjuntos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -82,10 +111,10 @@ async def listar_feriado_conjuntos(
     ] = None,
 ) -> contrato.ListaFeriadoConjunto:
     """Listar conjuntos de feriados"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_feriado_conjuntos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         abrangencia=abrangencia,
         uf=uf,
         unidade_id=unidade_id,
@@ -117,8 +146,9 @@ async def criar_feriado_conjunto(
         ),
     ],
     corpo: contrato.FeriadoConjuntoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -135,8 +165,8 @@ async def criar_feriado_conjunto(
     ] = None,
 ) -> contrato.FeriadoConjunto:
     """Criar conjunto de feriados"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_feriado_conjunto(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_feriado_conjunto(sessao, acesso.tenant_id, corpo)
     return contrato.FeriadoConjunto.model_validate(novo, from_attributes=True)
 
 
@@ -160,8 +190,9 @@ async def atualizar_feriado_conjunto(
         UUID, Path(alias="conjuntoId", description="Identificador do conjunto.")
     ],
     corpo: contrato.FeriadoConjuntoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -178,8 +209,10 @@ async def atualizar_feriado_conjunto(
     ] = None,
 ) -> contrato.FeriadoConjunto:
     """Atualizar conjunto de feriados"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    atualizado = await servico.atualizar_feriado_conjunto(sessao, tenant_id, conjunto_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    atualizado = await servico.atualizar_feriado_conjunto(
+        sessao, acesso.tenant_id, conjunto_id, corpo
+    )
     return contrato.FeriadoConjunto.model_validate(atualizado, from_attributes=True)
 
 
@@ -203,8 +236,9 @@ async def excluir_feriado_conjunto(
     conjunto_id: Annotated[
         UUID, Path(alias="conjuntoId", description="Identificador do conjunto.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -221,9 +255,13 @@ async def excluir_feriado_conjunto(
     ] = None,
 ) -> Response:
     """Excluir conjunto de feriados"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico.excluir_feriado_conjunto(sessao, tenant_id, conjunto_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico.excluir_feriado_conjunto(sessao, acesso.tenant_id, conjunto_id)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -234,8 +272,9 @@ async def excluir_feriado_conjunto(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_feriados(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -291,10 +330,10 @@ async def listar_feriados(
     tipo: Annotated[str | None, Query(alias="tipo", description="Filtra pelo tipo.")] = None,
 ) -> contrato.ListaFeriado:
     """Listar feriados"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_feriados(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         feriado_conjunto_id=feriado_conjunto_id,
         unidade_id=unidade_id,
         ano=ano,
@@ -326,8 +365,9 @@ async def criar_feriado(
         ),
     ],
     corpo: contrato.FeriadoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -344,8 +384,8 @@ async def criar_feriado(
     ] = None,
 ) -> contrato.Feriado:
     """Criar feriado"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_feriado(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_feriado(sessao, acesso.tenant_id, corpo)
     return contrato.Feriado.model_validate(novo, from_attributes=True)
 
 
@@ -367,8 +407,9 @@ async def excluir_feriado(
         ),
     ],
     feriado_id: Annotated[UUID, Path(alias="feriadoId", description="Identificador do feriado.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("feriados.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_FERIADOS_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -385,6 +426,10 @@ async def excluir_feriado(
     ] = None,
 ) -> Response:
     """Excluir feriado"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico.excluir_feriado(sessao, tenant_id, feriado_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico.excluir_feriado(sessao, acesso.tenant_id, feriado_id)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response

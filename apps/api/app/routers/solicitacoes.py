@@ -8,6 +8,18 @@ arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
 5). A regra em si vive em `app.workflow.solicitacoes.tipos`/`servico`
 (que também publicam `ajuste.solicitado`); este módulo só traduz
 HTTP <-> serviço, mesmo padrão de `app/routers/tratamentos.py` (F4).
+
+Autenticação dupla (retrofit de 2026-08-08, decisão do dono do produto): o
+contrato já declarava os três esquemas alternativos por operação
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas só sessão humana era aceita até
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador já provado em
+`app/routers/empresas.py`/`webhooks.py`) -- sessão humana É tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integração (OAuth/
+API key) só entra quando não há sessão humana autenticada. Note que o filtro
+`minhas` de `listarSolicitacoes` é um no-op para cliente de integração: o
+serviço só o aplica quando há `usuario_atual_id`, e um cliente não tem
+usuário humano a quem atribuir "minhas".
 """
 
 from __future__ import annotations
@@ -16,17 +28,39 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 from app.workflow.solicitacoes import servico, tipos
 from app.workflow.solicitacoes.servico import listar_aprovacoes_da_solicitacao
 
 roteador = APIRouter(tags=["solicitacoes"])
+
+# Uma instancia por par (permissao, escopo) unico deste arquivo -- nunca
+# `exigir_permissao_ou_escopo(...)` chamado de novo dentro de um handler
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="solicitacoes.ler", escopo="solicitacoes:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="solicitacoes.criar", escopo="solicitacoes:escrever"
+)
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="solicitacoes.editar", escopo="solicitacoes:escrever"
+)
+_ACESSO_TIPOS_LER = exigir_permissao_ou_escopo(
+    permissao="tipos_solicitacao.ler", escopo="solicitacoes:ler"
+)
+_ACESSO_TIPOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="tipos_solicitacao.criar", escopo="solicitacoes:escrever"
+)
 
 
 @roteador.get(
@@ -37,8 +71,9 @@ roteador = APIRouter(tags=["solicitacoes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_solicitacoes(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -100,17 +135,17 @@ async def listar_solicitacoes(
     ate: Annotated[date | None, Query(alias="ate", description="Data de referencia ate.")] = None,
 ) -> contrato.ListaSolicitacao:
     """Listar solicitacoes"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_solicitacoes(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         colaborador_id=colaborador_id,
         empresa_id=empresa_id,
         tipo_solicitacao_id=tipo_solicitacao_id,
         categoria=categoria,
         status=status,
         minhas=minhas,
-        usuario_atual_id=sujeito.usuario_id,
+        usuario_atual_id=usuario_id_do_acesso(acesso),
         de=de,
         ate=ate,
         cursor=cursor,
@@ -138,8 +173,9 @@ async def criar_solicitacao(
         ),
     ],
     corpo: contrato.SolicitacaoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -156,8 +192,10 @@ async def criar_solicitacao(
     ] = None,
 ) -> contrato.Solicitacao:
     """Criar solicitacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    nova = await servico.criar_solicitacao(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    nova = await servico.criar_solicitacao(
+        sessao, acesso.tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
+    )
     return contrato.Solicitacao.model_validate(nova, from_attributes=True)
 
 
@@ -172,8 +210,9 @@ async def obter_solicitacao(
     solicitacao_id: Annotated[
         UUID, Path(alias="solicitacaoId", description="Identificador da solicitacao.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -195,7 +234,7 @@ async def obter_solicitacao(
     descricao da operacao no contrato -- prova de quem autorizou cada
     correcao de jornada.
     """
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrada = await servico.obter_solicitacao(sessao, solicitacao_id)
     etapas = await listar_aprovacoes_da_solicitacao(sessao, encontrada.tenant_id, encontrada.id)
     schema = contrato.Solicitacao.model_validate(encontrada, from_attributes=True)
@@ -225,8 +264,9 @@ async def cancelar_solicitacao(
         UUID, Path(alias="solicitacaoId", description="Identificador da solicitacao.")
     ],
     corpo: contrato.CancelamentoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("solicitacoes.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -243,9 +283,9 @@ async def cancelar_solicitacao(
     ] = None,
 ) -> contrato.Solicitacao:
     """Cancelar solicitacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     cancelada = await servico.cancelar_solicitacao(
-        sessao, tenant_id, solicitacao_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, solicitacao_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return contrato.Solicitacao.model_validate(cancelada, from_attributes=True)
 
@@ -258,8 +298,9 @@ async def cancelar_solicitacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_solicitacao(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_solicitacao.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -299,10 +340,10 @@ async def listar_tipos_solicitacao(
     ] = None,
 ) -> contrato.ListaTipoSolicitacao:
     """Listar tipos de solicitacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await tipos.listar_tipos_solicitacao(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         categoria=categoria,
         ativo=ativo,
         cursor=cursor,
@@ -330,8 +371,9 @@ async def criar_tipo_solicitacao(
         ),
     ],
     corpo: contrato.TipoSolicitacaoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_solicitacao.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -348,8 +390,8 @@ async def criar_tipo_solicitacao(
     ] = None,
 ) -> contrato.TipoSolicitacao:
     """Criar tipo de solicitacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     novo = await tipos.criar_tipo_solicitacao(
-        sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return tipos.tipo_para_schema(novo)

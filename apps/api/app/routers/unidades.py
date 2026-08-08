@@ -4,6 +4,14 @@ Locais fisicos de trabalho.
 A unidade carrega o fuso efetivo da apuracao, a geocerca do registro por aplicativo, a allowlist de faixas CIDR do registro por navegador e os conjuntos de feriados aplicaveis.
 
 Implementado na Fase F2 (agente A1). Regra de negocio em `app/organizacao/unidades.py`.
+
+Autenticacao dupla (retrofit de 2026-08-08, mesma decisao do dono do produto
+aplicada em `app/routers/empresas.py`): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de integracao
+(OAuth/API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -13,9 +21,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.organizacao import unidades as servico
 from app.organizacao.paginacao import paginar, resolver_pedido
@@ -24,6 +37,21 @@ from app.schemas import contrato
 roteador = APIRouter(tags=["unidades"])
 
 _ORDENACAO_PADRAO = "criado_em:desc"
+
+# Uma instancia por par (permissao, escopo) unico -- nunca uma fabrica chamada
+# de novo dentro do handler: mesmo motivo documentado em
+# `app.comum.limitador_taxa` (identidade estavel do *callable* pro cache de
+# dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="unidades.ler", escopo="organizacao:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="unidades.criar", escopo="organizacao:escrever"
+)
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="unidades.editar", escopo="organizacao:escrever"
+)
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="unidades.excluir", escopo="organizacao:escrever"
+)
 
 
 @roteador.get(
@@ -35,7 +63,8 @@ _ORDENACAO_PADRAO = "criado_em:desc"
 )
 async def listar_unidades(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -98,13 +127,13 @@ async def listar_unidades(
     ] = None,
 ) -> contrato.ListaUnidade:
     """Listar unidades"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_unidades(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         tipo=tipo,
@@ -131,7 +160,8 @@ async def listar_unidades(
 )
 async def criar_unidade(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -156,11 +186,11 @@ async def criar_unidade(
     ] = None,
 ) -> contrato.Unidade:
     """Criar unidade"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     unidade = await servico.criar_unidade(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         empresa_id=corpo.empresa_id,
         codigo=corpo.codigo,
         nome=corpo.nome,
@@ -194,7 +224,8 @@ async def criar_unidade(
 )
 async def obter_unidade(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     unidade_id: Annotated[UUID, Path(alias="unidadeId", description="Identificador da unidade.")],
     x_tenant: Annotated[
         str | None,
@@ -212,8 +243,8 @@ async def obter_unidade(
     ] = None,
 ) -> contrato.Unidade:
     """Obter unidade"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    unidade = await servico.obter_unidade(sessao, tenant_id=tenant_id, unidade_id=unidade_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    unidade = await servico.obter_unidade(sessao, tenant_id=acesso.tenant_id, unidade_id=unidade_id)
     return contrato.Unidade.model_validate(unidade, from_attributes=True)
 
 
@@ -227,7 +258,8 @@ async def obter_unidade(
 )
 async def atualizar_unidade(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -253,13 +285,13 @@ async def atualizar_unidade(
     ] = None,
 ) -> contrato.Unidade:
     """Atualizar unidade"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     unidade = await servico.atualizar_unidade(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         unidade_id=unidade_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.Unidade.model_validate(unidade, from_attributes=True)
@@ -276,7 +308,8 @@ async def atualizar_unidade(
 )
 async def excluir_unidade(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -301,11 +334,18 @@ async def excluir_unidade(
     ] = None,
 ) -> Response:
     """Excluir unidade"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_unidade(
-        sessao, tenant_id=tenant_id, unidade_id=unidade_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        unidade_id=unidade_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -317,7 +357,8 @@ async def excluir_unidade(
 )
 async def listar_redes_permitidas(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     unidade_id: Annotated[UUID, Path(alias="unidadeId", description="Identificador da unidade.")],
     x_tenant: Annotated[
         str | None,
@@ -358,13 +399,13 @@ async def listar_redes_permitidas(
     ] = None,
 ) -> contrato.ListaRedePermitida:
     """Listar faixas de rede permitidas"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_redes_permitidas(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         unidade_id=unidade_id,
         pedido=pedido,
         canal=canal,
@@ -389,7 +430,8 @@ async def listar_redes_permitidas(
 )
 async def criar_rede_permitida(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -415,11 +457,11 @@ async def criar_rede_permitida(
     ] = None,
 ) -> contrato.RedePermitida:
     """Adicionar faixa de rede permitida"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     rede = await servico.criar_rede_permitida(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         unidade_id=unidade_id,
         empresa_id=corpo.empresa_id,
         cidr=corpo.cidr,
@@ -441,7 +483,8 @@ async def criar_rede_permitida(
 )
 async def excluir_rede_permitida(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("unidades.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -467,8 +510,12 @@ async def excluir_rede_permitida(
     ] = None,
 ) -> Response:
     """Remover faixa de rede permitida"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_rede_permitida(
-        sessao, tenant_id=tenant_id, unidade_id=unidade_id, rede_id=rede_id
+        sessao, tenant_id=acesso.tenant_id, unidade_id=unidade_id, rede_id=rede_id
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response

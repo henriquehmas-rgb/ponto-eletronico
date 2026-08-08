@@ -7,6 +7,15 @@ Implementado na fase F5 (agente A3, T11). `obterComprovante` aceita
 `Accept: text/plain` (devolve `conteudoTexto` cru) e `application/json`
 (devolve o schema `Comprovante` completo), conforme a descricao da operacao
 no contrato.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto --
+ver `docs/backlog.md` e a docstring de `app.comum.autenticacao_cliente`): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -15,16 +24,45 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from fastapi.responses import PlainTextResponse
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.core.seguranca import Sujeito
 from app.db.sessao import SessaoDb
 from app.marcacao.comprovantes import consulta as consulta_comprovantes
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["comprovantes"])
+
+# Uma unica instancia: as tres operacoes deste arquivo compartilham o mesmo
+# par (permissao, escopo). Criada no nivel de modulo (nunca chamada de novo
+# dentro do handler) para o cache de dependencia do FastAPI, mesmo motivo
+# documentado em `app.comum.limitador_taxa`.
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="comprovantes.ler", escopo="marcacoes:ler")
+
+
+def _sujeito_para_servico(acesso: ContextoAcesso) -> Sujeito:
+    """`Sujeito` a repassar para `listar_comprovantes_recentes`, que o usa
+    para o alcance hierarquico (`_verificar_acesso_colaborador`: o proprio
+    colaborador sempre acessa os seus; qualquer outro depende do alcance).
+
+    Acesso humano devolve o proprio `Sujeito` resolvido, sem nenhuma alteracao
+    (comportamento preservado byte a byte). Acesso de cliente de integracao
+    devolve um `Sujeito` sintetico so com o `tenant_id`: sem `usuario_id`
+    (logo nunca "o proprio colaborador") e sem `alcance` -- exatamente a
+    "conta de maquina sem RBAC hierarquico" que `app.core.seguranca.Sujeito`
+    ja documenta, e para a qual `exigir_alcance` e permissivo dentro do
+    tenant. Mesmo padrao ja usado em `app/routers/admin.py`.
+    """
+    if acesso.sujeito is not None:
+        return acesso.sujeito
+    return Sujeito(tenant_id=acesso.tenant_id, autenticado=True)
 
 
 @roteador.get(
@@ -35,8 +73,9 @@ roteador = APIRouter(tags=["comprovantes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_comprovantes(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -88,10 +127,10 @@ async def listar_comprovantes(
     ] = None,
 ) -> contrato.ListaComprovante:
     """Listar comprovantes."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta_comprovantes.listar_comprovantes(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         cursor=cursor,
         limite=limite,
         ordenar=ordenar,
@@ -119,8 +158,9 @@ async def obter_comprovante(
     comprovante_id: Annotated[
         UUID, Path(alias="comprovanteId", description="Identificador do comprovante.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     accept: Annotated[
         str | None,
         Header(
@@ -146,12 +186,16 @@ async def obter_comprovante(
 ) -> contrato.Comprovante | PlainTextResponse:
     """Obter comprovante. `Accept: text/plain` devolve `conteudoTexto` cru;
     `application/json` (ou ausencia do cabecalho) devolve o schema completo."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     comprovante = await consulta_comprovantes.obter_comprovante(
-        sessao, tenant_id=tenant_id, comprovante_id=comprovante_id
+        sessao, tenant_id=acesso.tenant_id, comprovante_id=comprovante_id
     )
     quer_texto = accept is not None and "text/plain" in accept and "application/json" not in accept
     if quer_texto:
+        # Devolver um `Response` proprio nao perde os cabecalhos `RateLimit-*`
+        # setados acima no `response` injetado: o FastAPI faz
+        # `response.headers.raw.extend(sub_response.headers.raw)` tambem
+        # quando o handler devolve um `Response` direto.
         return PlainTextResponse(comprovante.conteudo_texto or "")
     return comprovante
 
@@ -167,8 +211,9 @@ async def listar_comprovantes_recentes(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("comprovantes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -211,11 +256,11 @@ async def listar_comprovantes_recentes(
     """Listar comprovantes das ultimas 48 horas. O proprio colaborador sempre
     acessa os seus; gestor e RH dependem do alcance hierarquico
     (`PONTO-PERM-002` fora dele)."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta_comprovantes.listar_comprovantes_recentes(
         sessao,
-        tenant_id=tenant_id,
-        sujeito=sujeito,
+        tenant_id=acesso.tenant_id,
+        sujeito=_sujeito_para_servico(acesso),
         colaborador_id=colaborador_id,
         cursor=cursor,
         limite=limite,

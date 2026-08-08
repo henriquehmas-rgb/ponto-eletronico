@@ -26,6 +26,18 @@ fase, chegava e era descartado (achado do PCF §2.4, que nomeia explicitamente
 diferente da proibição geral de retrofit nas ~130 rotas de F1-F12). As duas
 rotas novas de escrita (`criarApiKey`/`revogarApiKey`) já nascem com o mesmo
 mecanismo.
+
+**Autenticação dupla (retrofit de 2026-08-08).** Revertendo a decisão dos
+parágrafos acima, por decisão do dono do produto: o contrato já declarava os
+três esquemas alternativos por operação (`bearerAuth`/`oauth2`/`apiKeyAuth`)
+também para as rotas de `admin`, e agora o código honra os três.
+`Depends(exigir_permissao(...))` virou `Depends(exigir_permissao_ou_escopo(
+...))` (mesmo combinador provado em `app/routers/empresas.py` e
+`app/routers/webhooks.py`) -- sessão humana é tentada primeiro (comportamento
+humano preservado byte a byte), cliente de integração (OAuth/API key) só entra
+quando não há sessão humana autenticada, com `admin:ler`/`admin:escrever`. Ver
+`_sujeito_para_servico` abaixo para como a trilha de auditoria trata o acesso
+sem usuário humano.
 """
 
 from __future__ import annotations
@@ -36,6 +48,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from pydantic import BaseModel
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.idempotencia_generica import (
     ChaveIdempotencia,
     abrir_operacao,
@@ -43,7 +60,7 @@ from app.comum.idempotencia_generica import (
     exigir_idempotencia,
 )
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.core.seguranca import Sujeito
 from app.db.sessao import SessaoDb
 from app.identidade.rbac import servico
 from app.integracoes.clientes import servico as clientes_servico
@@ -51,7 +68,52 @@ from app.schemas import contrato
 
 roteador = APIRouter(tags=["admin"])
 
+# Uma instancia por par (permissao, escopo) unico -- nunca uma fabrica chamada
+# de novo dentro do handler: mesmo motivo documentado em
+# `app.comum.limitador_taxa` (identidade estavel do *callable* pro cache de
+# dependencia do FastAPI).
+_ACESSO_USUARIOS_LER = exigir_permissao_ou_escopo(permissao="usuarios.ler", escopo="admin:ler")
+_ACESSO_USUARIOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="usuarios.criar", escopo="admin:escrever"
+)
+_ACESSO_USUARIOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="usuarios.editar", escopo="admin:escrever"
+)
+_ACESSO_PERFIS_LER = exigir_permissao_ou_escopo(permissao="perfis.ler", escopo="admin:ler")
+_ACESSO_PERFIS_CRIAR = exigir_permissao_ou_escopo(permissao="perfis.criar", escopo="admin:escrever")
+_ACESSO_PERMISSOES_LER = exigir_permissao_ou_escopo(permissao="permissoes.ler", escopo="admin:ler")
+_ACESSO_API_CLIENTS_LER = exigir_permissao_ou_escopo(
+    permissao="api_clients.ler", escopo="admin:ler"
+)
+_ACESSO_API_CLIENTS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="api_clients.criar", escopo="admin:escrever"
+)
+_ACESSO_API_CLIENTS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="api_clients.editar", escopo="admin:escrever"
+)
+
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
+
+
+def _sujeito_para_servico(acesso: ContextoAcesso) -> Sujeito:
+    """`Sujeito` a repassar para a camada de servico.
+
+    Cinco handlers deste arquivo repassam o `Sujeito` INTEIRO (nao so
+    `usuario_id`) para a camada de servico, que o usa para `criado_por` e para
+    `registrar_auditoria_de_sujeito` (que le `tenant_id`/`usuario_id`/`email`/
+    `perfis`/`delegacao_id`).
+
+    Acesso humano devolve o proprio `Sujeito` resolvido, sem nenhuma alteracao
+    (comportamento preservado byte a byte). Acesso de cliente de integracao
+    devolve um `Sujeito` sintetico so com o `tenant_id` do cliente: sem
+    `usuario_id`, sem perfis, sem delegacao -- nao ha usuario humano a quem
+    atribuir a acao, e `registrar_auditoria_de_sujeito` exige apenas
+    `tenant_id` nao-nulo. Mesma escolha que `usuario_id_do_acesso` ja faz para
+    os campos `criado_por`/`atualizado_por` nos outros routers retrofitados.
+    """
+    if acesso.sujeito is not None:
+        return acesso.sujeito
+    return Sujeito(tenant_id=acesso.tenant_id, autenticado=True)
 
 
 def _para_schema(schema_cls: type[_SchemaT], origem: Any, **extras: Any) -> _SchemaT:
@@ -92,7 +154,8 @@ async def _perfil_para_schema(sessao: SessaoDb, tenant_id: UUID, perfil: Any) ->
 )
 async def listar_usuarios(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_USUARIOS_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -106,7 +169,8 @@ async def listar_usuarios(
     busca: Annotated[str | None, Query(alias="busca")] = None,
 ) -> contrato.ListaUsuario:
     """Listar usuarios."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await servico.listar_usuarios(
         sessao,
         tenant_id=tenant_id,
@@ -137,15 +201,19 @@ async def listar_usuarios(
 )
 async def criar_usuario(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_USUARIOS_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.UsuarioCriar,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Usuario:
     """Criar usuario."""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    usuario = await servico.criar_usuario(sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
+    usuario = await servico.criar_usuario(
+        sessao, tenant_id=tenant_id, dados=corpo, sujeito=_sujeito_para_servico(acesso)
+    )
     return await _usuario_para_schema(sessao, tenant_id, usuario)
 
 
@@ -158,7 +226,8 @@ async def criar_usuario(
 )
 async def atualizar_usuario(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("usuarios.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_USUARIOS_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     usuario_id: Annotated[UUID, Path(alias="usuarioId")],
     corpo: contrato.UsuarioAtualizar,
@@ -166,9 +235,14 @@ async def atualizar_usuario(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Usuario:
     """Atualizar usuario."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     usuario = await servico.atualizar_usuario(
-        sessao, tenant_id=tenant_id, usuario_id=usuario_id, dados=corpo, sujeito=sujeito
+        sessao,
+        tenant_id=tenant_id,
+        usuario_id=usuario_id,
+        dados=corpo,
+        sujeito=_sujeito_para_servico(acesso),
     )
     return await _usuario_para_schema(sessao, tenant_id, usuario)
 
@@ -182,7 +256,8 @@ async def atualizar_usuario(
 )
 async def listar_perfis(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("perfis.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_PERFIS_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -193,7 +268,8 @@ async def listar_perfis(
     ativo: Annotated[bool | None, Query(alias="ativo")] = None,
 ) -> contrato.ListaPerfil:
     """Listar perfis."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await servico.listar_perfis(
         sessao,
         tenant_id=tenant_id,
@@ -216,15 +292,19 @@ async def listar_perfis(
 )
 async def criar_perfil(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("perfis.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_PERFIS_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.PerfilCriar,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Perfil:
     """Criar perfil."""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    perfil = await servico.criar_perfil(sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
+    perfil = await servico.criar_perfil(
+        sessao, tenant_id=tenant_id, dados=corpo, sujeito=_sujeito_para_servico(acesso)
+    )
     return await _perfil_para_schema(sessao, tenant_id, perfil)
 
 
@@ -237,7 +317,8 @@ async def criar_perfil(
 )
 async def listar_permissoes(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("permissoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_PERMISSOES_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -248,6 +329,7 @@ async def listar_permissoes(
     sensivel: Annotated[bool | None, Query(alias="sensivel")] = None,
 ) -> contrato.ListaPermissao:
     """Listar catalogo de permissoes (somente leitura -- ver `schema.sql` secao 20)."""
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_permissoes(
         sessao,
         cursor=cursor,
@@ -271,7 +353,8 @@ async def listar_permissoes(
 )
 async def listar_api_clients(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_API_CLIENTS_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -282,7 +365,8 @@ async def listar_api_clients(
     tipo: Annotated[str | None, Query(alias="tipo")] = None,
 ) -> contrato.ListaApiClient:
     """Listar clientes de API."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await servico.listar_api_clients(
         sessao,
         tenant_id=tenant_id,
@@ -307,7 +391,7 @@ async def listar_api_clients(
 )
 async def criar_api_client(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_API_CLIENTS_CRIAR)],
     chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
     response: Response,
     corpo: contrato.ApiClientCriar,
@@ -315,7 +399,8 @@ async def criar_api_client(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.ApiClientCriado:
     """Criar cliente de API. O segredo (`clientSecret`) sai uma unica vez."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     resultado = await abrir_operacao(
         sessao, tenant_id=tenant_id, escopo="criarApiClient", chave=chave_idem
     )
@@ -324,7 +409,7 @@ async def criar_api_client(
         return contrato.ApiClientCriado.model_validate(resultado.resposta_corpo)
 
     cliente, segredo = await servico.criar_api_client(
-        sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito
+        sessao, tenant_id=tenant_id, dados=corpo, sujeito=_sujeito_para_servico(acesso)
     )
     resposta = contrato.ApiClientCriado.model_validate(
         {"cliente": _para_schema(contrato.ApiClient, cliente), "clientSecret": segredo}
@@ -352,7 +437,8 @@ async def criar_api_client(
 )
 async def listar_api_keys(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_API_CLIENTS_LER)],
+    response: Response,
     api_client_id: Annotated[UUID, Path(alias="apiClientId")],
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
@@ -361,7 +447,8 @@ async def listar_api_keys(
     ordenar: Annotated[str | None, Query(alias="ordenar")] = None,
 ) -> contrato.ListaApiKey:
     """Listar chaves de API do cliente. Nunca devolve `hash` nem a chave em claro."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await clientes_servico.listar_api_keys(
         sessao, tenant_id=tenant_id, api_client_id=api_client_id, cursor=cursor, limite=limite
     )
@@ -378,7 +465,7 @@ async def listar_api_keys(
 )
 async def criar_api_key(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_API_CLIENTS_CRIAR)],
     chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
     response: Response,
     api_client_id: Annotated[UUID, Path(alias="apiClientId")],
@@ -387,7 +474,8 @@ async def criar_api_key(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.ApiKeyCriada:
     """Criar chave de API. O valor em claro (`chave`) sai uma unica vez."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     resultado = await abrir_operacao(
         sessao, tenant_id=tenant_id, escopo="criarApiKey", chave=chave_idem
     )
@@ -396,7 +484,11 @@ async def criar_api_key(
         return contrato.ApiKeyCriada.model_validate(resultado.resposta_corpo)
 
     chave, chave_em_claro = await clientes_servico.criar_api_key(
-        sessao, tenant_id=tenant_id, api_client_id=api_client_id, dados=corpo, sujeito=sujeito
+        sessao,
+        tenant_id=tenant_id,
+        api_client_id=api_client_id,
+        dados=corpo,
+        sujeito=_sujeito_para_servico(acesso),
     )
     resposta = contrato.ApiKeyCriada.model_validate(
         {"apiKey": _para_schema(contrato.ApiKey, chave), "chave": chave_em_claro}
@@ -419,7 +511,7 @@ async def criar_api_key(
 )
 async def revogar_api_key(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("api_clients.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_API_CLIENTS_EDITAR)],
     chave_idem: Annotated[ChaveIdempotencia, Depends(exigir_idempotencia())],
     response: Response,
     api_client_id: Annotated[UUID, Path(alias="apiClientId")],
@@ -428,7 +520,8 @@ async def revogar_api_key(
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Response:
     """Revogar chave de API. Idempotente: revogar de novo continua respondendo 204."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     resultado = await abrir_operacao(
         sessao, tenant_id=tenant_id, escopo="revogarApiKey", chave=chave_idem
     )

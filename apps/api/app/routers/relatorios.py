@@ -33,6 +33,17 @@ importa, e ela diverge de propósito da ordem em que as operações aparecem no
 desta fase (stub da Fase 0): o defeito ficava invisível porque as duas rotas
 colidentes respondiam o mesmo 501/`PONTO-INT-005` de qualquer forma -- só
 virou visível quando `obterRelatorio` passou a ser implementação real (T3).
+
+**Autenticação dupla (retrofit de 2026-08-08).** O contrato já declarava os
+três esquemas alternativos por operação (`bearerAuth`/`oauth2`/`apiKeyAuth`),
+mas só sessão humana era aceita até agora. `Depends(exigir_permissao(...))`
+trocado por `Depends(exigir_permissao_ou_escopo(...))` -- sessão humana É
+tentada primeiro (comportamento humano preservado byte a byte), cliente de
+integração (OAuth/API key) só entra quando não há sessão humana autenticada.
+Mesmo padrão já provado em `app/routers/empresas.py`/`webhooks.py`. As duas
+rotas de preferência de colunas continuam exigindo um usuário humano, agora
+por `_usuario_id_ou_erro` sobre o `ContextoAcesso` (RFC-015: preferência é
+sempre pessoal).
 """
 
 from __future__ import annotations
@@ -41,12 +52,17 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.relatorios import agendamentos as agendamentos_servico
 
@@ -66,22 +82,38 @@ from app.schemas import contrato
 
 roteador = APIRouter(tags=["relatorios"])
 
+# Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
+# chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
+# estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="relatorios.ler", escopo="relatorios:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="relatorios.criar", escopo="relatorios:escrever"
+)
+_ACESSO_EXECUTAR = exigir_permissao_ou_escopo(
+    permissao="relatorios.executar", escopo="relatorios:ler"
+)
 
-def _usuario_id_ou_erro(sujeito: Sujeito) -> UUID:
-    """Estreita `sujeito.usuario_id` (`UUID | None`) para `UUID`, mesmo
-    espírito de `tenant_id_ou_erro` (`app/core/seguranca.py`). Preferência de
-    colunas é sempre pessoal: uma conta de máquina (OAuth `client_
-    credentials`, sem `usuario_id`) não tem "usuário" para guardar
-    preferência nenhuma -- `PONTO-AUTH-002` porque o sujeito, apesar de
-    autenticado, não é o tipo de credencial que esta operação aceita (mesmo
-    código que `exigir_permissao` já usa para "não há sujeito autenticado";
-    não inventa código novo, proibição 5 do PCF §9)."""
-    if sujeito.usuario_id is None:
+
+def _usuario_id_ou_erro(acesso: ContextoAcesso) -> UUID:
+    """Estreita `usuario_id_do_acesso(acesso)` (`UUID | None`) para `UUID`,
+    mesmo espírito de `tenant_id_ou_erro` (`app/core/seguranca.py`).
+    Preferência de colunas é sempre pessoal: uma conta de máquina (OAuth
+    `client_credentials`/`X-API-Key`, sem `usuario_id`) não tem "usuário"
+    para guardar preferência nenhuma -- `PONTO-AUTH-002` porque o acesso,
+    apesar de autenticado, não é o tipo de credencial que esta operação
+    aceita (mesmo código que `exigir_permissao` já usa para "não há sujeito
+    autenticado"; não inventa código novo, proibição 5 do PCF §9).
+
+    Retrofit de 2026-08-08: a regra e a mensagem são as mesmas de antes --
+    o único caso NOVO que cai aqui é o cliente de integração (que antes nem
+    chegava a autenticar nestas rotas)."""
+    usuario_id = usuario_id_do_acesso(acesso)
+    if usuario_id is None:
         raise ErroDeAplicacao(
             "PONTO-AUTH-002",
             detalhe="Preferencia de colunas exige um usuario autenticado, nao uma conta de maquina.",
         )
-    return sujeito.usuario_id
+    return usuario_id
 
 
 # =============================================================================
@@ -95,8 +127,9 @@ def _usuario_id_ou_erro(sujeito: Sujeito) -> UUID:
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_relatorios(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -140,7 +173,8 @@ async def listar_relatorios(
     ] = None,
 ) -> contrato.ListaRelatorioDefinicao:
     """Listar catalogo de relatorios"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await execucao_servico.listar_definicoes(
         sessao,
         tenant_id,
@@ -170,8 +204,9 @@ async def listar_relatorios(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_preferencias_colunas(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -219,8 +254,9 @@ async def listar_preferencias_colunas(
     RFC-015: sempre filtrada pelo `usuario_id` do sujeito autenticado, nunca
     aceita um `usuarioId` de fora.
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    usuario_id = _usuario_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
+    usuario_id = _usuario_id_ou_erro(acesso)
     linhas, paginacao = await preferencias_servico.listar_preferencias(
         sessao,
         tenant_id,
@@ -247,8 +283,9 @@ async def listar_preferencias_colunas(
 )
 async def salvar_preferencia_colunas(
     corpo: contrato.PreferenciaColunasCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -271,8 +308,9 @@ async def salvar_preferencia_colunas(
     `uq_preferencias_colunas`. `usuarioId` e sempre o do sujeito autenticado,
     nunca aceito no corpo.
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    usuario_id = _usuario_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
+    usuario_id = _usuario_id_ou_erro(acesso)
     preferencia = await preferencias_servico.salvar_preferencia(
         sessao,
         tenant_id,
@@ -310,8 +348,9 @@ async def salvar_preferencia_colunas(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_agendamentos_relatorio(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -361,7 +400,8 @@ async def listar_agendamentos_relatorio(
     ] = None,
 ) -> contrato.ListaRelatorioAgendamento:
     """Listar agendamentos de relatorio"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await agendamentos_servico.listar_agendamentos(
         sessao,
         tenant_id,
@@ -397,8 +437,9 @@ async def criar_agendamento_relatorio(
         ),
     ],
     corpo: contrato.RelatorioAgendamentoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -415,12 +456,13 @@ async def criar_agendamento_relatorio(
     ] = None,
 ) -> contrato.RelatorioAgendamento:
     """Criar agendamento de relatorio"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     agendamento = await agendamentos_servico.criar_agendamento(
         sessao,
         tenant_id,
         corpo,
-        usuario_id_solicitante=sujeito.usuario_id,
+        usuario_id_solicitante=usuario_id_do_acesso(acesso),
     )
     return contrato.RelatorioAgendamento.model_validate(agendamento, from_attributes=True)
 
@@ -444,8 +486,9 @@ async def obter_relatorio(
             alias="codigo", description="Codigo estavel do relatorio, por exemplo espelho-jornada."
         ),
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -462,7 +505,8 @@ async def obter_relatorio(
     ] = None,
 ) -> contrato.RelatorioDefinicao:
     """Obter definicao de relatorio"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     definicao = await execucao_servico.obter_definicao(sessao, tenant_id, codigo)
     return contrato.RelatorioDefinicao.model_validate(definicao, from_attributes=True)
 
@@ -481,8 +525,9 @@ async def executar_relatorio(
             alias="codigo", description="Codigo estavel do relatorio, por exemplo espelho-jornada."
         ),
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXECUTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -558,7 +603,8 @@ async def executar_relatorio(
     ] = None,
 ) -> contrato.RelatorioExecucao:
     """Executar relatorio"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     config = obter_configuracao()
     parametros = execucao_servico.ParametrosExecucao(
         formato=formato,
@@ -581,7 +627,7 @@ async def executar_relatorio(
         tenant_id,
         codigo,
         parametros,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )
     return await execucao_servico.montar_execucao_resposta(execucao, codigo=codigo)
@@ -598,8 +644,9 @@ async def obter_execucao_relatorio(
     execucao_id: Annotated[
         UUID, Path(alias="execucaoId", description="Identificador da execucao.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("relatorios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -616,6 +663,7 @@ async def obter_execucao_relatorio(
     ] = None,
 ) -> contrato.RelatorioExecucao:
     """Obter execucao de relatorio"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     execucao = await execucao_servico.obter_execucao(sessao, tenant_id, execucao_id)
     return await execucao_servico.montar_execucao_resposta(execucao, sessao=sessao)

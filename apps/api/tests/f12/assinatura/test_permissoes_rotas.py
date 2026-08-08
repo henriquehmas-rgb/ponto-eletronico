@@ -49,15 +49,24 @@ def _permissao_exigida_por_operation_id() -> dict[str, str | None]:
 
 def _codigo_de_exigir_permissao(funcao: object) -> str | None:
     """Extrai o `codigo` capturado pelo closure de `exigir_permissao(codigo)`
-    -- mesma técnica de `tests/f10/test_permissoes_rotas.py`."""
+    -- mesma técnica de `tests/f10/test_permissoes_rotas.py`. Reconhece
+    também o combinador `exigir_permissao_ou_escopo(permissao=..., escopo=...)`
+    (retrofit de 2026-08-08, `app/comum/autenticacao_cliente.py`), que chama
+    `exigir_permissao` em runtime dentro do corpo de `_resolver`, não como
+    sub-dependência declarada."""
     if not callable(funcao):
         return None
-    if getattr(funcao, "__qualname__", "") != "exigir_permissao.<locals>._verificar":
+    qualname = getattr(funcao, "__qualname__", "")
+    if qualname == "exigir_permissao.<locals>._verificar":
+        nome_procurado = "codigo"
+    elif qualname == "exigir_permissao_ou_escopo.<locals>._resolver":
+        nome_procurado = "permissao"
+    else:
         return None
     code = funcao.__code__
     closure = funcao.__closure__ or ()
     for nome, cell in zip(code.co_freevars, closure, strict=True):
-        if nome == "codigo":
+        if nome == nome_procurado:
             valor = cell.cell_contents
             assert isinstance(valor, str)
             return valor

@@ -11,6 +11,16 @@ si vive em `app.pessoas.colaboradores`; este modulo so traduz HTTP <-> servico.
 `importarColaboradores`: RFC-007 decidida (opcao a) -- `ImportacaoCriar` ganhou
 `conteudoRef` no contrato, e o handler abaixo repassa para
 `app.importadores.servico.criar_importacao_colaboradores` (ownership F2/A3).
+
+Autenticacao dupla (retrofit de 2026-08-08, mesma decisao do dono do produto
+aplicada em `app/routers/empresas.py`): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de integracao
+(OAuth/API key) so entra quando nao ha sessao humana autenticada.
+`importarColaboradores` ficou DE FORA do retrofit (importacao em lote, corpo
+potencialmente grande, fora do escopo desta rodada).
 """
 
 from __future__ import annotations
@@ -21,6 +31,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
@@ -32,6 +47,21 @@ from app.schemas import contrato
 
 roteador = APIRouter(tags=["colaboradores"])
 
+# Uma instancia por par (permissao, escopo) unico -- nunca uma fabrica chamada
+# de novo dentro do handler: mesmo motivo documentado em
+# `app.comum.limitador_taxa` (identidade estavel do *callable* pro cache de
+# dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="colaboradores.ler", escopo="colaboradores:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="colaboradores.criar", escopo="colaboradores:escrever"
+)
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="colaboradores.editar", escopo="colaboradores:escrever"
+)
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="colaboradores.excluir", escopo="colaboradores:escrever"
+)
+
 
 @roteador.get(
     "/v1/colaboradores",
@@ -41,8 +71,9 @@ roteador = APIRouter(tags=["colaboradores"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_colaboradores(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -125,10 +156,10 @@ async def listar_colaboradores(
     ] = None,
 ) -> contrato.ListaColaborador:
     """Listar colaboradores"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_colaboradores(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
         departamento_id=departamento_id,
@@ -167,8 +198,9 @@ async def criar_colaborador(
         ),
     ],
     corpo: contrato.ColaboradorCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -185,8 +217,8 @@ async def criar_colaborador(
     ] = None,
 ) -> contrato.Colaborador:
     """Criar colaborador"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    colaborador = await servico.criar_colaborador(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    colaborador = await servico.criar_colaborador(sessao, acesso.tenant_id, corpo)
     return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
 
@@ -201,8 +233,9 @@ async def obter_colaborador(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -219,7 +252,8 @@ async def obter_colaborador(
     ] = None,
 ) -> contrato.Colaborador:
     """Obter colaborador"""
-    tenant_id_ou_erro(sujeito)  # so confirma sujeito autenticado; RLS ja restringe por tenant
+    # `acesso` ja confirma o chamador autenticado; RLS ja restringe por tenant.
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     colaborador = await servico.obter_colaborador(sessao, colaborador_id)
     return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
@@ -244,8 +278,9 @@ async def atualizar_colaborador(
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
     corpo: contrato.ColaboradorAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -262,7 +297,7 @@ async def atualizar_colaborador(
     ] = None,
 ) -> contrato.Colaborador:
     """Atualizar colaborador"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     colaborador = await servico.atualizar_colaborador(sessao, colaborador_id, corpo)
     return contrato.Colaborador.model_validate(colaborador, from_attributes=True)
 
@@ -287,8 +322,9 @@ async def excluir_colaborador(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -305,9 +341,13 @@ async def excluir_colaborador(
     ] = None,
 ) -> Response:
     """Excluir colaborador"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_colaborador(sessao, colaborador_id)
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -321,8 +361,9 @@ async def listar_gestores_colaborador(
     colaborador_id: Annotated[
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -366,7 +407,7 @@ async def listar_gestores_colaborador(
     ] = None,
 ) -> contrato.ListaColaboradorGestor:
     """Listar gestores do colaborador"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_gestores_colaborador(
         sessao,
         colaborador_id,
@@ -402,8 +443,9 @@ async def definir_gestores_colaborador(
         UUID, Path(alias="colaboradorId", description="Identificador do colaborador.")
     ],
     corpo: contrato.ColaboradorGestorCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("colaboradores.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -420,8 +462,10 @@ async def definir_gestores_colaborador(
     ] = None,
 ) -> contrato.ColaboradorGestor:
     """Definir gestores do colaborador"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    registro = await servico.definir_gestor_colaborador(sessao, tenant_id, colaborador_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    registro = await servico.definir_gestor_colaborador(
+        sessao, acesso.tenant_id, colaborador_id, corpo
+    )
     return contrato.ColaboradorGestor.model_validate(registro, from_attributes=True)
 
 

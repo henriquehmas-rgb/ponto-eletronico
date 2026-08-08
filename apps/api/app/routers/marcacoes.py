@@ -1,12 +1,28 @@
-"""Rotas da tag `marcacoes` do contrato. GERADO -- nao editar.
+"""Rotas da tag `marcacoes` do contrato.
 
 Registro de ponto: o nucleo legal do sistema.
 MARCACAO E IMUTAVEL.
 Esta tag expoe deliberadamente apenas criacao e leitura.
 
-Regra de negocio destas operacoes entra na fase F5. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio implementada na fase F5 (`app.marcacao.*`); este modulo so
+traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto --
+ver `docs/backlog.md` e a docstring de `app.comum.autenticacao_cliente`): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+
+Nada da logica de negocio muda: em particular o colaborador de
+`criarMarcacao`/`sincronizarMarcacoesOffline` continua sendo resolvido do
+CORPO (`colaboradorId`/`cpf`/`matricula`) e do dispositivo, NUNCA do sujeito
+autenticado -- quem bate o ponto e a pessoa identificada no pedido, nao o
+portador da credencial (terminal, totem, app do proprio colaborador ou
+integracao de RH). O sujeito so alimenta campos de auditoria e a
+reautenticacao recente do canal `web`.
 """
 
 from __future__ import annotations
@@ -18,9 +34,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
 from app.antifraude import fila as fila_revisao
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
+from app.core.seguranca import Sujeito
 from app.db.sessao import SessaoDb
 from app.marcacao.consulta import marcacoes as consulta_marcacoes
 from app.marcacao.dominio import verificacao_nsr
@@ -28,6 +50,52 @@ from app.marcacao.pipeline import ingestao, offline
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["marcacoes"])
+
+# Uma instancia por par (permissao, escopo) unico do arquivo, criada no nivel
+# de modulo (nunca chamada de novo dentro do handler): identidade estavel do
+# *callable* pro cache de dependencia do FastAPI, mesmo motivo documentado em
+# `app.comum.limitador_taxa`.
+_ACESSO_REGISTRAR = exigir_permissao_ou_escopo(
+    permissao="marcacoes.criar", escopo="ponto:registrar"
+)
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="marcacoes.ler", escopo="marcacoes:ler")
+_ACESSO_LER_FISCAL = exigir_permissao_ou_escopo(permissao="marcacoes.ler", escopo="fiscal:ler")
+_ACESSO_LER_SENSIVEL = exigir_permissao_ou_escopo(
+    permissao="marcacoes.ler_sensivel", escopo="marcacoes:ler"
+)
+_ACESSO_APROVAR = exigir_permissao_ou_escopo(permissao="marcacoes.aprovar", escopo="marcacoes:ler")
+
+
+def _sujeito_para_servico(acesso: ContextoAcesso) -> Sujeito:
+    """`Sujeito` a repassar para a camada de servico.
+
+    Tres handlers deste arquivo repassam o `Sujeito` INTEIRO (nao so
+    `usuario_id`): `criarMarcacao`/`sincronizarMarcacoesOffline` (auditoria de
+    `criado_por` e reautenticacao recente do canal `web`) e `listarMarcacoes`
+    (que reexecuta `exigir_permissao('marcacoes.ler_sensivel')` quando
+    `incluirMeta=true`).
+
+    Acesso humano devolve o proprio `Sujeito` resolvido, sem nenhuma alteracao
+    (comportamento preservado byte a byte). Acesso de cliente de integracao
+    devolve um `Sujeito` sintetico so com o `tenant_id` do cliente: sem
+    `usuario_id`, sem perfis, sem `alcance` -- exatamente a "conta de maquina
+    sem RBAC hierarquico" que `app.core.seguranca.Sujeito` ja documenta como
+    caso previsto (`alcance=None` -> `exigir_alcance` permissivo dentro do
+    tenant; `usuario_id=None` -> campos de auditoria nulos, todos `UUID`
+    nullable no schema). Mesmo padrao ja usado em `app/routers/admin.py`.
+
+    Consequencias deliberadas para cliente de integracao:
+    - `listarMarcacoes?incluirMeta=true` responde `PONTO-PERM-001` (o
+      sintetico nao carrega `marcacoes.ler_sensivel`); a leitura sensivel
+      permanece exclusiva de sessao humana com a permissao, que e o
+      comportamento conservador -- o escopo concedido e so `marcacoes:ler`.
+    - `criarMarcacao` em canal `web` com `exigeReautenticacao` responde
+      `PONTO-AUTH-011` (nao ha sessao humana a reautenticar). Canais
+      `terminal`/`mobile`/`totem`/`api` nao passam por essa checagem.
+    """
+    if acesso.sujeito is not None:
+        return acesso.sujeito
+    return Sujeito(tenant_id=acesso.tenant_id, autenticado=True)
 
 
 @roteador.post(
@@ -41,7 +109,7 @@ async def criar_marcacao(
     corpo: contrato.MarcacaoCriar,
     request: Request,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_REGISTRAR)],
     response: Response,
     idempotency_key: Annotated[
         str | None,
@@ -73,13 +141,13 @@ async def criar_marcacao(
     Idempotency-Key veja PONTO-IDEM-001") de que o cabecalho generico
     ausente NAO e o codigo certo aqui.
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     resultado = await ingestao.registrar_marcacao(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         corpo=corpo,
         idempotency_key=idempotency_key,
-        sujeito=sujeito,
+        sujeito=_sujeito_para_servico(acesso),
         ip_origem=ip_confiavel_do_cliente(request),
     )
     if resultado.replay:
@@ -97,8 +165,9 @@ async def criar_marcacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_marcacoes(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -182,11 +251,11 @@ async def listar_marcacoes(
 ) -> contrato.ListaMarcacao:
     """Listar marcacoes. Somente leitura -- ver `x-vedacao-legal` da tag no
     contrato: nunca havera `PUT`/`PATCH`/`DELETE` aqui."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta_marcacoes.listar_marcacoes(
         sessao,
-        tenant_id=tenant_id,
-        sujeito=sujeito,
+        tenant_id=acesso.tenant_id,
+        sujeito=_sujeito_para_servico(acesso),
         cursor=cursor,
         limite=limite,
         ordenar=ordenar,
@@ -217,8 +286,9 @@ async def obter_marcacao(
     marcacao_id: Annotated[
         UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -236,9 +306,9 @@ async def obter_marcacao(
 ) -> contrato.Marcacao:
     """Obter marcacao. `PONTO-REC-001` quando o id nao existe no tenant
     corrente (inclusive marcacao de outro tenant -- 404 por isolamento)."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta_marcacoes.obter_marcacao(
-        sessao, tenant_id=tenant_id, marcacao_id=marcacao_id
+        sessao, tenant_id=acesso.tenant_id, marcacao_id=marcacao_id
     )
 
 
@@ -253,8 +323,9 @@ async def obter_meta_marcacao(
     marcacao_id: Annotated[
         UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler_sensivel"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER_SENSIVEL)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -270,12 +341,16 @@ async def obter_meta_marcacao(
         ),
     ] = None,
 ) -> contrato.MarcacaoMeta:
-    """Obter contexto antifraude da marcacao. Dado sensivel: a permissao
-    `marcacoes.ler_sensivel` (`Depends(exigir_permissao(...))` acima) ja
-    registra o acesso em `acessos_dados_sensiveis` antes do corpo rodar."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    """Obter contexto antifraude da marcacao. Dado sensivel: em acesso HUMANO
+    a permissao `marcacoes.ler_sensivel` (dentro de
+    `exigir_permissao_ou_escopo` acima) ja registra o acesso em
+    `acessos_dados_sensiveis` antes do corpo rodar -- inalterado pelo
+    retrofit. Cliente de integracao chega aqui pelo escopo `marcacoes:ler` e
+    nao tem usuario humano a registrar (`acessos_dados_sensiveis` guarda o
+    exercicio de uma permissao humana), entao nao gera esse registro."""
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta_marcacoes.obter_meta_marcacao(
-        sessao, tenant_id=tenant_id, marcacao_id=marcacao_id
+        sessao, tenant_id=acesso.tenant_id, marcacao_id=marcacao_id
     )
 
 
@@ -298,8 +373,9 @@ async def decidir_revisao_marcacao(
         UUID, Path(alias="marcacaoId", description="Identificador da marcacao.")
     ],
     corpo: contrato.DecisaoRevisaoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.aprovar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APROVAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -318,14 +394,14 @@ async def decidir_revisao_marcacao(
     """Decidir revisao antifraude da marcacao (RFC-020). NUNCA altera a
     marcacao em si (ADR-002) -- so os campos de revisao de `MarcacaoMeta`,
     via `app.antifraude.fila.decidir_revisao`."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     meta = await fila_revisao.decidir_revisao(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         marcacao_id=marcacao_id,
         decisao=corpo.decisao.value,
         observacao=corpo.observacao,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     return consulta_marcacoes.serializar_meta_marcacao(meta)
 
@@ -338,8 +414,9 @@ async def decidir_revisao_marcacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_revisao_pendente(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler_sensivel"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER_SENSIVEL)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -372,13 +449,13 @@ async def listar_revisao_pendente(
     `revisaoStatus=pendente`, mais recentes primeiro. Cursor proprio (o
     instante da marcacao anterior), independente do cursor generico de
     `listarMarcacoes` -- ver `app.antifraude.fila.listar_pendentes`."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     limite_efetivo = limite if limite is not None else 50
     cursor_datahora = datetime.fromisoformat(cursor) if cursor else None
 
     itens = await fila_revisao.listar_pendentes(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         empresa_id=empresa_id,
         limite=limite_efetivo + 1,
         cursor_datahora=cursor_datahora,
@@ -427,7 +504,7 @@ async def sincronizar_marcacoes_offline(
     corpo: contrato.SincronizacaoOfflineRequisicao,
     request: Request,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_REGISTRAR)],
     response: Response,
     idempotency_key: Annotated[
         str | None,
@@ -453,13 +530,13 @@ async def sincronizar_marcacoes_offline(
 ) -> contrato.SincronizacaoOfflineResposta:
     """Sincronizar fila offline. Ver `criarMarcacao` sobre `Idempotency-Key`
     opcional na assinatura (so para responder `PONTO-IDEM-001` certo)."""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     resposta = await offline.sincronizar_lote(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         corpo=corpo,
         idempotency_key=idempotency_key,
-        sujeito=sujeito,
+        sujeito=_sujeito_para_servico(acesso),
         ip_origem=ip_confiavel_do_cliente(request),
     )
     return resposta
@@ -474,8 +551,9 @@ async def sincronizar_marcacoes_offline(
 )
 async def verificar_sequencia_nsr(
     rep_p_id: Annotated[UUID, Query(alias="repPId", description="REP-P a verificar.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("marcacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER_FISCAL)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -506,10 +584,10 @@ async def verificar_sequencia_nsr(
     ] = None,
 ) -> contrato.VerificacaoNsr:
     """Verificar continuidade do NSR"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     resultado = await verificacao_nsr.verificar_sequencia_nsr(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         rep_p_id=rep_p_id,
         nsr_de=nsr_de,
         nsr_ate=nsr_ate,

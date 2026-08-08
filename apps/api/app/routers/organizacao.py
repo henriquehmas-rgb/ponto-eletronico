@@ -4,6 +4,17 @@ Estrutura interna da empresa: departamentos, centros de custo, cargos e equipes.
 Sustenta escopo de perfil, agrupamento de relatorio e roteamento de aprovacao.
 
 Implementado na Fase F2 (agente A1). Regra de negocio em `app/organizacao/estrutura.py`.
+
+Autenticacao dupla (retrofit de 2026-08-08, mesma decisao do dono do produto
+aplicada em `app/routers/empresas.py`): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de integracao
+(OAuth/API key) so entra quando nao ha sessao humana autenticada. Todas as
+sub-tags deste arquivo (departamentos, centros de custo, cargos e equipes)
+compartilham os escopos `organizacao:ler`/`organizacao:escrever`; a permissao
+humana continua sendo a especifica do recurso.
 """
 
 from __future__ import annotations
@@ -13,9 +24,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.organizacao import estrutura as servico
 from app.organizacao.paginacao import paginar, resolver_pedido
@@ -24,6 +40,46 @@ from app.schemas import contrato
 roteador = APIRouter(tags=["organizacao"])
 
 _ORDENACAO_PADRAO = "criado_em:desc"
+
+# Uma instancia por par (permissao, escopo) unico -- nunca uma fabrica chamada
+# de novo dentro do handler: mesmo motivo documentado em
+# `app.comum.limitador_taxa` (identidade estavel do *callable* pro cache de
+# dependencia do FastAPI).
+_ACESSO_DEPARTAMENTOS_LER = exigir_permissao_ou_escopo(
+    permissao="departamentos.ler", escopo="organizacao:ler"
+)
+_ACESSO_DEPARTAMENTOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="departamentos.criar", escopo="organizacao:escrever"
+)
+_ACESSO_DEPARTAMENTOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="departamentos.editar", escopo="organizacao:escrever"
+)
+_ACESSO_DEPARTAMENTOS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="departamentos.excluir", escopo="organizacao:escrever"
+)
+_ACESSO_CENTROS_CUSTO_LER = exigir_permissao_ou_escopo(
+    permissao="centros_custo.ler", escopo="organizacao:ler"
+)
+_ACESSO_CENTROS_CUSTO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="centros_custo.criar", escopo="organizacao:escrever"
+)
+_ACESSO_CENTROS_CUSTO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="centros_custo.editar", escopo="organizacao:escrever"
+)
+_ACESSO_CARGOS_LER = exigir_permissao_ou_escopo(permissao="cargos.ler", escopo="organizacao:ler")
+_ACESSO_CARGOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="cargos.criar", escopo="organizacao:escrever"
+)
+_ACESSO_CARGOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="cargos.editar", escopo="organizacao:escrever"
+)
+_ACESSO_EQUIPES_LER = exigir_permissao_ou_escopo(permissao="equipes.ler", escopo="organizacao:ler")
+_ACESSO_EQUIPES_CRIAR = exigir_permissao_ou_escopo(
+    permissao="equipes.criar", escopo="organizacao:escrever"
+)
+_ACESSO_EQUIPES_EDITAR = exigir_permissao_ou_escopo(
+    permissao="equipes.editar", escopo="organizacao:escrever"
+)
 
 
 # --------------------------------------------------------------------------
@@ -40,7 +96,8 @@ _ORDENACAO_PADRAO = "criado_em:desc"
 )
 async def listar_departamentos(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("departamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DEPARTAMENTOS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -97,13 +154,13 @@ async def listar_departamentos(
     ] = None,
 ) -> contrato.ListaDepartamento:
     """Listar departamentos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_departamentos(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         departamento_pai_id=departamento_pai_id,
@@ -130,7 +187,8 @@ async def listar_departamentos(
 )
 async def criar_departamento(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("departamentos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DEPARTAMENTOS_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -155,11 +213,11 @@ async def criar_departamento(
     ] = None,
 ) -> contrato.Departamento:
     """Criar departamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     departamento = await servico.criar_departamento(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         empresa_id=corpo.empresa_id,
         codigo=corpo.codigo,
         nome=corpo.nome,
@@ -180,7 +238,8 @@ async def criar_departamento(
 )
 async def obter_departamento(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("departamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DEPARTAMENTOS_LER)],
+    response: Response,
     departamento_id: Annotated[
         UUID, Path(alias="departamentoId", description="Identificador do departamento.")
     ],
@@ -200,9 +259,9 @@ async def obter_departamento(
     ] = None,
 ) -> contrato.Departamento:
     """Obter departamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     departamento = await servico.obter_departamento(
-        sessao, tenant_id=tenant_id, departamento_id=departamento_id
+        sessao, tenant_id=acesso.tenant_id, departamento_id=departamento_id
     )
     return contrato.Departamento.model_validate(departamento, from_attributes=True)
 
@@ -217,7 +276,8 @@ async def obter_departamento(
 )
 async def atualizar_departamento(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("departamentos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DEPARTAMENTOS_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -245,13 +305,13 @@ async def atualizar_departamento(
     ] = None,
 ) -> contrato.Departamento:
     """Atualizar departamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     departamento = await servico.atualizar_departamento(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         departamento_id=departamento_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.Departamento.model_validate(departamento, from_attributes=True)
@@ -268,7 +328,8 @@ async def atualizar_departamento(
 )
 async def excluir_departamento(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("departamentos.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DEPARTAMENTOS_EXCLUIR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -295,11 +356,18 @@ async def excluir_departamento(
     ] = None,
 ) -> Response:
     """Excluir departamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_departamento(
-        sessao, tenant_id=tenant_id, departamento_id=departamento_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        departamento_id=departamento_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 # --------------------------------------------------------------------------
@@ -316,7 +384,8 @@ async def excluir_departamento(
 )
 async def listar_centros_custo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("centros_custo.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CENTROS_CUSTO_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -366,13 +435,13 @@ async def listar_centros_custo(
     ] = None,
 ) -> contrato.ListaCentroCusto:
     """Listar centros de custo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_centros_custo(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         centro_custo_pai_id=centro_custo_pai_id,
@@ -396,7 +465,8 @@ async def listar_centros_custo(
 )
 async def criar_centro_custo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("centros_custo.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CENTROS_CUSTO_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -421,11 +491,11 @@ async def criar_centro_custo(
     ] = None,
 ) -> contrato.CentroCusto:
     """Criar centro de custo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     centro = await servico.criar_centro_custo(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         empresa_id=corpo.empresa_id,
         codigo=corpo.codigo,
         nome=corpo.nome,
@@ -446,7 +516,8 @@ async def criar_centro_custo(
 )
 async def obter_centro_custo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("centros_custo.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CENTROS_CUSTO_LER)],
+    response: Response,
     centro_custo_id: Annotated[
         UUID, Path(alias="centroCustoId", description="Identificador do centro de custo.")
     ],
@@ -466,9 +537,9 @@ async def obter_centro_custo(
     ] = None,
 ) -> contrato.CentroCusto:
     """Obter centro de custo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     centro = await servico.obter_centro_custo(
-        sessao, tenant_id=tenant_id, centro_custo_id=centro_custo_id
+        sessao, tenant_id=acesso.tenant_id, centro_custo_id=centro_custo_id
     )
     return contrato.CentroCusto.model_validate(centro, from_attributes=True)
 
@@ -483,7 +554,8 @@ async def obter_centro_custo(
 )
 async def atualizar_centro_custo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("centros_custo.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CENTROS_CUSTO_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -511,13 +583,13 @@ async def atualizar_centro_custo(
     ] = None,
 ) -> contrato.CentroCusto:
     """Atualizar centro de custo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     centro = await servico.atualizar_centro_custo(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         centro_custo_id=centro_custo_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.CentroCusto.model_validate(centro, from_attributes=True)
@@ -537,7 +609,8 @@ async def atualizar_centro_custo(
 )
 async def listar_cargos(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("cargos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CARGOS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -587,13 +660,13 @@ async def listar_cargos(
     ] = None,
 ) -> contrato.ListaCargo:
     """Listar cargos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_cargos(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         cbo=cbo,
@@ -618,7 +691,8 @@ async def listar_cargos(
 )
 async def criar_cargo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("cargos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CARGOS_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -643,11 +717,11 @@ async def criar_cargo(
     ] = None,
 ) -> contrato.Cargo:
     """Criar cargo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     cargo = await servico.criar_cargo(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         empresa_id=corpo.empresa_id,
         codigo=corpo.codigo,
         nome=corpo.nome,
@@ -670,7 +744,8 @@ async def criar_cargo(
 )
 async def obter_cargo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("cargos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CARGOS_LER)],
+    response: Response,
     cargo_id: Annotated[UUID, Path(alias="cargoId", description="Identificador do cargo.")],
     x_tenant: Annotated[
         str | None,
@@ -688,8 +763,8 @@ async def obter_cargo(
     ] = None,
 ) -> contrato.Cargo:
     """Obter cargo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    cargo = await servico.obter_cargo(sessao, tenant_id=tenant_id, cargo_id=cargo_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    cargo = await servico.obter_cargo(sessao, tenant_id=acesso.tenant_id, cargo_id=cargo_id)
     return contrato.Cargo.model_validate(cargo, from_attributes=True)
 
 
@@ -703,7 +778,8 @@ async def obter_cargo(
 )
 async def atualizar_cargo(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("cargos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CARGOS_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -729,15 +805,15 @@ async def atualizar_cargo(
     ] = None,
 ) -> contrato.Cargo:
     """Atualizar cargo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     if "salario_base" in dados and dados["salario_base"] is not None:
         dados["salario_base"] = float(dados["salario_base"])
     cargo = await servico.atualizar_cargo(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         cargo_id=cargo_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.Cargo.model_validate(cargo, from_attributes=True)
@@ -757,7 +833,8 @@ async def atualizar_cargo(
 )
 async def listar_equipes(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("equipes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EQUIPES_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -810,13 +887,13 @@ async def listar_equipes(
     ] = None,
 ) -> contrato.ListaEquipe:
     """Listar equipes"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_equipes(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
@@ -841,7 +918,8 @@ async def listar_equipes(
 )
 async def criar_equipe(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("equipes.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EQUIPES_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -866,11 +944,11 @@ async def criar_equipe(
     ] = None,
 ) -> contrato.Equipe:
     """Criar equipe"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     equipe = await servico.criar_equipe(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         empresa_id=corpo.empresa_id,
         codigo=corpo.codigo,
         nome=corpo.nome,
@@ -893,7 +971,8 @@ async def criar_equipe(
 )
 async def obter_equipe(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("equipes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EQUIPES_LER)],
+    response: Response,
     equipe_id: Annotated[UUID, Path(alias="equipeId", description="Identificador da equipe.")],
     x_tenant: Annotated[
         str | None,
@@ -911,8 +990,8 @@ async def obter_equipe(
     ] = None,
 ) -> contrato.Equipe:
     """Obter equipe"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    equipe = await servico.obter_equipe(sessao, tenant_id=tenant_id, equipe_id=equipe_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    equipe = await servico.obter_equipe(sessao, tenant_id=acesso.tenant_id, equipe_id=equipe_id)
     return contrato.Equipe.model_validate(equipe, from_attributes=True)
 
 
@@ -926,7 +1005,8 @@ async def obter_equipe(
 )
 async def atualizar_equipe(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("equipes.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EQUIPES_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -952,13 +1032,13 @@ async def atualizar_equipe(
     ] = None,
 ) -> contrato.Equipe:
     """Atualizar equipe"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     equipe = await servico.atualizar_equipe(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         equipe_id=equipe_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.Equipe.model_validate(equipe, from_attributes=True)
@@ -974,7 +1054,8 @@ async def atualizar_equipe(
 )
 async def adicionar_membro_equipe(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("equipes.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EQUIPES_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -1000,12 +1081,12 @@ async def adicionar_membro_equipe(
     ] = None,
 ) -> contrato.EquipeMembro:
     """Adicionar membro a equipe"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     membro = await servico.adicionar_membro_equipe(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         equipe_id=equipe_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         colaborador_id=corpo.colaborador_id,
         papel=corpo.papel,
         vigencia_inicio=corpo.vigencia_inicio,

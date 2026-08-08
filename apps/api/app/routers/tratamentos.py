@@ -8,6 +8,15 @@ ver `docs/fases/F04-calculo-banco-de-horas.md`, secao 5). A regra em si vive em
 `app.apuracao.tratamento.servico`/`decisao` (que tambem publicam
 `ajuste.aprovado`/`ajuste.reprovado`/`apuracao.recalculada`); este modulo so
 traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/empresas.py`/`webhooks.py`) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -19,13 +28,38 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
 from app.apuracao.tratamento import decisao, servico
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["tratamentos"])
+
+# Uma instancia por par (permissao, escopo) unico deste arquivo -- nunca
+# `exigir_permissao_ou_escopo(...)` chamado de novo dentro de um handler
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="tratamentos.criar", escopo="tratamentos:escrever"
+)
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="tratamentos.ler", escopo="tratamentos:ler")
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="tratamentos.editar", escopo="tratamentos:escrever"
+)
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="tratamentos.excluir", escopo="tratamentos:escrever"
+)
+_ACESSO_APROVAR = exigir_permissao_ou_escopo(
+    permissao="tratamentos.aprovar", escopo="tratamentos:escrever"
+)
+_ACESSO_TIPOS_LER = exigir_permissao_ou_escopo(
+    permissao="tipos_tratamento.ler", escopo="tratamentos:ler"
+)
 
 
 @roteador.post(
@@ -45,8 +79,9 @@ async def criar_tratamento(
         ),
     ],
     corpo: contrato.TratamentoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -63,8 +98,10 @@ async def criar_tratamento(
     ] = None,
 ) -> contrato.Tratamento:
     """Criar tratamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_tratamento(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_tratamento(
+        sessao, acesso.tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
+    )
     return contrato.Tratamento.model_validate(novo, from_attributes=True)
 
 
@@ -76,8 +113,9 @@ async def criar_tratamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tratamentos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -139,10 +177,10 @@ async def listar_tratamentos(
     ] = None,
 ) -> contrato.ListaTratamento:
     """Listar tratamentos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_tratamentos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         colaborador_id=colaborador_id,
         vinculo_id=vinculo_id,
         empresa_id=empresa_id,
@@ -171,8 +209,9 @@ async def obter_tratamento(
     tratamento_id: Annotated[
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -189,7 +228,7 @@ async def obter_tratamento(
     ] = None,
 ) -> contrato.Tratamento:
     """Obter tratamento"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrado = await servico.obter_tratamento(sessao, tratamento_id)
     return contrato.Tratamento.model_validate(encontrado, from_attributes=True)
 
@@ -214,8 +253,9 @@ async def atualizar_tratamento(
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
     corpo: contrato.TratamentoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -232,9 +272,9 @@ async def atualizar_tratamento(
     ] = None,
 ) -> contrato.Tratamento:
     """Atualizar tratamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizado = await servico.atualizar_tratamento(
-        sessao, tenant_id, tratamento_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, tratamento_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return contrato.Tratamento.model_validate(atualizado, from_attributes=True)
 
@@ -259,8 +299,9 @@ async def cancelar_tratamento(
     tratamento_id: Annotated[
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -277,11 +318,15 @@ async def cancelar_tratamento(
     ] = None,
 ) -> Response:
     """Cancelar tratamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.cancelar_tratamento(
-        sessao, tenant_id, tratamento_id, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, tratamento_id, usuario_id=usuario_id_do_acesso(acesso)
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.post(
@@ -304,8 +349,9 @@ async def decidir_tratamento(
         UUID, Path(alias="tratamentoId", description="Identificador do tratamento.")
     ],
     corpo: contrato.DecisaoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tratamentos.aprovar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APROVAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -322,9 +368,9 @@ async def decidir_tratamento(
     ] = None,
 ) -> contrato.Tratamento:
     """Aprovar ou reprovar tratamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     decidido = await decisao.decidir_tratamento(
-        sessao, tenant_id, tratamento_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, tratamento_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return contrato.Tratamento.model_validate(decidido, from_attributes=True)
 
@@ -337,8 +383,9 @@ async def decidir_tratamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_tratamento(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_tratamento.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -378,10 +425,10 @@ async def listar_tipos_tratamento(
     ] = None,
 ) -> contrato.ListaTipoTratamento:
     """Listar tipos de tratamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_tipos_tratamento(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         categoria=categoria,
         ativo=ativo,
         cursor=cursor,

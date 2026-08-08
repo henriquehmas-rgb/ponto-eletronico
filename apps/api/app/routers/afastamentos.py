@@ -6,6 +6,15 @@ O afastamento entra na apuracao como insumo, NUNCA como marcacao, e e exportado 
 Regra de negocio implementada na fase F3 (agente A2, ownership deste arquivo --
 ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
 `app.jornada.calendario.afastamentos`; este modulo so traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/empresas.py`/`webhooks.py`) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -16,14 +25,41 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.jornada.calendario import afastamentos as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["afastamentos"])
+
+# Uma instancia por par (permissao, escopo) unico deste arquivo -- nunca
+# `exigir_permissao_ou_escopo(...)` chamado de novo dentro de um handler
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_TIPOS_LER = exigir_permissao_ou_escopo(
+    permissao="tipos_afastamento.ler", escopo="jornadas:ler"
+)
+_ACESSO_TIPOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="tipos_afastamento.criar", escopo="jornadas:escrever"
+)
+_ACESSO_TIPOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="tipos_afastamento.editar", escopo="jornadas:escrever"
+)
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="afastamentos.ler", escopo="jornadas:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="afastamentos.criar", escopo="jornadas:escrever"
+)
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="afastamentos.editar", escopo="jornadas:escrever"
+)
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="afastamentos.excluir", escopo="jornadas:escrever"
+)
 
 
 @roteador.get(
@@ -34,8 +70,9 @@ roteador = APIRouter(tags=["afastamentos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tipos_afastamento(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -75,10 +112,10 @@ async def listar_tipos_afastamento(
     ] = None,
 ) -> contrato.ListaTipoAfastamento:
     """Listar tipos de afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_tipos_afastamento(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         categoria=categoria,
         ativo=ativo,
         cursor=cursor,
@@ -108,8 +145,9 @@ async def criar_tipo_afastamento(
         ),
     ],
     corpo: contrato.TipoAfastamentoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -126,8 +164,8 @@ async def criar_tipo_afastamento(
     ] = None,
 ) -> contrato.TipoAfastamento:
     """Criar tipo de afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_tipo_afastamento(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_tipo_afastamento(sessao, acesso.tenant_id, corpo)
     return contrato.TipoAfastamento.model_validate(novo, from_attributes=True)
 
 
@@ -149,8 +187,9 @@ async def atualizar_tipo_afastamento(
     ],
     tipo_id: Annotated[UUID, Path(alias="tipoId", description="Identificador do tipo.")],
     corpo: contrato.TipoAfastamentoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tipos_afastamento.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TIPOS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -167,8 +206,8 @@ async def atualizar_tipo_afastamento(
     ] = None,
 ) -> contrato.TipoAfastamento:
     """Atualizar tipo de afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    atualizado = await servico.atualizar_tipo_afastamento(sessao, tenant_id, tipo_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    atualizado = await servico.atualizar_tipo_afastamento(sessao, acesso.tenant_id, tipo_id, corpo)
     return contrato.TipoAfastamento.model_validate(atualizado, from_attributes=True)
 
 
@@ -180,8 +219,9 @@ async def atualizar_tipo_afastamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_afastamentos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -240,10 +280,10 @@ async def listar_afastamentos(
     ] = None,
 ) -> contrato.ListaAfastamento:
     """Listar afastamentos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_afastamentos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         colaborador_id=colaborador_id,
         vinculo_id=vinculo_id,
         empresa_id=empresa_id,
@@ -276,8 +316,9 @@ async def criar_afastamento(
         ),
     ],
     corpo: contrato.AfastamentoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -294,8 +335,8 @@ async def criar_afastamento(
     ] = None,
 ) -> contrato.Afastamento:
     """Criar afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_afastamento(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_afastamento(sessao, acesso.tenant_id, corpo)
     return contrato.Afastamento.model_validate(novo, from_attributes=True)
 
 
@@ -310,8 +351,9 @@ async def obter_afastamento(
     afastamento_id: Annotated[
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -328,8 +370,8 @@ async def obter_afastamento(
     ] = None,
 ) -> contrato.Afastamento:
     """Obter afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    encontrado = await servico.obter_afastamento(sessao, tenant_id, afastamento_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    encontrado = await servico.obter_afastamento(sessao, acesso.tenant_id, afastamento_id)
     return contrato.Afastamento.model_validate(encontrado, from_attributes=True)
 
 
@@ -353,8 +395,9 @@ async def atualizar_afastamento(
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
     corpo: contrato.AfastamentoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -371,8 +414,10 @@ async def atualizar_afastamento(
     ] = None,
 ) -> contrato.Afastamento:
     """Atualizar afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    atualizado = await servico.atualizar_afastamento(sessao, tenant_id, afastamento_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    atualizado = await servico.atualizar_afastamento(
+        sessao, acesso.tenant_id, afastamento_id, corpo
+    )
     return contrato.Afastamento.model_validate(atualizado, from_attributes=True)
 
 
@@ -396,8 +441,9 @@ async def excluir_afastamento(
     afastamento_id: Annotated[
         UUID, Path(alias="afastamentoId", description="Identificador do afastamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("afastamentos.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -414,6 +460,10 @@ async def excluir_afastamento(
     ] = None,
 ) -> Response:
     """Excluir afastamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico.excluir_afastamento(sessao, tenant_id, afastamento_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico.excluir_afastamento(sessao, acesso.tenant_id, afastamento_id)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response

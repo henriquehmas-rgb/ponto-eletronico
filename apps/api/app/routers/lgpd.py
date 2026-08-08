@@ -8,6 +8,14 @@ Implementado na F14 (agente A3). Cada rota so orquestra HTTP <-> `app.lgpd.*`
 (consentimentos, solicitacoes, acessos) -- a regra de negocio vive la, nao
 aqui. Ver docstring de cada modulo de servico para as decisoes de
 interpretacao do contrato tomadas nesta fase.
+
+Autenticacao dupla (retrofit de 2026-08-08): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita ate agora. `Depends(exigir_permissao(...))`
+trocado por `Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E'
+tentada primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+Mesmo padrao ja provado em `app/routers/empresas.py`/`webhooks.py`.
 """
 
 from __future__ import annotations
@@ -18,8 +26,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.lgpd import acessos as servico_acessos
 from app.lgpd import consentimentos as servico_consentimentos
@@ -27,6 +40,13 @@ from app.lgpd import solicitacoes as servico_solicitacoes
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["lgpd"])
+
+# Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
+# chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
+# estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="lgpd.ler", escopo="lgpd:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(permissao="lgpd.criar", escopo="lgpd:escrever")
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(permissao="lgpd.excluir", escopo="lgpd:escrever")
 
 
 def _ip_do_cliente(request: Request) -> str | None:
@@ -117,7 +137,8 @@ def _acesso_para_schema(a: Any) -> contrato.AcessoDadoSensivel:
 )
 async def listar_consentimentos(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -128,7 +149,8 @@ async def listar_consentimentos(
     status: Annotated[str | None, Query(alias="status")] = None,
 ) -> contrato.ListaConsentimento:
     """Listar consentimentos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, tem_mais, proximo = await servico_consentimentos.listar_consentimentos(
         sessao,
         tenant_id=tenant_id,
@@ -163,13 +185,14 @@ async def criar_consentimento(
     corpo: contrato.ConsentimentoCriar,
     request: Request,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.Consentimento:
     """Registrar consentimento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     dados = servico_consentimentos.DadosConsentimentoCriar(
         colaborador_id=corpo.colaborador_id,
         finalidade=corpo.finalidade.value,
@@ -182,7 +205,7 @@ async def criar_consentimento(
         user_agent=request.headers.get("user-agent"),
     )
     consentimento = await servico_consentimentos.criar_consentimento(
-        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+        sessao, tenant_id=tenant_id, dados=dados, usuario_id=usuario_id_do_acesso(acesso)
     )
     response.headers["Location"] = f"/v1/lgpd/consentimentos/{consentimento.id}"
     return _consentimento_para_schema(consentimento)
@@ -200,19 +223,25 @@ async def revogar_consentimento(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     consentimento_id: Annotated[UUID, Path(alias="consentimentoId")],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> Response:
     """Revogar consentimento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico_consentimentos.revogar_consentimento(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         consentimento_id=consentimento_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos
+    # `RateLimit-*` setados acima, quando o acesso e de cliente de
+    # integracao) em vez de construir um `Response` novo, que perderia
+    # esses cabecalhos -- mesmo padrao de `app/routers/empresas.py`.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -224,7 +253,8 @@ async def revogar_consentimento(
 )
 async def listar_solicitacoes_titular(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -236,7 +266,8 @@ async def listar_solicitacoes_titular(
     vencendo: Annotated[bool | None, Query(alias="vencendo")] = None,
 ) -> contrato.ListaSolicitacaoTitular:
     """Listar pedidos de titular"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, tem_mais, proximo = await servico_solicitacoes.listar_solicitacoes_titular(
         sessao,
         tenant_id=tenant_id,
@@ -271,13 +302,14 @@ async def criar_solicitacao_titular(
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     corpo: contrato.SolicitacaoTitularCriar,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> contrato.SolicitacaoTitular:
     """Registrar pedido de titular"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     dados = servico_solicitacoes.DadosSolicitacaoCriar(
         colaborador_id=corpo.colaborador_id,
         usuario_id=corpo.usuario_id,
@@ -291,7 +323,7 @@ async def criar_solicitacao_titular(
         resposta_ref_informada=corpo.resposta_ref,
     )
     solicitacao = await servico_solicitacoes.criar_solicitacao_titular(
-        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+        sessao, tenant_id=tenant_id, dados=dados, usuario_id=usuario_id_do_acesso(acesso)
     )
     response.headers["Location"] = f"/v1/lgpd/solicitacoes-titular/{solicitacao.id}"
     return _solicitacao_para_schema(solicitacao)
@@ -306,7 +338,8 @@ async def criar_solicitacao_titular(
 )
 async def listar_acessos_sensiveis(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("lgpd.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     x_tenant: Annotated[str | None, Header(alias="X-Tenant")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
     cursor: Annotated[str | None, Query(alias="cursor")] = None,
@@ -320,7 +353,8 @@ async def listar_acessos_sensiveis(
     ate: Annotated[datetime | None, Query(alias="ate")] = None,
 ) -> contrato.ListaAcessoDadoSensivel:
     """Listar acessos a dados sensiveis"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, tem_mais, proximo = await servico_acessos.listar_acessos_sensiveis(
         sessao,
         tenant_id=tenant_id,

@@ -7,6 +7,16 @@ Regra de negocio implementada na fase F3 (agente A1, ownership deste arquivo
 -- ver `docs/fases/F03-motor-de-jornada.md`, secao 5). A regra em si vive em
 `app.jornada.modelagem.escalas` e `app.jornada.modelagem.turnos`; este
 modulo so traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -18,9 +28,13 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from ponto_contracts import Escala
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.jornada.modelagem import (
     escala_atribuicoes,
@@ -34,6 +48,27 @@ from app.jornada.modelagem import (
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["escalas"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_ESCALAS_LER = exigir_permissao_ou_escopo(permissao="escalas.ler", escopo="jornadas:ler")
+_ACESSO_ESCALAS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="escalas.criar", escopo="jornadas:escrever"
+)
+_ACESSO_ESCALAS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="escalas.editar", escopo="jornadas:escrever"
+)
+_ACESSO_ESCALAS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="escalas.excluir", escopo="jornadas:escrever"
+)
+_ACESSO_TURNOS_LER = exigir_permissao_ou_escopo(permissao="turnos.ler", escopo="jornadas:ler")
+_ACESSO_TURNOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="turnos.criar", escopo="jornadas:escrever"
+)
+_ACESSO_TURNOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="turnos.editar", escopo="jornadas:escrever"
+)
 
 
 async def _montar_escala(sessao: AsyncSession, escala: Escala) -> contrato.Escala:
@@ -51,8 +86,9 @@ async def _montar_escala(sessao: AsyncSession, escala: Escala) -> contrato.Escal
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_escalas(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -93,10 +129,10 @@ async def listar_escalas(
     ] = None,
 ) -> contrato.ListaEscala:
     """Listar escalas"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico_escalas.listar_escalas(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         tipo=tipo,
         ativo=ativo,
@@ -125,8 +161,9 @@ async def criar_escala(
         ),
     ],
     corpo: contrato.EscalaCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -143,8 +180,8 @@ async def criar_escala(
     ] = None,
 ) -> contrato.Escala:
     """Criar escala"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    nova = await servico_escalas.criar_escala(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    nova = await servico_escalas.criar_escala(sessao, acesso.tenant_id, corpo)
     return await _montar_escala(sessao, nova)
 
 
@@ -157,8 +194,9 @@ async def criar_escala(
 )
 async def obter_escala(
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -175,7 +213,7 @@ async def obter_escala(
     ] = None,
 ) -> contrato.Escala:
     """Obter escala"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrada = await servico_escalas.obter_escala(sessao, escala_id)
     return await _montar_escala(sessao, encontrada)
 
@@ -198,8 +236,9 @@ async def atualizar_escala(
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
     corpo: contrato.EscalaAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -216,7 +255,7 @@ async def atualizar_escala(
     ] = None,
 ) -> contrato.Escala:
     """Atualizar escala"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizada = await servico_escalas.atualizar_escala(sessao, escala_id, corpo)
     return await _montar_escala(sessao, atualizada)
 
@@ -239,8 +278,9 @@ async def excluir_escala(
         ),
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -257,9 +297,13 @@ async def excluir_escala(
     ] = None,
 ) -> Response:
     """Excluir escala"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico_escalas.excluir_escala(sessao, tenant_id, escala_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico_escalas.excluir_escala(sessao, acesso.tenant_id, escala_id)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.post(
@@ -280,8 +324,9 @@ async def atribuir_escala_vinculo(
     ],
     escala_id: Annotated[UUID, Path(alias="escalaId", description="Identificador da escala.")],
     corpo: contrato.EscalaAtribuicaoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("escalas.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ESCALAS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -298,8 +343,10 @@ async def atribuir_escala_vinculo(
     ] = None,
 ) -> contrato.EscalaAtribuicao:
     """Atribuir escala a vinculo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    nova = await escala_atribuicoes.atribuir_escala_vinculo(sessao, tenant_id, escala_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    nova = await escala_atribuicoes.atribuir_escala_vinculo(
+        sessao, acesso.tenant_id, escala_id, corpo
+    )
     return contrato.EscalaAtribuicao.model_validate(nova, from_attributes=True)
 
 
@@ -311,8 +358,9 @@ async def atribuir_escala_vinculo(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_turnos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TURNOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -353,10 +401,10 @@ async def listar_turnos(
     ] = None,
 ) -> contrato.ListaTurno:
     """Listar turnos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico_turnos.listar_turnos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         tipo=tipo,
         ativo=ativo,
@@ -385,8 +433,9 @@ async def criar_turno(
         ),
     ],
     corpo: contrato.TurnoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TURNOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -403,8 +452,8 @@ async def criar_turno(
     ] = None,
 ) -> contrato.Turno:
     """Criar turno"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico_turnos.criar_turno(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico_turnos.criar_turno(sessao, acesso.tenant_id, corpo)
     return contrato.Turno.model_validate(novo, from_attributes=True)
 
 
@@ -426,8 +475,9 @@ async def atualizar_turno(
     ],
     turno_id: Annotated[UUID, Path(alias="turnoId", description="Identificador do turno.")],
     corpo: contrato.TurnoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("turnos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TURNOS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -444,6 +494,6 @@ async def atualizar_turno(
     ] = None,
 ) -> contrato.Turno:
     """Atualizar turno"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizado = await servico_turnos.atualizar_turno(sessao, turno_id, corpo)
     return contrato.Turno.model_validate(atualizado, from_attributes=True)

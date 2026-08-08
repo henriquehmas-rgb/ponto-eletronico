@@ -8,6 +8,15 @@ arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
 5). A regra em si vive em `app.workflow.fechamento.periodos`/`servico`/
 `conferencia`; este módulo só traduz HTTP <-> serviço, mesmo padrão de
 `app/routers/tratamentos.py` (F4).
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto --
+ver `docs/backlog.md` e a docstring de `app.comum.autenticacao_cliente`): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -15,17 +24,43 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 from app.workflow.fechamento import conferencia, periodos, servico
 
 roteador = APIRouter(tags=["fechamentos"])
+
+# Uma instancia por par (permissao, escopo) unico do arquivo, criada no nivel
+# de modulo (nunca chamada de novo dentro do handler): identidade estavel do
+# *callable* pro cache de dependencia do FastAPI, mesmo motivo documentado em
+# `app.comum.limitador_taxa`.
+_ACESSO_PERIODOS_LER = exigir_permissao_ou_escopo(
+    permissao="periodos.ler", escopo="fechamentos:ler"
+)
+_ACESSO_PERIODOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="periodos.criar", escopo="fechamentos:escrever"
+)
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="fechamentos.ler", escopo="fechamentos:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="fechamentos.criar", escopo="fechamentos:escrever"
+)
+_ACESSO_CONFERIR = exigir_permissao_ou_escopo(
+    permissao="fechamentos.executar", escopo="fechamentos:escrever"
+)
+_ACESSO_REABRIR = exigir_permissao_ou_escopo(
+    permissao="fechamentos.reabrir", escopo="fechamentos:escrever"
+)
 
 
 @roteador.get(
@@ -36,8 +71,9 @@ roteador = APIRouter(tags=["fechamentos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_periodos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("periodos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_PERIODOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -85,10 +121,10 @@ async def listar_periodos(
     ] = None,
 ) -> contrato.ListaPeriodo:
     """Listar periodos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await periodos.listar_periodos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         tipo=tipo,
         status=status,
@@ -118,8 +154,9 @@ async def criar_periodo(
         ),
     ],
     corpo: contrato.PeriodoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("periodos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_PERIODOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -136,8 +173,10 @@ async def criar_periodo(
     ] = None,
 ) -> contrato.Periodo:
     """Criar periodo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await periodos.criar_periodo(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await periodos.criar_periodo(
+        sessao, acesso.tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
+    )
     return contrato.Periodo.model_validate(novo, from_attributes=True)
 
 
@@ -158,8 +197,9 @@ async def criar_fechamento(
         ),
     ],
     corpo: contrato.FechamentoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -176,13 +216,13 @@ async def criar_fechamento(
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
     """Fechar periodo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     config = obter_configuracao()
     return await servico.criar_fechamento(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )
 
@@ -195,8 +235,9 @@ async def criar_fechamento(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_fechamentos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -247,10 +288,10 @@ async def listar_fechamentos(
     ] = None,
 ) -> contrato.ListaFechamento:
     """Listar fechamentos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_fechamentos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         periodo_id=periodo_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
@@ -275,8 +316,9 @@ async def obter_fechamento(
     fechamento_id: Annotated[
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -293,8 +335,8 @@ async def obter_fechamento(
     ] = None,
 ) -> contrato.Fechamento:
     """Obter fechamento"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    encontrado = await servico.obter_fechamento(sessao, tenant_id, fechamento_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    encontrado = await servico.obter_fechamento(sessao, acesso.tenant_id, fechamento_id)
     return contrato.Fechamento.model_validate(encontrado, from_attributes=True)
 
 
@@ -317,8 +359,9 @@ async def conferir_fechamento(
     fechamento_id: Annotated[
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CONFERIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -335,9 +378,9 @@ async def conferir_fechamento(
     ] = None,
 ) -> contrato.ConferenciaResposta:
     """Conferir periodo antes de fechar"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await conferencia.conferir_fechamento(
-        sessao, tenant_id, fechamento_id, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, fechamento_id, usuario_id=usuario_id_do_acesso(acesso)
     )
 
 
@@ -361,8 +404,9 @@ async def reabrir_fechamento(
         UUID, Path(alias="fechamentoId", description="Identificador do fechamento.")
     ],
     corpo: contrato.ReaberturaRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fechamentos.reabrir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_REABRIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -379,8 +423,8 @@ async def reabrir_fechamento(
     ] = None,
 ) -> contrato.Fechamento:
     """Reabrir periodo fechado"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     reaberto = await servico.reabrir_fechamento(
-        sessao, tenant_id, fechamento_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, acesso.tenant_id, fechamento_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return contrato.Fechamento.model_validate(reaberto, from_attributes=True)

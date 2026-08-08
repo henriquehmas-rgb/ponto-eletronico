@@ -7,6 +7,17 @@ Regra de negocio implementada na F1/A2 (T2) -- ver
 `app.identidade.tenancy.servico`. `listarTenants` e `criarTenant` continuam
 `501`: sao necessariamente CROSS-tenant e a role de conexao da aplicacao
 (`ponto_app`) nao tem `BYPASSRLS` -- ver `docs/backlog.md` (item "F1 / A2").
+
+Autenticacao dupla (retrofit de 2026-08-08): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita ate agora. `Depends(exigir_permissao(...))`
+trocado por `Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E'
+tentada primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+Mesmo padrao ja provado em `app/routers/empresas.py`/`webhooks.py`.
+`obterTenantAtual` ficou de fora de proposito: nao tem `x-permissao`/
+`x-escopo` no contrato e ja nao exigia sujeito autenticado nenhum (ver
+docstring do handler) -- nao ha o que retrofitar la.
 """
 
 from __future__ import annotations
@@ -14,20 +25,61 @@ from __future__ import annotations
 from typing import Annotated, Any, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from pydantic import BaseModel
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core import contexto
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao, NaoImplementado
-from app.core.seguranca import Sujeito, exigir_permissao
+from app.core.seguranca import Sujeito
 from app.db.sessao import SessaoDb
 from app.identidade.tenancy import servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["tenants"])
 
+# Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
+# chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
+# estavel do *callable* pro cache de dependencia do FastAPI).
+# Sem `_ACESSO_CRIAR` (`tenants.criar`/`tenants:escrever`): `criarTenant` --
+# como `listarTenants` -- nao tem, e nunca teve, dependencia de autenticacao
+# nenhuma (ver docstring dos dois handlers: sao `501` incondicionais ate uma
+# fase desenhar o acesso cross-tenant do suporte da SEEG). Retrofitar um
+# portao de auth num stub `501` so trocaria o `501` por `401` para quem chama
+# sem credencial -- regressao de comportamento, sem ganho.
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="tenants.ler", escopo="tenants:ler")
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(permissao="tenants.editar", escopo="tenants:escrever")
+_ACESSO_CONFIGURAR = exigir_permissao_ou_escopo(
+    permissao="tenants.configurar", escopo="tenants:escrever"
+)
+
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
+
+
+def _sujeito_para_servico(acesso: ContextoAcesso) -> Sujeito:
+    """`Sujeito` a repassar para a camada de servico.
+
+    `atualizar_tenant` e `definir_configuracao_tenant` recebem o `Sujeito`
+    INTEIRO (nao so `usuario_id`): usam-no para `criado_por`/`atualizado_por`
+    e para `registrar_auditoria_de_sujeito` (que le `tenant_id`/`usuario_id`/
+    `email`/`perfis`/`delegacao_id`).
+
+    Acesso humano devolve o proprio `Sujeito` resolvido, sem nenhuma
+    alteracao (comportamento preservado byte a byte). Acesso de cliente de
+    integracao devolve um `Sujeito` sintetico so com o `tenant_id` do
+    cliente: sem `usuario_id`, sem perfis, sem delegacao -- nao ha usuario
+    humano a quem atribuir a acao, e `registrar_auditoria_de_sujeito` exige
+    apenas `tenant_id` nao-nulo. Mesmo helper (e mesma decisao) de
+    `app/routers/admin.py`.
+    """
+    if acesso.sujeito is not None:
+        return acesso.sujeito
+    return Sujeito(tenant_id=acesso.tenant_id, autenticado=True)
 
 
 def _para_schema(schema_cls: type[_SchemaT], origem: Any, **extras: Any) -> _SchemaT:
@@ -214,7 +266,8 @@ async def criar_tenant(
 async def obter_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tenants.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     tenant_id: Annotated[UUID, Path(alias="tenantId", description="Identificador do tenant.")],
     x_tenant: Annotated[
         str | None,
@@ -240,6 +293,7 @@ async def obter_tenant(
     "zero linha vira 404" para um caso que e, na pratica, uma tentativa de
     cruzar a fronteira do tenant.
     """
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linha = await servico.obter_tenant(sessao, tenant_id=tenant_id)
     return _para_schema(contrato.Tenant, linha)
 
@@ -255,7 +309,8 @@ async def obter_tenant(
 async def atualizar_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tenants.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -285,8 +340,9 @@ async def atualizar_tenant(
     Mesma recusa cross-tenant explicita de `obterTenant`, agora tambem para
     ESCRITA: `{tenantId}` de outro tenant nao chega a acionar nenhum `UPDATE`.
     """
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linha = await servico.atualizar_tenant(
-        sessao, tenant_id=tenant_id, dados=corpo, sujeito=sujeito
+        sessao, tenant_id=tenant_id, dados=corpo, sujeito=_sujeito_para_servico(acesso)
     )
     return _para_schema(contrato.Tenant, linha)
 
@@ -301,7 +357,8 @@ async def atualizar_tenant(
 async def listar_configuracoes_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tenants.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
+    response: Response,
     tenant_id: Annotated[UUID, Path(alias="tenantId", description="Identificador do tenant.")],
     x_tenant: Annotated[
         str | None,
@@ -339,6 +396,7 @@ async def listar_configuracoes_tenant(
     ] = None,
 ) -> contrato.ListaTenantConfiguracao:
     """Listar configuracoes do tenant."""
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao_bruta = await servico.listar_configuracoes_tenant(
         sessao, tenant_id=tenant_id, cursor=cursor, limite=limite, categoria=categoria
     )
@@ -359,7 +417,8 @@ async def listar_configuracoes_tenant(
 async def definir_configuracao_tenant(
     _mesmo_tenant: Annotated[None, Depends(_exigir_mesmo_tenant)],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("tenants.configurar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CONFIGURAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -396,7 +455,8 @@ async def definir_configuracao_tenant(
     (`tenants.configurar` -- RFC-002 opcao (a), a acao ja aceita pelo `CHECK`
     de `permissoes.acao`).
     """
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linha = await servico.definir_configuracao_tenant(
-        sessao, tenant_id=tenant_id, chave=chave, dados=corpo, sujeito=sujeito
+        sessao, tenant_id=tenant_id, chave=chave, dados=corpo, sujeito=_sujeito_para_servico(acesso)
     )
     return _para_schema(contrato.TenantConfiguracao, linha)

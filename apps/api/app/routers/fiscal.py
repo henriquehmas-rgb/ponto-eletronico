@@ -7,6 +7,16 @@ Confundir o escopo dos dois arquivos e o erro que invalida o sistema numa fiscal
 Regra de negocio destas operacoes entra na fase F12. Ate la toda chamada
 responde 501 com PONTO-INT-005. Regerar com
 `python tools/gerar_do_contrato.py`.
+
+Autenticacao dupla (retrofit de 2026-08-08): o contrato ja declarava os tres
+esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
+so sessao humana era aceita ate agora. `Depends(exigir_permissao(...))`
+trocado por `Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E'
+tentada primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+Mesmo padrao ja provado em `app/routers/empresas.py`/`webhooks.py`. So a
+camada de autenticacao mudou: nenhuma regra de negocio de geracao/assinatura
+foi tocada.
 """
 
 from __future__ import annotations
@@ -17,11 +27,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.fiscal.aej import gerador as _aej_gerador
 from app.fiscal.afd.gerador import solicitar_geracao_afd as _servico_solicitar_geracao_afd
@@ -33,6 +48,15 @@ from app.fiscal.rep_p.servico import rep_p_para_contrato as _rep_p_para_contrato
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["fiscal"])
+
+# Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
+# chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
+# estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="fiscal.ler", escopo="fiscal:ler")
+_ACESSO_EXPORTAR = exigir_permissao_ou_escopo(permissao="fiscal.exportar", escopo="fiscal:ler")
+_ACESSO_EXECUTAR = exigir_permissao_ou_escopo(permissao="fiscal.executar", escopo="fiscal:escrever")
+_ACESSO_ASSINAR = exigir_permissao_ou_escopo(permissao="fiscal.assinar", escopo="fiscal:escrever")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(permissao="fiscal.criar", escopo="fiscal:escrever")
 
 
 def _ip_do_cliente(request: Request) -> str | None:
@@ -63,8 +87,9 @@ async def gerar_afd(
         ),
     ],
     corpo: contrato.AfdCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXECUTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -87,13 +112,14 @@ async def gerar_afd(
     padrao de `criarFechamento` (F10) e de `gerarAej` (F12/A2). Regra de
     negocio em `app.fiscal.afd.gerador.solicitar_geracao_afd` (F12/A1).
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     config = obter_configuracao()
     return await _servico_solicitar_geracao_afd(
         sessao,
         tenant_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )
 
@@ -106,8 +132,9 @@ async def gerar_afd(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_afd(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -158,7 +185,8 @@ async def listar_afd(
     ] = None,
 ) -> contrato.ListaAfdArquivo:
     """Listar arquivos AFD"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await _cofre_consulta.listar_afd(
         sessao,
         tenant_id,
@@ -186,8 +214,9 @@ async def listar_afd(
 )
 async def obter_afd(
     arquivo_id: Annotated[UUID, Path(alias="arquivoId", description="Identificador do arquivo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -204,7 +233,8 @@ async def obter_afd(
     ] = None,
 ) -> contrato.AfdArquivo:
     """Obter arquivo AFD"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     arquivo = await _cofre_consulta.obter_afd(sessao, tenant_id, arquivo_id)
     return contrato.AfdArquivo.model_validate(arquivo, from_attributes=True)
 
@@ -219,9 +249,10 @@ async def obter_afd(
 )
 async def baixar_afd(
     arquivo_id: Annotated[UUID, Path(alias="arquivoId", description="Identificador do arquivo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.exportar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXPORTAR)],
     sessao: SessaoDb,
     request: Request,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -245,21 +276,32 @@ async def baixar_afd(
     ] = None,
 ) -> Response:
     """Baixar arquivo AFD"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     conteudo, content_type, nome_arquivo = await _cofre_consulta.baixar_afd(
         sessao,
         tenant_id,
         arquivo_id,
         incluir_assinatura=bool(incluir_assinatura),
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         ip=_ip_do_cliente(request),
         user_agent=_user_agent(request),
     )
-    return Response(
+    download = Response(
         content=conteudo,
         media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
     )
+    # Diferente das rotas 204 (que reaproveitam o proprio `response`), aqui o
+    # corpo obriga um `Response` novo -- e o FastAPI 0.137 DESCARTA os
+    # cabecalhos do `response` injetado quando o handler devolve um `Response`
+    # proprio (`fastapi.routing.get_request_handler`: `response =
+    # raw_response`, sem merge). Os `RateLimit-*` setados acima sao copiados a
+    # mao para nao se perderem no download; para sessao humana o `response`
+    # injetado esta vazio e este laco nao faz nada (comportamento preservado).
+    for nome, valor in response.headers.items():
+        download.headers[nome] = valor
+    return download
 
 
 @roteador.post(
@@ -279,8 +321,9 @@ async def gerar_aej(
         ),
     ],
     corpo: contrato.AejCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXECUTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -304,13 +347,14 @@ async def gerar_aej(
     `gerarAfd` (F12/A1). Regra de negocio em
     `app.fiscal.aej.gerador.solicitar_geracao_aej` (F12/A2).
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     config = obter_configuracao()
     return await _aej_gerador.solicitar_geracao_aej(
         sessao,
         tenant_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )
 
@@ -323,8 +367,9 @@ async def gerar_aej(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_aej(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -375,7 +420,8 @@ async def listar_aej(
     ] = None,
 ) -> contrato.ListaAejArquivo:
     """Listar arquivos AEJ"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, paginacao = await _cofre_consulta.listar_aej(
         sessao,
         tenant_id,
@@ -403,8 +449,9 @@ async def listar_aej(
 )
 async def obter_aej(
     arquivo_id: Annotated[UUID, Path(alias="arquivoId", description="Identificador do arquivo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -421,7 +468,8 @@ async def obter_aej(
     ] = None,
 ) -> contrato.AejArquivo:
     """Obter arquivo AEJ"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     arquivo = await _cofre_consulta.obter_aej(sessao, tenant_id, arquivo_id)
     return contrato.AejArquivo.model_validate(arquivo, from_attributes=True)
 
@@ -446,7 +494,7 @@ async def assinar_arquivo_fiscal(
         UUID, Path(alias="arquivoId", description="Identificador do arquivo a assinar.")
     ],
     corpo: contrato.AssinaturaArquivoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.assinar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ASSINAR)],
     sessao: SessaoDb,
     response: Response,
     x_tenant: Annotated[
@@ -465,9 +513,10 @@ async def assinar_arquivo_fiscal(
     ] = None,
 ) -> contrato.ArquivoAssinatura:
     """Assinar arquivo fiscal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     assinatura = await _servico_assinar_arquivo_fiscal(
-        sessao, tenant_id, arquivo_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, tenant_id, arquivo_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     tipo_arquivo_bruto = corpo.tipo_arquivo
     # `is not None` (em vez de `hasattr`, usado como padrao em outros pontos
@@ -495,8 +544,9 @@ async def assinar_arquivo_fiscal(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_rep_ps(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -536,7 +586,8 @@ async def listar_rep_ps(
     ] = None,
 ) -> contrato.ListaRepP:
     """Listar REP-P"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
     linhas, sequencias, paginacao = await _servico_listar_rep_ps(
         sessao,
         tenant_id,
@@ -576,7 +627,7 @@ async def criar_rep_p(
         ),
     ],
     corpo: contrato.RepPCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("fiscal.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
     response: Response,
     x_tenant: Annotated[
@@ -599,7 +650,10 @@ async def criar_rep_p(
     Inicializa `nsr_sequencias` (`proximo_nsr=1`) na mesma transacao. Regra
     de negocio em `app.fiscal.rep_p.servico.criar_rep_p` (F12/A1).
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    criado = await _servico_criar_rep_p(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    tenant_id = acesso.tenant_id
+    criado = await _servico_criar_rep_p(
+        sessao, tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
+    )
     response.headers["Location"] = f"/v1/fiscal/rep-ps/{criado.id}"
     return criado

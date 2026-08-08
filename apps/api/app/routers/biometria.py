@@ -16,6 +16,16 @@ esta no schema (nenhum `additionalProperties: false` os proibe; ver
 `docs/backlog.md` e a docstring de `app.biometria.servico.DadosBiometriaCriar`).
 Por isso esta rota le o corpo bruto via `Request.json()` para completar os
 campos que o Pydantic gerado nao tipa.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -28,13 +38,34 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
 from app.biometria import servico
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["biometria"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_BIOMETRIAS_LER = exigir_permissao_ou_escopo(
+    permissao="biometrias.ler", escopo="biometria:ler"
+)
+_ACESSO_BIOMETRIAS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="biometrias.criar", escopo="biometria:escrever"
+)
+_ACESSO_BIOMETRIAS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="biometrias.excluir", escopo="biometria:escrever"
+)
+_ACESSO_BIOMETRIAS_APROVAR = exigir_permissao_ou_escopo(
+    permissao="biometrias.aprovar", escopo="biometria:escrever"
+)
 
 
 def _biometria_para_schema(biometria: Any, versao_modelo: str | None) -> contrato.Biometria:
@@ -97,7 +128,8 @@ def _decodificar_vetor(bruto: dict[str, Any]) -> bytes | None:
 )
 async def listar_biometrias(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("biometrias.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_BIOMETRIAS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -147,10 +179,10 @@ async def listar_biometrias(
     ] = None,
 ) -> contrato.ListaBiometria:
     """Listar credenciais biometricas"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, tem_mais, proximo = await servico.listar_biometrias(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         colaborador_id=colaborador_id,
         modalidade=modalidade,
         status=status,
@@ -194,7 +226,7 @@ async def criar_biometria(
     corpo: contrato.BiometriaCriar,
     request: Request,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("biometrias.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_BIOMETRIAS_CRIAR)],
     response: Response,
     x_tenant: Annotated[
         str | None,
@@ -212,7 +244,7 @@ async def criar_biometria(
     ] = None,
 ) -> contrato.Biometria:
     """Cadastrar credencial biometrica"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     bruto: dict[str, Any] = await request.json()
     vetor = _decodificar_vetor(bruto)
     versao_modelo = bruto.get("versaoModelo") or None
@@ -232,10 +264,13 @@ async def criar_biometria(
         dimensao=dimensao,
     )
     biometria = await servico.criar_biometria(
-        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        dados=dados,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     versao_ativa = await servico.versao_modelo_ativa(
-        sessao, tenant_id=tenant_id, biometria_id=biometria.id
+        sessao, tenant_id=acesso.tenant_id, biometria_id=biometria.id
     )
     response.headers["Location"] = f"/v1/biometrias/{biometria.id}"
     return _biometria_para_schema(biometria, versao_ativa)
@@ -253,7 +288,8 @@ async def obter_biometria(
         UUID, Path(alias="biometriaId", description="Identificador da credencial.")
     ],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("biometrias.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_BIOMETRIAS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -270,12 +306,15 @@ async def obter_biometria(
     ] = None,
 ) -> contrato.Biometria:
     """Obter credencial biometrica"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     biometria = await servico.obter_biometria(
-        sessao, tenant_id=tenant_id, biometria_id=biometria_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        biometria_id=biometria_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     versao_ativa = await servico.versao_modelo_ativa(
-        sessao, tenant_id=tenant_id, biometria_id=biometria_id
+        sessao, tenant_id=acesso.tenant_id, biometria_id=biometria_id
     )
     return _biometria_para_schema(biometria, versao_ativa)
 
@@ -301,7 +340,8 @@ async def revogar_biometria(
         UUID, Path(alias="biometriaId", description="Identificador da credencial.")
     ],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("biometrias.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_BIOMETRIAS_EXCLUIR)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -318,11 +358,18 @@ async def revogar_biometria(
     ] = None,
 ) -> Response:
     """Revogar credencial biometrica"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.revogar_biometria(
-        sessao, tenant_id=tenant_id, biometria_id=biometria_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        biometria_id=biometria_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.post(
@@ -346,7 +393,8 @@ async def validar_biometria(
     ],
     corpo: contrato.DecisaoRequisicao,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("biometrias.aprovar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_BIOMETRIAS_APROVAR)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -363,18 +411,18 @@ async def validar_biometria(
     ] = None,
 ) -> contrato.Biometria:
     """Validar credencial biometrica"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     if corpo.decisao is None:
         raise ErroDeAplicacao("PONTO-VAL-001", detalhe="Campo 'decisao' e obrigatorio.")
     biometria = await servico.validar_biometria(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         biometria_id=biometria_id,
         decisao=corpo.decisao,
         comentario=corpo.comentario,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     versao_ativa = await servico.versao_modelo_ativa(
-        sessao, tenant_id=tenant_id, biometria_id=biometria_id
+        sessao, tenant_id=acesso.tenant_id, biometria_id=biometria_id
     )
     return _biometria_para_schema(biometria, versao_ativa)

@@ -7,6 +7,17 @@ espelho mudar, ela deixa de conferir, que é o comportamento desejado.
 Regra de negócio implementada na fase F10 (agente A2, ownership deste
 arquivo). A regra em si vive em `app.workflow.fechamento.espelho`/
 `assinatura`; este módulo só traduz HTTP <-> serviço.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto --
+ver `docs/backlog.md` e a docstring de `app.comum.autenticacao_cliente`): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E tentada
+primeiro (comportamento humano preservado byte a byte), cliente de
+integracao (OAuth/API key) so entra quando nao ha sessao humana autenticada.
+A idempotencia real de `POST /v1/espelhos` (`ROTAS_COM_DEDUP_REAL` em
+`app.comum.idempotencia_middleware`) e ortogonal a isto e nao muda aqui.
 """
 
 from __future__ import annotations
@@ -19,11 +30,16 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 from ponto_contracts import AssinaturaEspelho, Espelho
 
 from app.comum.armazenamento import obter_objeto
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.ip_confiavel import ip_confiavel_do_cliente
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 from app.workflow.fechamento import assinatura as assinatura_servico
@@ -31,6 +47,21 @@ from app.workflow.fechamento import espelho as espelho_servico
 from app.workflow.fechamento.pdf import gerar_pdf_espelho
 
 roteador = APIRouter(tags=["espelhos"])
+
+# Uma instancia por par (permissao, escopo) unico do arquivo, criada no nivel
+# de modulo (nunca chamada de novo dentro do handler): identidade estavel do
+# *callable* pro cache de dependencia do FastAPI, mesmo motivo documentado em
+# `app.comum.limitador_taxa`.
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="espelhos.ler", escopo="fechamentos:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="espelhos.criar", escopo="fechamentos:escrever"
+)
+_ACESSO_ASSINAR = exigir_permissao_ou_escopo(
+    permissao="espelhos.assinar", escopo="fechamentos:escrever"
+)
+_ACESSO_EXPORTAR = exigir_permissao_ou_escopo(
+    permissao="espelhos.exportar", escopo="fechamentos:ler"
+)
 
 
 def _ip_do_cliente(request: Request) -> str | None:
@@ -60,8 +91,9 @@ def _montar_espelho(linha: Espelho, assinaturas: list[AssinaturaEspelho]) -> con
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_espelhos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("espelhos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -119,10 +151,10 @@ async def listar_espelhos(
     ] = None,
 ) -> contrato.ListaEspelho:
     """Listar espelhos de ponto"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await espelho_servico.listar_espelhos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         periodo_id=periodo_id,
         colaborador_id=colaborador_id,
         vinculo_id=vinculo_id,
@@ -154,8 +186,9 @@ async def gerar_espelhos(
         ),
     ],
     corpo: contrato.EspelhoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("espelhos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -172,13 +205,13 @@ async def gerar_espelhos(
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
     """Gerar espelhos de ponto"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     config = obter_configuracao()
     return await espelho_servico.criar_espelhos_assincrono(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )
 
@@ -192,8 +225,9 @@ async def gerar_espelhos(
 )
 async def obter_espelho(
     espelho_id: Annotated[UUID, Path(alias="espelhoId", description="Identificador do espelho.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("espelhos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -210,14 +244,14 @@ async def obter_espelho(
     ] = None,
 ) -> contrato.Espelho:
     """Obter espelho de ponto"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    encontrado = await espelho_servico.obter_espelho(sessao, tenant_id, espelho_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    encontrado = await espelho_servico.obter_espelho(sessao, acesso.tenant_id, espelho_id)
     assinaturas = (
         (
             await sessao.execute(
                 sa.select(AssinaturaEspelho)
                 .where(
-                    AssinaturaEspelho.tenant_id == tenant_id,
+                    AssinaturaEspelho.tenant_id == acesso.tenant_id,
                     AssinaturaEspelho.espelho_id == encontrado.id,
                 )
                 .order_by(AssinaturaEspelho.criado_em.asc())
@@ -247,9 +281,10 @@ async def assinar_espelho(
     ],
     espelho_id: Annotated[UUID, Path(alias="espelhoId", description="Identificador do espelho.")],
     corpo: contrato.AssinaturaEspelhoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("espelhos.assinar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ASSINAR)],
     sessao: SessaoDb,
     request: Request,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -266,13 +301,13 @@ async def assinar_espelho(
     ] = None,
 ) -> contrato.AssinaturaEspelho:
     """Assinar espelho de ponto"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     assinado = await assinatura_servico.assinar_espelho(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         espelho_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         ip=_ip_do_cliente(request),
         user_agent=_user_agent(request),
     )
@@ -289,8 +324,9 @@ async def assinar_espelho(
 )
 async def baixar_espelho_pdf(
     espelho_id: Annotated[UUID, Path(alias="espelhoId", description="Identificador do espelho.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("espelhos.exportar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXPORTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -315,8 +351,8 @@ async def baixar_espelho_pdf(
     permanece sem efeito colateral; quem quiser o PDF persistido chama
     `gerarEspelhos` com `gerarPdf=true`).
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    espelho = await espelho_servico.obter_espelho(sessao, tenant_id, espelho_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    espelho = await espelho_servico.obter_espelho(sessao, acesso.tenant_id, espelho_id)
 
     if espelho.conteudo_ref:
         pdf_bytes = await obter_objeto(espelho.conteudo_ref)
@@ -325,7 +361,7 @@ async def baixar_espelho_pdf(
             (
                 await sessao.execute(
                     sa.select(AssinaturaEspelho).where(
-                        AssinaturaEspelho.tenant_id == tenant_id,
+                        AssinaturaEspelho.tenant_id == acesso.tenant_id,
                         AssinaturaEspelho.espelho_id == espelho.id,
                         AssinaturaEspelho.status == "assinado",
                     )
@@ -350,4 +386,8 @@ async def baixar_espelho_pdf(
             ],
         )
 
+    # Devolver um `Response` proprio nao perde os cabecalhos `RateLimit-*`
+    # setados acima no `response` injetado: o FastAPI faz
+    # `response.headers.raw.extend(sub_response.headers.raw)` tambem quando o
+    # handler devolve um `Response` direto.
     return Response(content=pdf_bytes, media_type="application/pdf")

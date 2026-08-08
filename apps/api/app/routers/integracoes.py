@@ -15,6 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import ContextoAcesso, exigir_permissao_ou_escopo
 from app.comum.idempotencia_generica import (
     ChaveIdempotencia,
     abrir_operacao,
@@ -25,7 +26,6 @@ from app.comum.limitador_taxa import exigir_limite_taxa
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.db.sessao import SessaoDb
-from app.integracoes.webhooks.seguranca import ContextoAcesso, exigir_permissao_ou_escopo
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["integracoes"])

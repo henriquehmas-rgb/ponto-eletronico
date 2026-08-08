@@ -8,6 +8,16 @@ Regra de negocio implementada na fase F6 (agente A1, ownership deste arquivo --
 ver `docs/fases/F06-integracao-control-id.md`, secao 5). A regra em si vive em
 `app.terminais.servico`; este modulo so traduz HTTP <-> servico, no mesmo
 padrao estrutural de `app/routers/colaboradores.py` (F2).
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -18,15 +28,39 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 from app.terminais import servico
 
 roteador = APIRouter(tags=["terminais"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_TERMINAIS_LER = exigir_permissao_ou_escopo(
+    permissao="terminais.ler", escopo="dispositivos:ler"
+)
+_ACESSO_TERMINAIS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="terminais.criar", escopo="dispositivos:escrever"
+)
+_ACESSO_TERMINAIS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="terminais.editar", escopo="dispositivos:escrever"
+)
+_ACESSO_TERMINAIS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="terminais.excluir", escopo="dispositivos:escrever"
+)
+_ACESSO_TERMINAIS_EXECUTAR = exigir_permissao_ou_escopo(
+    permissao="terminais.executar", escopo="dispositivos:escrever"
+)
 
 
 @roteador.get(
@@ -37,8 +71,9 @@ roteador = APIRouter(tags=["terminais"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_terminais(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -90,10 +125,10 @@ async def listar_terminais(
     ] = None,
 ) -> contrato.ListaTerminal:
     """Listar terminais"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_terminais(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
         fabricante=fabricante,
@@ -124,8 +159,9 @@ async def criar_terminal(
         ),
     ],
     corpo: contrato.TerminalCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -142,8 +178,10 @@ async def criar_terminal(
     ] = None,
 ) -> contrato.Terminal:
     """Criar terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    terminal = await servico.criar_terminal(sessao, tenant_id, corpo, sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    terminal = await servico.criar_terminal(
+        sessao, acesso.tenant_id, corpo, usuario_id_do_acesso(acesso)
+    )
     return servico.montar_resposta_terminal(terminal)
 
 
@@ -158,8 +196,9 @@ async def obter_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -176,8 +215,8 @@ async def obter_terminal(
     ] = None,
 ) -> contrato.Terminal:
     """Obter terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    terminal = await servico.obter_terminal(sessao, tenant_id, terminal_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    terminal = await servico.obter_terminal(sessao, acesso.tenant_id, terminal_id)
     return servico.montar_resposta_terminal(terminal)
 
 
@@ -201,8 +240,9 @@ async def atualizar_terminal(
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
     corpo: contrato.TerminalAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -219,9 +259,9 @@ async def atualizar_terminal(
     ] = None,
 ) -> contrato.Terminal:
     """Atualizar terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     terminal = await servico.atualizar_terminal(
-        sessao, tenant_id, terminal_id, corpo, sujeito.usuario_id
+        sessao, acesso.tenant_id, terminal_id, corpo, usuario_id_do_acesso(acesso)
     )
     return servico.montar_resposta_terminal(terminal)
 
@@ -246,8 +286,9 @@ async def excluir_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -264,9 +305,15 @@ async def excluir_terminal(
     ] = None,
 ) -> Response:
     """Excluir terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico.excluir_terminal(sessao, tenant_id, terminal_id, sujeito.usuario_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico.excluir_terminal(
+        sessao, acesso.tenant_id, terminal_id, usuario_id_do_acesso(acesso)
+    )
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -280,8 +327,9 @@ async def listar_saude_terminal(
     terminal_id: Annotated[
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -326,10 +374,10 @@ async def listar_saude_terminal(
     ] = None,
 ) -> contrato.ListaTerminalSaude:
     """Consultar saude do terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_saude_terminal(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         terminal_id,
         desde=desde,
         somente_offline=somente_offline,
@@ -361,8 +409,9 @@ async def sincronizar_terminal(
         UUID, Path(alias="terminalId", description="Identificador do terminal.")
     ],
     corpo: contrato.SincronizacaoTerminalRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("terminais.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_TERMINAIS_EXECUTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -379,13 +428,13 @@ async def sincronizar_terminal(
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
     """Sincronizar terminal"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     config = obter_configuracao()
     return await servico.sincronizar_terminal(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         terminal_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         redis_url=config.redis_url,
     )

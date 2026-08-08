@@ -1,11 +1,19 @@
-"""Rotas da tag `apuracoes` do contrato. GERADO -- nao editar.
+"""Rotas da tag `apuracoes` do contrato.
 
 Resultado do motor de calculo por vinculo e dia, com decomposicao auditavel de cada bloco de minutos, e as ocorrencias detectadas.
 A apuracao e deterministica e recalculavel: mesmos insumos produzem exatamente o mesmo resultado.
 
-Regra de negocio destas operacoes entra na fase F4. Ate la toda chamada
-responde 501 com PONTO-INT-005. Regerar com
-`python tools/gerar_do_contrato.py`.
+Regra de negocio vive em `app.apuracao.dominio.consulta` e
+`app.apuracao.tratamento.*`; este modulo so traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto): o
+contrato ja declarava os tres esquemas alternativos por operacao
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era aceita ate
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/empresas.py`/`webhooks.py`) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -14,19 +22,40 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
 from app.apuracao.dominio import consulta
 from app.apuracao.tratamento import ocorrencias as ocorrencias_servico
 from app.apuracao.tratamento import recalculo
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["apuracoes"])
+
+# Uma instancia por par (permissao, escopo) unico deste arquivo -- nunca
+# `exigir_permissao_ou_escopo(...)` chamado de novo dentro de um handler
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_APURACOES_LER = exigir_permissao_ou_escopo(
+    permissao="apuracoes.ler", escopo="tratamentos:ler"
+)
+_ACESSO_APURACOES_EXECUTAR = exigir_permissao_ou_escopo(
+    permissao="apuracoes.executar", escopo="tratamentos:escrever"
+)
+_ACESSO_OCORRENCIAS_LER = exigir_permissao_ou_escopo(
+    permissao="ocorrencias.ler", escopo="tratamentos:ler"
+)
+_ACESSO_OCORRENCIAS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="ocorrencias.editar", escopo="tratamentos:escrever"
+)
 
 
 @roteador.get(
@@ -39,8 +68,9 @@ roteador = APIRouter(tags=["apuracoes"])
 async def listar_apuracoes(
     de: Annotated[date, Query(alias="de", description="Primeiro dia do intervalo.")],
     ate: Annotated[date, Query(alias="ate", description="Ultimo dia do intervalo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APURACOES_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -115,10 +145,10 @@ async def listar_apuracoes(
     ] = None,
 ) -> contrato.ListaApuracaoDia:
     """Listar apuracoes do dia"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados, paginacao = await consulta.listar_apuracoes(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         de=de,
         ate=ate,
         empresa_id=empresa_id,
@@ -148,8 +178,9 @@ async def obter_apuracao(
     apuracao_id: Annotated[
         UUID, Path(alias="apuracaoId", description="Identificador da apuracao.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APURACOES_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -166,7 +197,7 @@ async def obter_apuracao(
     ] = None,
 ) -> contrato.ApuracaoDia:
     """Obter apuracao do dia"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     return await consulta.obter_apuracao(sessao, apuracao_id)
 
 
@@ -187,8 +218,9 @@ async def recalcular_apuracoes(
         ),
     ],
     corpo: contrato.RecalculoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("apuracoes.executar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APURACOES_EXECUTAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -205,10 +237,10 @@ async def recalcular_apuracoes(
     ] = None,
 ) -> contrato.ProcessamentoAssincrono:
     """Recalcular apuracoes"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     config = obter_configuracao()
     job_id, total_vinculos = await recalculo.enfileirar_recalculo(
-        sessao, tenant_id, corpo, redis_url=config.redis_url
+        sessao, acesso.tenant_id, corpo, redis_url=config.redis_url
     )
     return contrato.ProcessamentoAssincrono.model_validate(
         {
@@ -229,8 +261,9 @@ async def recalcular_apuracoes(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_ocorrencias(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("ocorrencias.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_OCORRENCIAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -288,10 +321,10 @@ async def listar_ocorrencias(
     ] = None,
 ) -> contrato.ListaOcorrencia:
     """Listar ocorrencias"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados, paginacao = await consulta.listar_ocorrencias(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
         colaborador_id=colaborador_id,
@@ -327,8 +360,9 @@ async def atualizar_ocorrencia(
         UUID, Path(alias="ocorrenciaId", description="Identificador da ocorrencia.")
     ],
     corpo: contrato.OcorrenciaAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("ocorrencias.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_OCORRENCIAS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -345,8 +379,8 @@ async def atualizar_ocorrencia(
     ] = None,
 ) -> contrato.Ocorrencia:
     """Atualizar ocorrencia"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizada = await ocorrencias_servico.atualizar_ocorrencia(
-        sessao, ocorrencia_id, corpo, usuario_id=sujeito.usuario_id
+        sessao, ocorrencia_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
     )
     return contrato.Ocorrencia.model_validate(atualizada, from_attributes=True)

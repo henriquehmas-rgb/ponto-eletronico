@@ -12,11 +12,13 @@ import datetime as dt
 import hashlib
 import uuid
 
+from fastapi import Response
 from fastapi.responses import PlainTextResponse
 from ponto_contracts import Comprovante as ComprovanteOrm
 from ponto_contracts import Marcacao as MarcacaoOrm
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.autenticacao_cliente import ContextoAcesso
 from app.core.seguranca import Sujeito
 from app.marcacao.comprovantes import consulta as consulta_comprovantes
 from app.marcacao.dominio.registro import DadosMarcacao, persistir_marcacao
@@ -35,6 +37,13 @@ def _sujeito(contexto: ContextoF5) -> Sujeito:
         autenticado=True,
         permissoes=frozenset({"comprovantes.ler"}),
     )
+
+
+def _acesso(contexto: ContextoF5) -> ContextoAcesso:
+    # Retrofit de 2026-08-08: `obter_comprovante` (router) passou a receber
+    # `ContextoAcesso`, nao mais `Sujeito` direto -- ver
+    # `app/comum/autenticacao_cliente.py`.
+    return ContextoAcesso(tenant_id=contexto.tenant_id, sujeito=_sujeito(contexto))
 
 
 async def _criar_marcacao(sessao: AsyncSession, contexto: ContextoF5) -> MarcacaoOrm:
@@ -116,12 +125,13 @@ async def test_obter_comprovante_accept_text_plain_devolve_texto_cru(
     comprovante = await _criar_comprovante(
         sessao_f5, marcacao, emitido_em=dt.datetime.now(tz=dt.UTC)
     )
-    sujeito = _sujeito(contexto_f5)
+    acesso = _acesso(contexto_f5)
 
     resposta_texto = await obter_comprovante(
         comprovante_id=comprovante.id,
-        sujeito=sujeito,
+        acesso=acesso,
         sessao=sessao_f5,
+        response=Response(),
         accept="text/plain",
     )
     assert isinstance(resposta_texto, PlainTextResponse)
@@ -131,8 +141,9 @@ async def test_obter_comprovante_accept_text_plain_devolve_texto_cru(
 
     resposta_json = await obter_comprovante(
         comprovante_id=comprovante.id,
-        sujeito=sujeito,
+        acesso=acesso,
         sessao=sessao_f5,
+        response=Response(),
         accept="application/json",
     )
     assert isinstance(resposta_json, contrato.Comprovante)
@@ -141,8 +152,9 @@ async def test_obter_comprovante_accept_text_plain_devolve_texto_cru(
 
     resposta_sem_accept = await obter_comprovante(
         comprovante_id=comprovante.id,
-        sujeito=sujeito,
+        acesso=acesso,
         sessao=sessao_f5,
+        response=Response(),
     )
     assert isinstance(resposta_sem_accept, contrato.Comprovante)
     assert resposta_sem_accept.numero == comprovante.numero

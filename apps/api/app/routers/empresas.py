@@ -4,6 +4,16 @@ Pessoas juridicas empregadoras.
 Matriz e filiais sao registros distintos, cada um com CNPJ proprio, REP-P proprio e arquivos fiscais proprios.
 
 Implementado na Fase F2 (agente A1). Regra de negocio em `app/organizacao/empresas.py`.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -13,9 +23,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.organizacao import empresas as servico
 from app.organizacao.paginacao import paginar, resolver_pedido
@@ -24,6 +39,21 @@ from app.schemas import contrato
 roteador = APIRouter(tags=["empresas"])
 
 _ORDENACAO_PADRAO = "criado_em:desc"
+
+# Uma instancia por operacao (nao uma fabrica chamada de novo dentro do
+# handler): mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LISTAR = exigir_permissao_ou_escopo(permissao="empresas.ler", escopo="organizacao:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="empresas.criar", escopo="organizacao:escrever"
+)
+_ACESSO_OBTER = exigir_permissao_ou_escopo(permissao="empresas.ler", escopo="organizacao:ler")
+_ACESSO_ATUALIZAR = exigir_permissao_ou_escopo(
+    permissao="empresas.editar", escopo="organizacao:escrever"
+)
+_ACESSO_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="empresas.excluir", escopo="organizacao:escrever"
+)
 
 
 @roteador.get(
@@ -35,7 +65,8 @@ _ORDENACAO_PADRAO = "criado_em:desc"
 )
 async def listar_empresas(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LISTAR)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -97,13 +128,13 @@ async def listar_empresas(
     ] = None,
 ) -> contrato.ListaEmpresa:
     """Listar empresas"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     pedido = resolver_pedido(
         cursor=cursor, limite=limite, ordenar=ordenar, ordenacao_padrao=_ORDENACAO_PADRAO
     )
     linhas = await servico.listar_empresas(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         pedido=pedido,
         empresa_id=empresa_id,
         cnpj=cnpj,
@@ -130,7 +161,8 @@ async def listar_empresas(
 )
 async def criar_empresa(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -155,11 +187,11 @@ async def criar_empresa(
     ] = None,
 ) -> contrato.Empresa:
     """Criar empresa"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     empresa = await servico.criar_empresa(
         sessao,
-        tenant_id=tenant_id,
-        usuario_id=sujeito.usuario_id,
+        tenant_id=acesso.tenant_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         matriz_id=corpo.matriz_id,
         tipo=corpo.tipo,
         cnpj=corpo.cnpj,
@@ -196,7 +228,8 @@ async def criar_empresa(
 )
 async def obter_empresa(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_OBTER)],
+    response: Response,
     empresa_id: Annotated[UUID, Path(alias="empresaId", description="Identificador da empresa.")],
     x_tenant: Annotated[
         str | None,
@@ -214,8 +247,8 @@ async def obter_empresa(
     ] = None,
 ) -> contrato.Empresa:
     """Obter empresa"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    empresa = await servico.obter_empresa(sessao, tenant_id=tenant_id, empresa_id=empresa_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    empresa = await servico.obter_empresa(sessao, tenant_id=acesso.tenant_id, empresa_id=empresa_id)
     return contrato.Empresa.model_validate(empresa, from_attributes=True)
 
 
@@ -229,7 +262,8 @@ async def obter_empresa(
 )
 async def atualizar_empresa(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_ATUALIZAR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -255,13 +289,13 @@ async def atualizar_empresa(
     ] = None,
 ) -> contrato.Empresa:
     """Atualizar empresa"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = corpo.model_dump(exclude_unset=True)
     empresa = await servico.atualizar_empresa(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         empresa_id=empresa_id,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         dados=dados,
     )
     return contrato.Empresa.model_validate(empresa, from_attributes=True)
@@ -278,7 +312,8 @@ async def atualizar_empresa(
 )
 async def excluir_empresa(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("empresas.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EXCLUIR)],
+    response: Response,
     idempotency_key: Annotated[
         str,
         Header(
@@ -303,8 +338,16 @@ async def excluir_empresa(
     ] = None,
 ) -> Response:
     """Excluir empresa"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_empresa(
-        sessao, tenant_id=tenant_id, empresa_id=empresa_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        empresa_id=empresa_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos
+    # `RateLimit-*` setados acima, quando o acesso e de cliente de
+    # integracao) em vez de construir um `Response` novo, que perderia
+    # esses cabecalhos -- mesmo padrao de `app/routers/webhooks.py`.
+    response.status_code = 204
+    return response

@@ -61,7 +61,7 @@ from typing import Annotated
 from uuid import UUID
 
 import sqlalchemy as sa
-from fastapi import Header, Request
+from fastapi import Depends, Header, Request, Response
 from ponto_contracts import ApiClient, ApiKey, OauthToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,7 +70,14 @@ from app.core.erros import ErroDeAplicacao
 from app.identidade.autenticacao.tenant import sessao_com_tenant_resolvido
 from app.identidade.tokens import oauth as oauth_mod
 
-__all__ = ["ClienteAutenticado", "exigir_escopo"]
+__all__ = [
+    "ClienteAutenticado",
+    "ContextoAcesso",
+    "aplicar_limite_taxa_se_cliente",
+    "exigir_escopo",
+    "exigir_permissao_ou_escopo",
+    "usuario_id_do_acesso",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,3 +237,136 @@ def exigir_escopo(escopo: str) -> Callable[..., Awaitable[ClienteAutenticado]]:
             )
 
     return _dependencia
+
+
+# =============================================================================
+# Combinador sessão humana OU cliente de integração (movido de
+# `app.integracoes.webhooks.seguranca` em 2026-08-08 -- era genérico desde a
+# origem em F13/A3, só morava num módulo com nome de fase por não ter tido
+# um segundo consumidor ainda; mesma recomendação já registrada em
+# `docs/backlog.md`, 2026-08-05, "F14 / A2 (T \"decisão core/seguranca.py\")").
+# Retrofit de OAuth/API-key para as rotas de F1-F12, decisão do dono do
+# produto em 2026-08-08 apesar de F14/A2 ter deixado como "sem valor de
+# produto validado ainda" -- risco técnico reavaliado e considerado baixo
+# (campos de auditoria já são `UUID` nullable em todo o schema, sem
+# migration necessária; padrão idêntico já provado em produção por
+# `webhooks.py`/`integracoes.py`, F13).
+# =============================================================================
+
+from app.core.seguranca import (  # noqa: E402
+    Sujeito,
+    exigir_permissao,
+    obter_sujeito,
+    tenant_id_ou_erro,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ContextoAcesso:
+    """União das duas formas de acesso válido a um endpoint que aceita os
+    três esquemas do contrato (`bearerAuth`/`oauth2`/`apiKeyAuth`).
+    Exatamente um de `sujeito`/`cliente` é não-nulo."""
+
+    tenant_id: UUID
+    sujeito: Sujeito | None = None
+    cliente: ClienteAutenticado | None = None
+
+    @property
+    def api_client_id(self) -> UUID | None:
+        cliente = self.cliente
+        if cliente is None:
+            return None
+        return cliente.api_client_id
+
+
+def exigir_permissao_ou_escopo(
+    *, permissao: str, escopo: str
+) -> Callable[..., Awaitable[ContextoAcesso]]:
+    """Fábrica de dependência FastAPI: sessão humana com `permissao`
+    concedida OU cliente de integração com `escopo` concedido.
+
+    Tenta sessão humana primeiro (reaproveitando `exigir_permissao` por
+    inteiro -- inclusive o veto de `perfis_somente_leitura` e o registro de
+    `acessos_dados_sensiveis`). Sem sessão humana autenticada, cai para
+    `exigir_escopo`. As duas falhas possíveis desta segunda etapa
+    (`PONTO-AUTH-002` sem credencial nenhuma, `PONTO-PERM-003` escopo
+    insuficiente) são as que `exigir_escopo` já produz -- não reimplementadas
+    aqui.
+    """
+
+    async def _resolver(
+        request: Request,
+        sujeito: Annotated[Sujeito, Depends(obter_sujeito)],
+    ) -> ContextoAcesso:
+        if sujeito.autenticado:
+            verificador = exigir_permissao(permissao)
+            confirmado = await verificador(sujeito=sujeito)
+            return ContextoAcesso(tenant_id=tenant_id_ou_erro(confirmado), sujeito=confirmado)
+
+        token_bearer = _extrair_bearer(request.headers.get("authorization"))
+        chave_api = (request.headers.get("x-api-key") or "").strip() or None
+        if not token_bearer and not chave_api:
+            raise ErroDeAplicacao("PONTO-AUTH-002")
+
+        cliente = await exigir_escopo(escopo)(
+            request,
+            authorization=request.headers.get("authorization"),
+            x_api_key=request.headers.get("x-api-key"),
+            x_tenant=request.headers.get("x-tenant"),
+        )
+        return ContextoAcesso(tenant_id=cliente.tenant_id, cliente=cliente)
+
+    return _resolver
+
+
+def usuario_id_do_acesso(acesso: ContextoAcesso) -> UUID | None:
+    """`usuario_id` para gravar em campo de auditoria (`criado_por`/
+    `atualizado_por`/`excluido_por`, todos `UUID` nullable no schema) --
+    `None` quando o acesso é de cliente de integração (não há usuário humano
+    para atribuir a ação)."""
+    return acesso.sujeito.usuario_id if acesso.sujeito is not None else None
+
+
+async def _cliente_ja_resolvido() -> ClienteAutenticado:  # pragma: no cover
+    """Nunca chamada de verdade: `_LIMITE_TAXA_ACESSO` abaixo sempre recebe
+    `cliente=` explícito de `aplicar_limite_taxa_se_cliente`, contornando a
+    resolução via `Depends()` -- existe só para `exigir_limite_taxa` receber
+    um *callable* do tipo certo. Mesmo padrão de `app/routers/webhooks.py`."""
+    raise AssertionError("_cliente_ja_resolvido nao deveria ser invocada")
+
+
+#: Instância única, criada de forma PREGUIÇOSA (não no import do módulo):
+#: `app.comum.limitador_taxa` importa `ClienteAutenticado` DESTE módulo no
+#: próprio nível de módulo -- resolver `exigir_limite_taxa` aqui de olhos
+#: abertos, no import, forma um ciclo (achado real, 2026-08-08: `app.main`
+#: falhava com `ImportError: cannot import name 'exigir_limite_taxa' from
+#: partially initialized module`). Adiada para a PRIMEIRA chamada de
+#: `aplicar_limite_taxa_se_cliente`, quando os dois módulos já terminaram de
+#: carregar. Chamada sempre manualmente (nunca via `Depends()` direto),
+#: então a identidade do *callable* não importa para o cache de dependência
+#: do FastAPI aqui -- o limitador em si é chaveado por
+#: `cliente.api_client_id` (`app.comum.limitador_taxa`), não pela identidade
+#: desta função. Uma única instância compartilhada por TODO o processo (não
+#: uma por router) é segura.
+_limite_taxa_acesso_cache: Callable[..., Awaitable[None]] | None = None
+
+
+def _limite_taxa_acesso() -> Callable[..., Awaitable[None]]:
+    global _limite_taxa_acesso_cache
+    if _limite_taxa_acesso_cache is None:
+        from app.comum.limitador_taxa import exigir_limite_taxa
+
+        _limite_taxa_acesso_cache = exigir_limite_taxa(_cliente_ja_resolvido)
+    return _limite_taxa_acesso_cache
+
+
+async def aplicar_limite_taxa_se_cliente(response: Response, acesso: ContextoAcesso) -> None:
+    """`exigir_limite_taxa` só faz sentido para cliente de integração
+    (`ClienteAutenticado.rate_limit_por_minuto`) -- sessão humana usa
+    `app.comum.limitador_taxa.exigir_limite_taxa_sessao` (via `Depends()`
+    declarativo na própria rota, não esta função). Chamada MANUAL porque a
+    rota só sabe qual dos dois caminhos foi usado depois que
+    `exigir_permissao_ou_escopo` já decidiu."""
+    if acesso.cliente is None:
+        return
+    await _limite_taxa_acesso()(response=response, cliente=acesso.cliente)

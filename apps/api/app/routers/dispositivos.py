@@ -7,6 +7,16 @@ Regra de negocio implementada na fase F2 (agente A3, T9): estas rotas so
 orquestram HTTP <-> `app.biometria.dispositivos` (cadastro e vinculo). Os
 sinais antifraude (`attestation_status`, `root_detectado`, ...) sao apenas
 cadastrados e expostos aqui -- a avaliacao/score e da F14 (secao 9 do PCF).
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -17,13 +27,34 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
 from app.biometria import dispositivos as servico
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["dispositivos"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_DISPOSITIVOS_LER = exigir_permissao_ou_escopo(
+    permissao="dispositivos.ler", escopo="dispositivos:ler"
+)
+_ACESSO_DISPOSITIVOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="dispositivos.criar", escopo="dispositivos:escrever"
+)
+_ACESSO_DISPOSITIVOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="dispositivos.editar", escopo="dispositivos:escrever"
+)
+_ACESSO_DISPOSITIVOS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="dispositivos.excluir", escopo="dispositivos:escrever"
+)
 
 
 def _dispositivo_para_schema(
@@ -75,7 +106,8 @@ def _dispositivo_para_schema(
 )
 async def listar_dispositivos(
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -138,10 +170,10 @@ async def listar_dispositivos(
     ] = None,
 ) -> contrato.ListaDispositivo:
     """Listar dispositivos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, tem_mais, proximo = await servico.listar_dispositivos(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
         colaborador_id=colaborador_id,
@@ -188,7 +220,7 @@ async def criar_dispositivo(
     ],
     corpo: contrato.DispositivoCriar,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_CRIAR)],
     response: Response,
     x_tenant: Annotated[
         str | None,
@@ -206,7 +238,7 @@ async def criar_dispositivo(
     ] = None,
 ) -> contrato.Dispositivo:
     """Criar dispositivo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = servico.DadosDispositivoCriar(
         empresa_id=corpo.empresa_id,
         unidade_id=corpo.unidade_id,
@@ -226,7 +258,10 @@ async def criar_dispositivo(
         observacoes=corpo.observacoes,
     )
     dispositivo = await servico.criar_dispositivo(
-        sessao, tenant_id=tenant_id, dados=dados, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        dados=dados,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     response.headers["Location"] = f"/v1/dispositivos/{dispositivo.id}"
     return _dispositivo_para_schema(dispositivo, None)
@@ -244,7 +279,8 @@ async def obter_dispositivo(
         UUID, Path(alias="dispositivoId", description="Identificador do dispositivo.")
     ],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_LER)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -261,12 +297,12 @@ async def obter_dispositivo(
     ] = None,
 ) -> contrato.Dispositivo:
     """Obter dispositivo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dispositivo = await servico.obter_dispositivo(
-        sessao, tenant_id=tenant_id, dispositivo_id=dispositivo_id
+        sessao, tenant_id=acesso.tenant_id, dispositivo_id=dispositivo_id
     )
     colaborador_vinculado = await servico.colaborador_vinculado_atual(
-        sessao, tenant_id=tenant_id, dispositivo_id=dispositivo_id
+        sessao, tenant_id=acesso.tenant_id, dispositivo_id=dispositivo_id
     )
     return _dispositivo_para_schema(dispositivo, colaborador_vinculado)
 
@@ -292,7 +328,8 @@ async def atualizar_dispositivo(
     ],
     corpo: contrato.DispositivoAtualizar,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_EDITAR)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -309,7 +346,7 @@ async def atualizar_dispositivo(
     ] = None,
 ) -> contrato.Dispositivo:
     """Atualizar dispositivo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     dados = servico.DadosDispositivoAtualizar(
         empresa_id=corpo.empresa_id,
         unidade_id=corpo.unidade_id,
@@ -330,13 +367,13 @@ async def atualizar_dispositivo(
     )
     dispositivo = await servico.atualizar_dispositivo(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         dispositivo_id=dispositivo_id,
         dados=dados,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     colaborador_vinculado = await servico.colaborador_vinculado_atual(
-        sessao, tenant_id=tenant_id, dispositivo_id=dispositivo_id
+        sessao, tenant_id=acesso.tenant_id, dispositivo_id=dispositivo_id
     )
     return _dispositivo_para_schema(dispositivo, colaborador_vinculado)
 
@@ -362,7 +399,8 @@ async def excluir_dispositivo(
         UUID, Path(alias="dispositivoId", description="Identificador do dispositivo.")
     ],
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_EXCLUIR)],
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -379,11 +417,18 @@ async def excluir_dispositivo(
     ] = None,
 ) -> Response:
     """Excluir dispositivo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     await servico.excluir_dispositivo(
-        sessao, tenant_id=tenant_id, dispositivo_id=dispositivo_id, usuario_id=sujeito.usuario_id
+        sessao,
+        tenant_id=acesso.tenant_id,
+        dispositivo_id=dispositivo_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
-    return Response(status_code=204)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.post(
@@ -407,7 +452,7 @@ async def vincular_dispositivo(
     ],
     corpo: contrato.VinculoDispositivoRequisicao,
     sessao: SessaoDb,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("dispositivos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DISPOSITIVOS_EDITAR)],
     response: Response,
     x_tenant: Annotated[
         str | None,
@@ -425,21 +470,21 @@ async def vincular_dispositivo(
     ] = None,
 ) -> contrato.Dispositivo:
     """Vincular dispositivo a colaborador"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     if corpo.colaborador_id is None:
         raise ErroDeAplicacao("PONTO-VAL-001", detalhe="Campo 'colaboradorId' e obrigatorio.")
     dispositivo = await servico.vincular_dispositivo(
         sessao,
-        tenant_id=tenant_id,
+        tenant_id=acesso.tenant_id,
         dispositivo_id=dispositivo_id,
         colaborador_id=corpo.colaborador_id,
         aprovar_imediatamente=bool(corpo.aprovar_imediatamente),
         revogar_anterior=bool(corpo.revogar_anterior),
         motivo=corpo.motivo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
     )
     colaborador_vinculado = await servico.colaborador_vinculado_atual(
-        sessao, tenant_id=tenant_id, dispositivo_id=dispositivo.id
+        sessao, tenant_id=acesso.tenant_id, dispositivo_id=dispositivo.id
     )
     response.headers["Location"] = f"/v1/dispositivos/{dispositivo.id}"
     return _dispositivo_para_schema(dispositivo, colaborador_vinculado)

@@ -9,7 +9,7 @@ Sete operacoes: `criarWebhook`, `listarWebhooks`, `obterWebhook`,
 Autenticacao dupla (contrato declara os tres esquemas alternativos por
 operacao -- `bearerAuth`/`oauth2`/`apiKeyAuth`): sessao humana (painel de
 RH/gestor, A4/T14) OU cliente de integracao (OAuth/API key, A1/T1). Ver
-`app.integracoes.webhooks.seguranca.exigir_permissao_ou_escopo`.
+`app.comum.autenticacao_cliente.exigir_permissao_ou_escopo`.
 
 Idempotencia (T3 de A1) e limite de taxa (T4 de A1) aplicados nas quatro
 operacoes de escrita/execucao (`criarWebhook`, `atualizarWebhook`,
@@ -25,27 +25,39 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
-from app.comum.autenticacao_cliente import ClienteAutenticado
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    exigir_permissao_ou_escopo,
+)
+from app.comum.autenticacao_cliente import (
+    aplicar_limite_taxa_se_cliente as _aplicar_limite_taxa_se_cliente,
+)
+from app.comum.autenticacao_cliente import (
+    usuario_id_do_acesso as _usuario_id,
+)
 from app.comum.idempotencia_generica import (
     ChaveIdempotencia,
     abrir_operacao,
     concluir_operacao,
     exigir_idempotencia,
 )
-from app.comum.limitador_taxa import exigir_limite_taxa
 from app.core.config import obter_configuracao
 from app.core.erros import RESPOSTAS_PADRAO
 from app.db.sessao import SessaoDb
 from app.integracoes.webhooks import servico
-from app.integracoes.webhooks.seguranca import ContextoAcesso, exigir_permissao_ou_escopo
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["webhooks"])
 
-# Uma instancia por operacao (nao uma fabrica chamada de novo dentro do
-# handler): `exigir_limite_taxa`/o cache de dependencia do FastAPI dependem
-# de identidade estavel do *callable* -- mesmo motivo documentado em
-# `app.comum.limitador_taxa`.
+# `ContextoAcesso`/`exigir_permissao_ou_escopo`/`aplicar_limite_taxa_se_cliente`/
+# `usuario_id_do_acesso` movidos para `app.comum.autenticacao_cliente` em
+# 2026-08-08 (eram genéricos desde a origem em F13/A3, só moravam neste
+# módulo por não terem tido consumidor fora de `webhooks`/`integracoes`
+# ainda -- agora reaproveitados pelo retrofit de OAuth/API-key de F1-F12,
+# ver `docs/backlog.md`). Uma instancia por operacao (nao uma fabrica
+# chamada de novo dentro do handler): `exigir_limite_taxa`/o cache de
+# dependencia do FastAPI dependem de identidade estavel do *callable* --
+# mesmo motivo documentado em `app.comum.limitador_taxa`.
 _ACESSO_CRIAR = exigir_permissao_ou_escopo(permissao="webhooks.criar", escopo="webhooks:escrever")
 _ACESSO_LISTAR = exigir_permissao_ou_escopo(permissao="webhooks.ler", escopo="webhooks:ler")
 _ACESSO_OBTER = exigir_permissao_ou_escopo(permissao="webhooks.ler", escopo="webhooks:ler")
@@ -61,38 +73,6 @@ _ACESSO_LISTAR_ENTREGAS = exigir_permissao_ou_escopo(
 _ACESSO_REENVIAR = exigir_permissao_ou_escopo(
     permissao="webhooks.executar", escopo="webhooks:escrever"
 )
-
-
-async def _cliente_ja_resolvido() -> ClienteAutenticado:  # pragma: no cover
-    """Nunca chamada de verdade: `_LIMITE_TAXA` abaixo sempre recebe
-    `cliente=` explicito de `_aplicar_limite_taxa_se_cliente`, contornando a
-    resolucao via `Depends()`. Existe so para `exigir_limite_taxa` receber um
-    *callable* do tipo certo (`Callable[..., Awaitable[ClienteAutenticado]]`)
-    -- ver docstring de `app.comum.limitador_taxa.exigir_limite_taxa` sobre
-    por que normalmente se passaria a MESMA instancia de `exigir_escopo(...)`
-    da rota; aqui a rota usa `exigir_permissao_ou_escopo` (uniao humana/
-    cliente), nao `exigir_escopo` isolado, entao nao ha essa instancia unica
-    para reaproveitar."""
-    raise AssertionError("_cliente_ja_resolvido nao deveria ser invocada")
-
-
-_LIMITE_TAXA = exigir_limite_taxa(_cliente_ja_resolvido)
-
-
-async def _aplicar_limite_taxa_se_cliente(response: Response, acesso: ContextoAcesso) -> None:
-    """`exigir_limite_taxa` (T4) so faz sentido para cliente de integracao
-    (`ClienteAutenticado.rate_limit_por_minuto`) -- sessao humana nao tem
-    equivalente neste contrato. Chamada MANUAL (nao via `Depends()` direto
-    na rota) porque a rota precisa decidir isso SO DEPOIS de saber qual dos
-    dois caminhos de autenticacao foi usado (`exigir_permissao_ou_escopo`
-    ja fez essa escolha)."""
-    if acesso.cliente is None:
-        return
-    await _LIMITE_TAXA(response=response, cliente=acesso.cliente)
-
-
-def _usuario_id(acesso: ContextoAcesso) -> UUID | None:
-    return acesso.sujeito.usuario_id if acesso.sujeito is not None else None
 
 
 @roteador.post(

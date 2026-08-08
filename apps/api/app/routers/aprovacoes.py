@@ -9,6 +9,26 @@ arquivo -- ver `docs/fases/F10-workflows-aprovacoes-fechamento.md`, seção
 5). A regra em si vive em `app.workflow.aprovacoes.servico`/`delegacoes`;
 este módulo só traduz HTTP <-> serviço, mesmo padrão de
 `app/routers/tratamentos.py` (F4).
+
+Autenticação dupla (retrofit de 2026-08-08, decisão do dono do produto): o
+contrato já declarava os três esquemas alternativos por operação
+(`bearerAuth`/`oauth2`/`apiKeyAuth`), mas só sessão humana era aceita até
+agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador já provado em
+`app/routers/empresas.py`/`webhooks.py`) -- sessão humana É tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integração (OAuth/
+API key) só entra quando não há sessão humana autenticada.
+
+`listarAprovacoesPendentes` é o único ponto deste arquivo em que a identidade
+humana não é só auditoria: `servico.listar_aprovacoes_pendentes` monta o
+recorte de visibilidade a partir de `sujeito_usuario_id`/`sujeito_perfis`
+(etapas atribuídas ao usuário, etapas do papel dele e etapas que ele responde
+por delegação). Um cliente de integração não tem usuário nem perfis, então
+passa `None`/`frozenset()` -- o serviço já trata esse caso deixando
+`condicoes_visibilidade` vazia, o que devolve a fila inteira do tenant. É o
+recorte correto para uma integração server-to-server (escopo
+`solicitacoes:ler` é concedido no nível do tenant, não de um aprovador), e o
+caminho humano fica inalterado byte a byte.
 """
 
 from __future__ import annotations
@@ -17,16 +37,43 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query, Request
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+    usuario_id_do_acesso,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.schemas import contrato
 from app.workflow.aprovacoes import delegacoes, servico
 
 roteador = APIRouter(tags=["aprovacoes"])
+
+# Uma instancia por par (permissao, escopo) unico deste arquivo -- nunca
+# `exigir_permissao_ou_escopo(...)` chamado de novo dentro de um handler
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="aprovacoes.ler", escopo="solicitacoes:ler")
+_ACESSO_APROVAR = exigir_permissao_ou_escopo(
+    permissao="aprovacoes.aprovar", escopo="solicitacoes:escrever"
+)
+_ACESSO_DELEGACOES_LER = exigir_permissao_ou_escopo(
+    permissao="delegacoes.ler", escopo="solicitacoes:ler"
+)
+_ACESSO_DELEGACOES_CRIAR = exigir_permissao_ou_escopo(
+    permissao="delegacoes.criar", escopo="solicitacoes:escrever"
+)
+
+
+def _perfis_do_acesso(acesso: ContextoAcesso) -> frozenset[str]:
+    """Perfis RBAC humanos do acesso -- vazio para cliente de integracao, que
+    nao tem perfil (ver nota no docstring do modulo)."""
+    if acesso.sujeito is None:
+        return frozenset()
+    return frozenset(acesso.sujeito.perfis)
 
 
 @roteador.get(
@@ -37,8 +84,9 @@ roteador = APIRouter(tags=["aprovacoes"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_aprovacoes_pendentes(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("aprovacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -96,12 +144,12 @@ async def listar_aprovacoes_pendentes(
     ] = None,
 ) -> contrato.ListaAprovacao:
     """Listar aprovacoes"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_aprovacoes_pendentes(
         sessao,
-        tenant_id,
-        sujeito_usuario_id=sujeito.usuario_id,
-        sujeito_perfis=frozenset(sujeito.perfis),
+        acesso.tenant_id,
+        sujeito_usuario_id=usuario_id_do_acesso(acesso),
+        sujeito_perfis=_perfis_do_acesso(acesso),
         decisao=decisao,
         papel=papel,
         solicitacao_id=solicitacao_id,
@@ -135,9 +183,10 @@ async def decidir_aprovacao(
         UUID, Path(alias="aprovacaoId", description="Identificador da etapa de aprovacao.")
     ],
     corpo: contrato.DecisaoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("aprovacoes.aprovar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_APROVAR)],
     sessao: SessaoDb,
     requisicao: Request,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -154,15 +203,15 @@ async def decidir_aprovacao(
     ] = None,
 ) -> contrato.Aprovacao:
     """Aprovar ou reprovar etapa de aprovacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     ip = requisicao.client.host if requisicao.client else None
     user_agent = requisicao.headers.get("user-agent")
     decidida = await servico.decidir_aprovacao(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         aprovacao_id,
         corpo,
-        usuario_id=sujeito.usuario_id,
+        usuario_id=usuario_id_do_acesso(acesso),
         ip=ip,
         user_agent=user_agent,
     )
@@ -177,8 +226,9 @@ async def decidir_aprovacao(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_delegacoes(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("delegacoes.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DELEGACOES_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -236,10 +286,10 @@ async def listar_delegacoes(
     ] = None,
 ) -> contrato.ListaDelegacao:
     """Listar delegacoes"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await delegacoes.listar_delegacoes(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         delegante_usuario_id=delegante_usuario_id,
         delegado_usuario_id=delegado_usuario_id,
         status=status,
@@ -269,8 +319,9 @@ async def criar_delegacao(
         ),
     ],
     corpo: contrato.DelegacaoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("delegacoes.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_DELEGACOES_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -287,6 +338,8 @@ async def criar_delegacao(
     ] = None,
 ) -> contrato.Delegacao:
     """Criar delegacao"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    nova = await delegacoes.criar_delegacao(sessao, tenant_id, corpo, usuario_id=sujeito.usuario_id)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    nova = await delegacoes.criar_delegacao(
+        sessao, acesso.tenant_id, corpo, usuario_id=usuario_id_do_acesso(acesso)
+    )
     return contrato.Delegacao.model_validate(nova, from_attributes=True)

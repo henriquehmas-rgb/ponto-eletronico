@@ -47,21 +47,36 @@ def _permissao_exigida_por_operation_id() -> dict[str, str | None]:
 
 
 def _codigo_de_exigir_permissao(funcao: object) -> str | None:
-    """Extrai o `codigo` capturado pelo closure de `exigir_permissao(codigo)`.
+    """Extrai o `codigo`/`permissao` capturado pelo closure de
+    `exigir_permissao(codigo)` ou de `exigir_permissao_ou_escopo(permissao=...)`.
 
     `exigir_permissao` (`app/core/seguranca.py`) é uma fábrica de dependência:
     devolve uma função interna `_verificar` cujo `__closure__` guarda o
     `codigo` original -- é a única forma de recuperar, em runtime, qual
     x-permissao um `Depends(exigir_permissao("..."))` realmente carrega.
+
+    Retrofit de 2026-08-08 (OAuth/API-key nas rotas humanas): boa parte das
+    rotas trocou `Depends(exigir_permissao(...))` por
+    `Depends(exigir_permissao_ou_escopo(permissao=..., escopo=...))`
+    (`app/comum/autenticacao_cliente.py`), que chama `exigir_permissao`
+    internamente EM RUNTIME (dentro do corpo de `_resolver`), não como
+    sub-dependência declarada -- por isso não aparece na árvore de
+    `rota.dependant.dependencies` e precisa de reconhecimento próprio aqui,
+    lendo a freevar `permissao` do closure de `_resolver`.
     """
     if not callable(funcao):
         return None
-    if getattr(funcao, "__qualname__", "") != "exigir_permissao.<locals>._verificar":
+    qualname = getattr(funcao, "__qualname__", "")
+    if qualname == "exigir_permissao.<locals>._verificar":
+        nome_procurado = "codigo"
+    elif qualname == "exigir_permissao_ou_escopo.<locals>._resolver":
+        nome_procurado = "permissao"
+    else:
         return None
     code = funcao.__code__
     closure = funcao.__closure__ or ()
     for nome, cell in zip(code.co_freevars, closure, strict=True):
-        if nome == "codigo":
+        if nome == nome_procurado:
             valor = cell.cell_contents
             assert isinstance(valor, str)
             return valor

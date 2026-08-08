@@ -8,6 +8,13 @@ Regra de negocio implementada na fase F2 (agente A2, ownership deste arquivo --
 ver `docs/fases/F02-cadastros-organizacionais-pessoas.md`, secao 5). A regra em
 si vive em `app.pessoas.contratos` (que tambem publica `colaborador.admitido` e
 `colaborador.demitido`, ver T8); este modulo so traduz HTTP <-> servico.
+
+Autenticacao dupla (retrofit de 2026-08-08, mesma decisao do dono do produto
+aplicada em `app/routers/empresas.py`): as oito operacoes deste arquivo
+(`contratos` e `vinculos`) passaram de `Depends(exigir_permissao(...))` para
+`Depends(exigir_permissao_ou_escopo(...))` -- sessao humana E' tentada
+primeiro (comportamento humano preservado byte a byte), cliente de integracao
+(OAuth/API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -16,16 +23,41 @@ from datetime import date
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query
+from fastapi import APIRouter, Depends, Header, Path, Query, Response
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.pessoas import contratos as servico
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["contratos"])
+
+# Uma instancia por par (permissao, escopo) unico -- nunca uma fabrica chamada
+# de novo dentro do handler: mesmo motivo documentado em
+# `app.comum.limitador_taxa` (identidade estavel do *callable* pro cache de
+# dependencia do FastAPI).
+_ACESSO_LER = exigir_permissao_ou_escopo(permissao="contratos.ler", escopo="colaboradores:ler")
+_ACESSO_CRIAR = exigir_permissao_ou_escopo(
+    permissao="contratos.criar", escopo="colaboradores:escrever"
+)
+_ACESSO_EDITAR = exigir_permissao_ou_escopo(
+    permissao="contratos.editar", escopo="colaboradores:escrever"
+)
+_ACESSO_VINCULOS_LER = exigir_permissao_ou_escopo(
+    permissao="vinculos.ler", escopo="colaboradores:ler"
+)
+_ACESSO_VINCULOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="vinculos.criar", escopo="colaboradores:escrever"
+)
+_ACESSO_VINCULOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="vinculos.editar", escopo="colaboradores:escrever"
+)
 
 
 @roteador.get(
@@ -36,8 +68,9 @@ roteador = APIRouter(tags=["contratos"])
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_contratos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -90,10 +123,10 @@ async def listar_contratos(
     ] = None,
 ) -> contrato.ListaContrato:
     """Listar contratos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_contratos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         colaborador_id=colaborador_id,
         empresa_id=empresa_id,
         tipo=tipo,
@@ -124,8 +157,9 @@ async def criar_contrato(
         ),
     ],
     corpo: contrato.ContratoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -142,8 +176,8 @@ async def criar_contrato(
     ] = None,
 ) -> contrato.Contrato:
     """Criar contrato"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_contrato(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_contrato(sessao, acesso.tenant_id, corpo)
     return contrato.Contrato.model_validate(novo, from_attributes=True)
 
 
@@ -158,8 +192,9 @@ async def obter_contrato(
     contrato_id: Annotated[
         UUID, Path(alias="contratoId", description="Identificador do contrato.")
     ],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -176,7 +211,7 @@ async def obter_contrato(
     ] = None,
 ) -> contrato.Contrato:
     """Obter contrato"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrado = await servico.obter_contrato(sessao, contrato_id)
     return contrato.Contrato.model_validate(encontrado, from_attributes=True)
 
@@ -201,8 +236,9 @@ async def atualizar_contrato(
         UUID, Path(alias="contratoId", description="Identificador do contrato.")
     ],
     corpo: contrato.ContratoAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("contratos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -219,7 +255,7 @@ async def atualizar_contrato(
     ] = None,
 ) -> contrato.Contrato:
     """Atualizar contrato"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizado = await servico.atualizar_contrato(sessao, contrato_id, corpo)
     return contrato.Contrato.model_validate(atualizado, from_attributes=True)
 
@@ -232,8 +268,9 @@ async def atualizar_contrato(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_vinculos(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_VINCULOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -290,10 +327,10 @@ async def listar_vinculos(
     ] = None,
 ) -> contrato.ListaVinculo:
     """Listar vinculos"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico.listar_vinculos(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         colaborador_id=colaborador_id,
         empresa_id=empresa_id,
         unidade_id=unidade_id,
@@ -325,8 +362,9 @@ async def criar_vinculo(
         ),
     ],
     corpo: contrato.VinculoCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_VINCULOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -343,8 +381,8 @@ async def criar_vinculo(
     ] = None,
 ) -> contrato.Vinculo:
     """Criar vinculo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico.criar_vinculo(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico.criar_vinculo(sessao, acesso.tenant_id, corpo)
     return contrato.Vinculo.model_validate(novo, from_attributes=True)
 
 
@@ -357,8 +395,9 @@ async def criar_vinculo(
 )
 async def obter_vinculo(
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_VINCULOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -375,7 +414,7 @@ async def obter_vinculo(
     ] = None,
 ) -> contrato.Vinculo:
     """Obter vinculo"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrado = await servico.obter_vinculo(sessao, vinculo_id)
     return contrato.Vinculo.model_validate(encontrado, from_attributes=True)
 
@@ -398,8 +437,9 @@ async def encerrar_vinculo(
     ],
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
     corpo: contrato.EncerramentoVinculoRequisicao,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("vinculos.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_VINCULOS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -416,6 +456,6 @@ async def encerrar_vinculo(
     ] = None,
 ) -> contrato.Vinculo:
     """Encerrar vinculo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    encerrado = await servico.encerrar_vinculo(sessao, tenant_id, vinculo_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    encerrado = await servico.encerrar_vinculo(sessao, acesso.tenant_id, vinculo_id, corpo)
     return contrato.Vinculo.model_validate(encerrado, from_attributes=True)

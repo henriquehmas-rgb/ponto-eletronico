@@ -9,6 +9,16 @@ operacoes de horarios/jornadas/vinculo-jornada (`listarHorarios` ate
 fica como stub `501` ate A3 preencher (T7, chamando
 `app.jornada.resolvedor.servico.resolver_jornada_do_dia`) -- ninguem edita a
 parte do outro depois de entregue.
+
+Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
+apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
+ver `docs/backlog.md`): contrato ja declarava os tres esquemas alternativos
+por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas so sessao humana era
+aceita ate agora. `Depends(exigir_permissao(...))` trocado por
+`Depends(exigir_permissao_ou_escopo(...))` (mesmo combinador ja provado em
+`app/routers/webhooks.py`/F13) -- sessao humana E' tentada primeiro
+(comportamento humano preservado byte a byte), cliente de integracao (OAuth/
+API key) so entra quando nao ha sessao humana autenticada.
 """
 
 from __future__ import annotations
@@ -21,9 +31,13 @@ from fastapi import APIRouter, Depends, Header, Path, Query, Response
 from ponto_contracts import Jornada
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.comum.autenticacao_cliente import (
+    ContextoAcesso,
+    aplicar_limite_taxa_se_cliente,
+    exigir_permissao_ou_escopo,
+)
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core.erros import RESPOSTAS_PADRAO
-from app.core.seguranca import Sujeito, exigir_permissao, tenant_id_ou_erro
 from app.db.sessao import SessaoDb
 from app.jornada.modelagem import horarios as servico_horarios
 from app.jornada.modelagem import jornadas as servico_jornadas
@@ -32,6 +46,27 @@ from app.jornada.resolvedor import servico as servico_resolvedor
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["jornadas"])
+
+# Uma instancia por par (permissao, escopo) -- nao uma fabrica chamada de novo
+# dentro do handler: mesmo motivo documentado em `app.comum.limitador_taxa`
+# (identidade estavel do *callable* pro cache de dependencia do FastAPI).
+_ACESSO_HORARIOS_LER = exigir_permissao_ou_escopo(permissao="horarios.ler", escopo="jornadas:ler")
+_ACESSO_HORARIOS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="horarios.criar", escopo="jornadas:escrever"
+)
+_ACESSO_HORARIOS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="horarios.editar", escopo="jornadas:escrever"
+)
+_ACESSO_JORNADAS_LER = exigir_permissao_ou_escopo(permissao="jornadas.ler", escopo="jornadas:ler")
+_ACESSO_JORNADAS_CRIAR = exigir_permissao_ou_escopo(
+    permissao="jornadas.criar", escopo="jornadas:escrever"
+)
+_ACESSO_JORNADAS_EDITAR = exigir_permissao_ou_escopo(
+    permissao="jornadas.editar", escopo="jornadas:escrever"
+)
+_ACESSO_JORNADAS_EXCLUIR = exigir_permissao_ou_escopo(
+    permissao="jornadas.excluir", escopo="jornadas:escrever"
+)
 
 
 async def _montar_jornada(sessao: AsyncSession, jornada: Jornada) -> contrato.Jornada:
@@ -49,8 +84,9 @@ async def _montar_jornada(sessao: AsyncSession, jornada: Jornada) -> contrato.Jo
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_horarios(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_HORARIOS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -93,10 +129,10 @@ async def listar_horarios(
     ] = None,
 ) -> contrato.ListaHorario:
     """Listar horarios"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico_horarios.listar_horarios(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         cruza_meia_noite=cruza_meia_noite,
         ativo=ativo,
@@ -125,8 +161,9 @@ async def criar_horario(
         ),
     ],
     corpo: contrato.HorarioCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_HORARIOS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -143,8 +180,8 @@ async def criar_horario(
     ] = None,
 ) -> contrato.Horario:
     """Criar horario"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    novo = await servico_horarios.criar_horario(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    novo = await servico_horarios.criar_horario(sessao, acesso.tenant_id, corpo)
     return contrato.Horario.model_validate(novo, from_attributes=True)
 
 
@@ -166,8 +203,9 @@ async def atualizar_horario(
     ],
     horario_id: Annotated[UUID, Path(alias="horarioId", description="Identificador do horario.")],
     corpo: contrato.HorarioAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("horarios.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_HORARIOS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -184,7 +222,7 @@ async def atualizar_horario(
     ] = None,
 ) -> contrato.Horario:
     """Atualizar horario"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizado = await servico_horarios.atualizar_horario(sessao, horario_id, corpo)
     return contrato.Horario.model_validate(atualizado, from_attributes=True)
 
@@ -197,8 +235,9 @@ async def atualizar_horario(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_jornadas(
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -247,10 +286,10 @@ async def listar_jornadas(
     ] = None,
 ) -> contrato.ListaJornada:
     """Listar jornadas"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico_jornadas.listar_jornadas(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         empresa_id=empresa_id,
         tipo=tipo,
         vigente_em=vigente_em,
@@ -280,8 +319,9 @@ async def criar_jornada(
         ),
     ],
     corpo: contrato.JornadaCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.criar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_CRIAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -298,8 +338,8 @@ async def criar_jornada(
     ] = None,
 ) -> contrato.Jornada:
     """Criar jornada"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    nova = await servico_jornadas.criar_jornada(sessao, tenant_id, corpo)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    nova = await servico_jornadas.criar_jornada(sessao, acesso.tenant_id, corpo)
     return await _montar_jornada(sessao, nova)
 
 
@@ -313,8 +353,9 @@ async def criar_jornada(
 async def resolver_jornada_do_dia(
     vinculo_id: Annotated[UUID, Query(alias="vinculoId", description="Vinculo a resolver.")],
     data: Annotated[date, Query(alias="data", description="Data a resolver.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -344,8 +385,10 @@ async def resolver_jornada_do_dia(
     contra API real), corrigido pelo orquestrador reordenando so a posicao
     deste bloco no arquivo -- nenhuma linha de logica mudou.
     """
-    tenant_id = tenant_id_ou_erro(sujeito)
-    return await servico_resolvedor.resolver_jornada_do_dia(sessao, tenant_id, vinculo_id, data)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    return await servico_resolvedor.resolver_jornada_do_dia(
+        sessao, acesso.tenant_id, vinculo_id, data
+    )
 
 
 @roteador.get(
@@ -357,8 +400,9 @@ async def resolver_jornada_do_dia(
 )
 async def obter_jornada(
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -375,7 +419,7 @@ async def obter_jornada(
     ] = None,
 ) -> contrato.Jornada:
     """Obter jornada"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     encontrada = await servico_jornadas.obter_jornada(sessao, jornada_id)
     return await _montar_jornada(sessao, encontrada)
 
@@ -398,8 +442,9 @@ async def atualizar_jornada(
     ],
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
     corpo: contrato.JornadaAtualizar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -416,7 +461,7 @@ async def atualizar_jornada(
     ] = None,
 ) -> contrato.Jornada:
     """Atualizar jornada"""
-    tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     atualizada = await servico_jornadas.atualizar_jornada(sessao, jornada_id, corpo)
     return await _montar_jornada(sessao, atualizada)
 
@@ -439,8 +484,9 @@ async def excluir_jornada(
         ),
     ],
     jornada_id: Annotated[UUID, Path(alias="jornadaId", description="Identificador da jornada.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.excluir"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_EXCLUIR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -457,9 +503,13 @@ async def excluir_jornada(
     ] = None,
 ) -> Response:
     """Excluir jornada"""
-    tenant_id = tenant_id_ou_erro(sujeito)
-    await servico_jornadas.excluir_jornada(sessao, tenant_id, jornada_id)
-    return Response(status_code=204)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
+    await servico_jornadas.excluir_jornada(sessao, acesso.tenant_id, jornada_id)
+    # Reaproveita o `response` injetado (ja carrega os cabecalhos `RateLimit-*`
+    # setados acima, quando o acesso e de cliente de integracao) em vez de
+    # construir um `Response` novo, que perderia esses cabecalhos.
+    response.status_code = 204
+    return response
 
 
 @roteador.get(
@@ -471,8 +521,9 @@ async def excluir_jornada(
 )
 async def listar_jornadas_vinculo(
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.ler"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_LER)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -513,10 +564,10 @@ async def listar_jornadas_vinculo(
     ] = None,
 ) -> contrato.ListaVinculoJornada:
     """Listar jornadas do vinculo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     linhas, paginacao = await servico_vinculo_jornadas.listar_jornadas_vinculo(
         sessao,
-        tenant_id,
+        acesso.tenant_id,
         vinculo_id,
         vigente_em=vigente_em,
         cursor=cursor,
@@ -547,8 +598,9 @@ async def atribuir_jornada_vinculo(
     ],
     vinculo_id: Annotated[UUID, Path(alias="vinculoId", description="Identificador do vinculo.")],
     corpo: contrato.VinculoJornadaCriar,
-    sujeito: Annotated[Sujeito, Depends(exigir_permissao("jornadas.editar"))],
+    acesso: Annotated[ContextoAcesso, Depends(_ACESSO_JORNADAS_EDITAR)],
     sessao: SessaoDb,
+    response: Response,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -565,8 +617,8 @@ async def atribuir_jornada_vinculo(
     ] = None,
 ) -> contrato.VinculoJornada:
     """Atribuir jornada ao vinculo"""
-    tenant_id = tenant_id_ou_erro(sujeito)
+    await aplicar_limite_taxa_se_cliente(response, acesso)
     nova = await servico_vinculo_jornadas.atribuir_jornada_vinculo(
-        sessao, tenant_id, vinculo_id, corpo
+        sessao, acesso.tenant_id, vinculo_id, corpo
     )
     return contrato.VinculoJornada.model_validate(nova, from_attributes=True)
