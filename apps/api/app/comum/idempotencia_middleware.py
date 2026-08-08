@@ -92,11 +92,16 @@ ProximoMiddleware = Callable[[Request], Awaitable[Response]]
 #: rotas de importação/sincronização em lote (`colaboradores/importar`,
 #: `marcacoes/sincronizar-offline`, `importacoes` -- corpo potencialmente
 #: grande), ações que não são "criar um recurso" (`apuracoes/recalcular`,
-#: `banco-horas/simular` -- disparo de processamento, não criação), e rotas
-#: que já têm idempotência própria (`marcacoes.py`/F5, `webhooks.py`/F13) ou
-#: ainda são `501` (`tenants.py`). PUT/PATCH/DELETE ficam de fora desta
-#: expansão -- já são idempotentes por semântica HTTP, ganho marginal menor,
-#: e misturar métodos desvia do critério original de "criação simples".
+#: `banco-horas/simular`, `auditoria/verificar-cadeia` -- disparo de
+#: processamento/verificação sobre dado imutável, não criação -- rodar duas
+#: vezes já produz o mesmo resultado por natureza, dedup aqui não agrega
+#: nada), e rotas que já têm idempotência própria (`marcacoes.py`/F5,
+#: `webhooks.py`/F13, `admin/api-clients`/F13 -- `criarApiClient` já chama
+#: `abrir_operacao`/`concluir_operacao` direto no corpo do handler, mesmo
+#: padrão de `webhooks.py`) ou ainda são `501` (`tenants.py`). PUT/PATCH/
+#: DELETE ficam de fora desta expansão -- já são idempotentes por semântica
+#: HTTP, ganho marginal menor, e misturar métodos desvia do critério
+#: original de "criação simples".
 ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
     {
         ("POST", "/v1/colaboradores"),  # F2
@@ -134,6 +139,7 @@ ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
         ("POST", "/v1/turnos"),  # F3
         ("POST", "/v1/vinculos"),  # F2
         ("POST", "/v1/biometrias"),  # F14
+        ("POST", "/v1/espelhos"),  # F10 (segunda passada, 2026-08-08)
     }
 )
 

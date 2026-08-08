@@ -1,5 +1,5 @@
-"""Expansão de 2026-08-07 da amostra representativa de `IdempotenciaRetrofitMiddleware`
-(`app/comum/idempotencia_middleware.py`, `ROTAS_COM_DEDUP_REAL`) -- de 10 para 35
+"""Expansão de 2026-08-07/08 da amostra representativa de `IdempotenciaRetrofitMiddleware`
+(`app/comum/idempotencia_middleware.py`, `ROTAS_COM_DEDUP_REAL`) -- de 10 para 36
 rotas, ver comentário no próprio módulo para o critério de seleção/exclusão.
 
 Dois níveis de prova, mesmo espírito do teste original
@@ -67,6 +67,7 @@ _ROTAS_DA_EXPANSAO: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/v1/turnos"),
         ("POST", "/v1/vinculos"),
         ("POST", "/v1/biometrias"),
+        ("POST", "/v1/espelhos"),  # segunda passada, 2026-08-08
     }
 )
 
