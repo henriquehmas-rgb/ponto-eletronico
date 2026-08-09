@@ -93,6 +93,27 @@ class Configuracao(BaseSettings):
     facial_svc_url: str = "http://facial-svc:8000"
     device_gw_url: str = "http://device-gw:8000"
 
+    #: mTLS de cliente para falar com o `facial-svc`. Mesmos tres caminhos que
+    #: `gateway.dominio.cliente_facial` ja usa no device-gw, e mesma postura do
+    #: proprio `facial-svc` (`infra/docker-compose.prod.yml`): os tres juntos
+    #: ligam mTLS de verdade; todos vazios sobem em HTTP puro, aceito SO fora de
+    #: producao. Preenchimento PARCIAL e sempre erro -- ver
+    #: `app.biometria.cliente_facial.montar_cliente_facial_svc`.
+    facial_mtls_cert_path: str = ""
+    facial_mtls_key_path: str = ""
+    facial_mtls_ca_path: str = ""
+
+    #: Teto de espera do `/enroll`. Medido em 0,7s p50 / 0,88s p90 na VPS de 8
+    #: vCPU sem GPU (`docs/backlog.md`, 08/08); 8s cobre carregamento frio do
+    #: modelo ONNX no primeiro pedido apos o container subir.
+    facial_timeout_enroll_s: float = 8.0
+
+    #: Teto de espera do `/verificar`. Menor que o do enroll de proposito: e o
+    #: caminho quente de `POST /v1/marcacoes`, com uma pessoa esperando na
+    #: frente do coletor. Estourar aqui NAO recusa a marcacao (ADR-008) -- ver
+    #: `app.marcacao.pipeline.facial`.
+    facial_timeout_verificar_s: float = 3.0
+
     # --- URLs publicas ----------------------------------------------------------
     api_base_url: str = "http://localhost:8000"
     web_base_url: str = "http://localhost:3000"

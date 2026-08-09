@@ -47,6 +47,7 @@ __all__ = [
     "listar_biometrias",
     "obter_biometria",
     "revogar_biometria",
+    "templates_ativos_do_colaborador",
     "validar_biometria",
     "versao_modelo_ativa",
 ]
@@ -428,3 +429,95 @@ async def ler_template_decifrado(
         iv=template.iv,
         tag_autenticacao=template.tag_autenticacao or b"",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class TemplatesDoColaborador:
+    """Templates faciais ativos de UM colaborador, prontos para `/verificar`.
+
+    `versao_modelo` e unica por construcao: vetores de motores diferentes nao
+    sao comparaveis entre si (ADR-006 regra 3), e o `facial-svc` recusa a
+    divergencia em vez de avisar. Quando o colaborador tem templates de mais de
+    uma versao (recadastro durante uma troca de motor), so os da versao MAIS
+    RECENTE entram -- `/verificar` compara melhor-de-N dentro de uma versao so.
+    """
+
+    vetores: tuple[bytes, ...]
+    versao_modelo: str
+
+
+async def templates_ativos_do_colaborador(
+    sessao: AsyncSession,
+    *,
+    tenant_id: UUID,
+    colaborador_id: UUID,
+    usuario_id: UUID | None,
+    modalidade: str = "facial",
+    finalidade: str = "biometria_facial",
+) -> TemplatesDoColaborador | None:
+    """Decifra os templates ativos do colaborador para uma verificacao.
+
+    `None` quando o colaborador **nao tem credencial biometrica ativa** -- que e
+    situacao normal, nao erro: ADR-006 regra 8 garante que quem recusa a
+    biometria registra ponto do mesmo jeito, pelo fallback. Quem chama trata
+    isso como ausencia de sinal, nunca como reprovacao.
+
+    Mais de um template e o caso comum e desejado (recadastro apos mudanca de
+    aparencia, cadastro pelo app e pelo terminal): `/verificar` recebe a lista
+    inteira e faz melhor-de-N.
+
+    NUNCA e exposta por rota da API (ADR-006 regra 5) e registra o acesso a
+    dado sensivel (regra 6), uma linha por verificacao, como
+    `ler_template_decifrado` ja faz para a leitura individual.
+    """
+    consulta = (
+        sa.select(BiometriaTemplate, Biometria.id)
+        .join(Biometria, Biometria.id == BiometriaTemplate.biometria_id)
+        .where(
+            Biometria.tenant_id == tenant_id,
+            Biometria.colaborador_id == colaborador_id,
+            Biometria.modalidade == modalidade,
+            Biometria.status == "ativa",
+            BiometriaTemplate.tenant_id == tenant_id,
+            BiometriaTemplate.ativo.is_(True),
+        )
+        .order_by(BiometriaTemplate.gerado_em.desc())
+    )
+    linhas = (await sessao.execute(consulta)).all()
+    if not linhas:
+        return None
+
+    # A versao do template mais recente manda; as demais ficam de fora em vez
+    # de irem juntas e fazerem o facial-svc recusar o lote inteiro.
+    versao_alvo: str = linhas[0][0].versao_modelo
+    vetores: list[bytes] = []
+    biometria_ids: set[UUID] = set()
+    for template, biometria_id in linhas:
+        if template.versao_modelo != versao_alvo:
+            continue
+        vetores.append(
+            cifra.decifrar_vetor(
+                tenant_id=tenant_id,
+                colaborador_id=colaborador_id,
+                template_cifrado=template.template_cifrado,
+                iv=template.iv,
+                tag_autenticacao=template.tag_autenticacao or b"",
+            )
+        )
+        biometria_ids.add(biometria_id)
+
+    if not vetores:  # pragma: no cover - `versao_alvo` sai da propria lista
+        return None
+
+    for biometria_id in biometria_ids:
+        await _registrar_acesso(
+            sessao,
+            tenant_id=tenant_id,
+            usuario_id=usuario_id,
+            colaborador_id=colaborador_id,
+            entidade_id=biometria_id,
+            acao="leitura",
+            finalidade=finalidade,
+            base_legal="consentimento",
+        )
+    return TemplatesDoColaborador(vetores=tuple(vetores), versao_modelo=versao_alvo)

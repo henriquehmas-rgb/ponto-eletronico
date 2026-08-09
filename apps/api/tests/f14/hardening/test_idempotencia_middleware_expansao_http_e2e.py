@@ -53,7 +53,6 @@ _ROTAS_DA_EXPANSAO: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/v1/equipes"),
         ("POST", "/v1/fechamentos"),
         ("POST", "/v1/feriado-conjuntos"),
-        ("POST", "/v1/integracoes/folha"),
         ("POST", "/v1/jornadas"),
         ("POST", "/v1/lgpd/consentimentos"),
         ("POST", "/v1/lgpd/solicitacoes-titular"),

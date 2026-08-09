@@ -37,7 +37,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response
 
-from app.biometria import servico
+from app.biometria import cliente_facial, servico
 from app.comum.autenticacao_cliente import (
     ContextoAcesso,
     aplicar_limite_taxa_se_cliente,
@@ -116,6 +116,61 @@ def _decodificar_vetor(bruto: dict[str, Any]) -> bytes | None:
     except (binascii.Error, ValueError) as exc:
         raise ErroDeAplicacao(
             "PONTO-VAL-001", detalhe="Campo 'vetor' precisa ser base64 valido."
+        ) from exc
+
+
+async def _extrair_template(
+    bruto: dict[str, Any], *, colaborador_id: UUID
+) -> cliente_facial.ResultadoEnroll | None:
+    """`fotoBase64` no corpo -> chama `facial-svc:/enroll` e devolve o template.
+
+    **Por que `fotoBase64` e lido do corpo bruto** (mesma tecnica ja usada por
+    `vetor`/`versaoModelo`/`dimensao`/`provedor`, ver docstring do modulo):
+    `BiometriaCriar` do contrato nao declara nenhum campo de imagem, e nenhum
+    `additionalProperties: false` o proibe. Acrescentar uma propriedade nova ao
+    contrato publico e decisao do dono do produto, nao deste modulo -- a lacuna
+    esta registrada no relatorio desta sessao. O nome `fotoBase64` nao e
+    inventado: e exatamente o campo que `MarcacaoCriar` ja usa para a mesma
+    coisa ("Captura ao vivo em base64... NUNCA aceita upload de arquivo
+    previamente salvo").
+
+    **`fotoBase64` e `vetor` sao mutuamente exclusivos.** Aceitar os dois
+    obrigaria a escolher em silencio entre um template extraido aqui e um
+    template que o cliente afirma ter -- e a escolha errada grava biometria da
+    pessoa errada. Erro explicito e a unica resposta honesta.
+
+    **Falha fechada.** `facial-svc` fora do ar durante um cadastro vira
+    `503 PONTO-INT-003` (retentavel), nunca uma `biometrias` gravada sem
+    template: uma credencial que parece cadastrada e nao verifica ninguem e pior
+    que a ausencia dela, porque o RH a aprova achando que esta pronta.
+    """
+    foto = bruto.get("fotoBase64")
+    if not foto:
+        return None
+    if not isinstance(foto, str):
+        raise ErroDeAplicacao(
+            "PONTO-VAL-001", detalhe="Campo 'fotoBase64' precisa ser uma string base64."
+        )
+    if bruto.get("vetor"):
+        raise ErroDeAplicacao(
+            "PONTO-VAL-001",
+            detalhe="Envie 'fotoBase64' (o servidor extrai o template) ou 'vetor', nunca os dois.",
+        )
+    try:
+        return await cliente_facial.enroll(
+            imagem_base64=foto,
+            mime_type=str(bruto.get("mimeType") or "image/jpeg"),
+            # Identificador OPACO da operacao: o facial-svc nunca recebe CPF,
+            # nome nem matricula (ver `facial/esquemas.py`). O UUID do
+            # colaborador ja e opaco fora deste banco e amarra a chamada a
+            # `acessos_dados_sensiveis`.
+            referencia=f"enroll:{colaborador_id}",
+        )
+    except cliente_facial.FacialSvcIndisponivel as exc:
+        raise ErroDeAplicacao(
+            "PONTO-INT-003",
+            detalhe="Servico de reconhecimento facial indisponivel. Tente novamente.",
+            contexto_log={"motivo": exc.motivo},
         ) from exc
 
 
@@ -246,10 +301,20 @@ async def criar_biometria(
     """Cadastrar credencial biometrica"""
     await aplicar_limite_taxa_se_cliente(response, acesso)
     bruto: dict[str, Any] = await request.json()
-    vetor = _decodificar_vetor(bruto)
-    versao_modelo = bruto.get("versaoModelo") or None
+    extraido = await _extrair_template(bruto, colaborador_id=corpo.colaborador_id)
+    if extraido is not None:
+        # `versaoModelo`/`dimensao` do CORPO sao ignorados quando o servidor
+        # extraiu o template: o carimbo tem que ser o do motor que gerou o
+        # vetor, nunca o que o cliente afirma (ADR-006 regra 3 -- carimbo que
+        # mente invalida a base biometrica inteira em silencio).
+        vetor: bytes | None = extraido.vetor
+        versao_modelo: str | None = extraido.versao_modelo
+        dimensao: Any = extraido.dimensao
+    else:
+        vetor = _decodificar_vetor(bruto)
+        versao_modelo = bruto.get("versaoModelo") or None
+        dimensao = bruto.get("dimensao")
     provedor = bruto.get("provedor") or "facial-svc"
-    dimensao = bruto.get("dimensao")
 
     dados = servico.DadosBiometriaCriar(
         colaborador_id=corpo.colaborador_id,

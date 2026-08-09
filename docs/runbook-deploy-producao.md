@@ -21,6 +21,7 @@
 - [Parte II — Deploy de rotina](#parte-ii--deploy-de-rotina)
 - [Parte III — Rollback](#parte-iii--rollback)
 - [Parte IV — Operações do dia a dia](#parte-iv--operações-do-dia-a-dia)
+- [Parte V — Backup do banco](#parte-v--backup-do-banco)
 - [Anexo — Diferenças hml × prd](#anexo--diferenças-hml--prd)
 
 ---
@@ -46,6 +47,18 @@
 | `infra/deploy-prod.sh` | deploy de produção, com confirmação explícita obrigatória |
 | `.github/workflows/deploy-prod.yml` | job de deploy de prd, **só `workflow_dispatch` manual** |
 | este runbook | o que fazer antes e depois |
+
+**Criado depois, e este já foi executado de verdade (2026-08-09):**
+
+| Arquivo | Papel |
+| --- | --- |
+| `infra/backup-postgres.sh` | dump `pg_dump -Fc`, verificação e retenção — ver [Parte V](#parte-v--backup-do-banco) |
+| `infra/restaurar-postgres.sh` | restore com dois portões de confirmação (**destrutivo**) |
+| `infra/instalar-backup-postgres.sh` | instala unit + timer do systemd na VPS |
+
+Ciclo completo (backup → banco novo → restore → conferência de contagens)
+validado contra o Postgres de **teste** da VPS. Em `prod` nada foi executado,
+porque o stack de produção ainda não existe.
 
 **Não existe:** domínio de produção, registros DNS, certificado TLS, certificado
 ICP-Brasil, CA interna de mTLS, banco de produção, `infra/.env.prod`,
@@ -404,18 +417,73 @@ marcação é premissa do produto (ADR-002).
 
 ### Caso C — restaurar backup do banco
 
-> **Pendência real, e é bloqueante:** não existe rotina de backup automático
-> configurada. **Configure antes do primeiro cliente real**, não depois. Um
-> `pg_dump` diário do volume `ponto-prd-postgres-data` para fora da VPS é o
-> mínimo. Sem isso, o Caso C não tem como ser executado.
+Este caso deixou de ser teórico: a rotina de backup existe e está descrita em
+[Parte V — Backup do banco](#parte-v--backup-do-banco). Leia a Parte V antes,
+principalmente a limitação em destaque (backup **só local**).
+
+> ⚠️ **Restaurar é DESTRUTIVO e não tem desfazer.** `pg_restore --clean` derruba
+> os objetos existentes antes de recriar: todo dado gravado depois do dump
+> escolhido some. Em produção isso é marcação de ponto de gente real, com
+> consequência trabalhista, e a imutabilidade da marcação é premissa do produto
+> (ADR-002). Confira o **ambiente** e a **data do dump** antes de digitar.
+
+**1. Antes de qualquer coisa, congele o estado atual.** Mesmo o banco quebrado é
+evidência, e pode ser a única cópia de algo que o backup escolhido não tem:
 
 ```bash
-# Dump manual — faça um AGORA, antes de qualquer deploy arriscado
+ssh vps
+sudo /usr/local/sbin/backup-postgres.sh prod
+```
+
+**2. Escolha o dump** (o mais recente anterior ao estrago):
+
+```bash
+sudo ls -lt /var/backups/ponto/prod/diario /var/backups/ponto/prod/semanal
+# Ver o que tem dentro sem restaurar nada:
+sudo docker run --rm --network none -v /var/backups/ponto/prod/diario:/b:ro \
+  postgres:16-alpine pg_restore --list /b/ponto-prod-AAAAMMDD-HHMMSS.dump | head -40
+```
+
+**3. Sempre que der, restaure primeiro para um banco NOVO e compare** — é o que
+transforma "o comando não deu erro" em prova:
+
+```bash
+sudo /usr/local/sbin/restaurar-postgres.sh \
+  /var/backups/ponto/prod/diario/ponto-prod-AAAAMMDD-HHMMSS.dump prod \
+  --banco ponto_prd_conferencia --criar-banco --confirmar
+```
+
+O script termina imprimindo as contagens por tabela. Compare com o banco em uso
+antes de decidir sobrescrever.
+
+**4. Restauração sobre o banco de produção de verdade** — dois portões, de
+propósito: `--confirmar` **e** a frase por extenso. Pare os serviços que
+escrevem antes, para não restaurar por baixo de uma aplicação viva:
+
+```bash
 cd /docker/ponto-prd/infra
 sudo docker compose -p ponto-prd --env-file .env.prod -f docker-compose.prod.yml \
-  exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" \
-  | gzip > /root/backup-prd-$(date -u +%Y%m%dT%H%M%SZ).sql.gz
+  stop api worker scheduler device-gw
+
+sudo CONFIRMAR_RESTAURACAO_PRODUCAO='restaurar banco de producao' \
+  /usr/local/sbin/restaurar-postgres.sh \
+  /var/backups/ponto/prod/diario/ponto-prod-AAAAMMDD-HHMMSS.dump prod --confirmar
+
+sudo docker compose -p ponto-prd --env-file .env.prod -f docker-compose.prod.yml \
+  start api worker scheduler device-gw
 ```
+
+**5. Depois de restaurar**, confirme em qual migration o banco ficou — o dump é
+do schema daquele momento, não do `head`:
+
+```bash
+sudo docker compose -p ponto-prd --env-file .env.prod -f docker-compose.prod.yml \
+  run --rm api alembic current
+```
+
+Se o código implantado for mais novo que o schema restaurado, ou você aplica as
+migrations que faltam (`alembic upgrade head`), ou volta o código para a tag
+correspondente (Caso A). Não deixe os dois em desacordo.
 
 ### Caso D — parada de emergência
 
@@ -465,6 +533,132 @@ docker run --rm -it --network ponto-prd-interna --entrypoint sh minio/mc
 
 ---
 
+## Parte V — Backup do banco
+
+> 🔴 **A limitação que importa: o backup fica APENAS no disco da própria VPS.**
+> Isso cobre `DROP TABLE` acidental, migration ruim e corrupção lógica — que é
+> a maioria dos incidentes reais. **Não cobre perda da VPS inteira**: disco,
+> datacenter, conta suspensa. Se a VPS sumir, os backups somem junto. Cópia
+> externa (S3/B2/rclone) está **preparada, desligada e não configurada** — não
+> existe credencial provisionada; ver "Cópia externa" no fim desta seção.
+> Enquanto isso não for resolvido, o plano de recuperação tem esse buraco, e
+> ele é conhecido.
+
+### O que existe
+
+| Arquivo | Papel |
+| --- | --- |
+| `infra/backup-postgres.sh` | faz o dump (`pg_dump -Fc`), verifica e aplica retenção |
+| `infra/restaurar-postgres.sh` | restaura um dump — **destrutivo**, dois portões de confirmação |
+| `infra/instalar-backup-postgres.sh` | instala scripts + unit + timer do systemd (rode uma vez) |
+
+Formato **custom** (`-Fc`), não `.sql.gz`: já sai comprimido e permite restore
+seletivo (`pg_restore -t tabela`, `-n schema`, `--list`) — o `pg_dump | gzip`
+que este runbook sugeria antes só permitia restaurar tudo ou nada.
+
+O dump roda **dentro do container** (`docker exec`), com o `pg_dump` da mesma
+versão do servidor; nada é instalado no host. A senha é lida de dentro do
+container, nunca aparece na linha de comando do host.
+
+Todo dump é **verificado** logo depois de gravado (`pg_restore --list` num
+container descartável): dump truncado falha na hora, não seis meses depois.
+
+### Instalar (uma vez, na VPS)
+
+```bash
+ssh vps
+sudo /docker/ponto-prd/infra/instalar-backup-postgres.sh prod
+# homologação, se quiser:
+sudo /docker/ponto-eletronico/infra/instalar-backup-postgres.sh hml
+```
+
+O instalador copia os scripts para `/usr/local/sbin/` (de propósito: o deploy
+faz `git reset --hard`, e o backup não pode depender do commit que estiver na
+árvore na hora do disparo — **rode o instalador de novo depois de atualizar os
+scripts no repo**), cria `/var/backups/ponto` (modo 700) e instala:
+
+- `ponto-backup@.service` — unit template, `%i` é o ambiente;
+- `ponto-backup@.timer` — `OnCalendar=*-*-* 06:30:00` (relógio da VPS é UTC ⇒
+  03:30 em `America/Sao_Paulo`), `Persistent=true`, `RandomizedDelaySec=600`.
+
+systemd e não cron porque o resto da automação da VPS já é systemd (o runner
+self-hosted é um serviço); e porque timer dá log unificado, `Persistent=true`
+(recupera a execução perdida se a VPS estava desligada) e estado consultável.
+
+Não espere o primeiro disparo — force um agora e leia o log:
+
+```bash
+sudo systemctl start ponto-backup@prod.service
+sudo journalctl -u ponto-backup@prod -n 30 --no-pager
+```
+
+### Onde os backups ficam
+
+```
+/var/backups/ponto/<ambiente>/
+├── diario/    ponto-<ambiente>-AAAAMMDD-HHMMSS.dump  (+ .sha256)
+├── semanal/   idem, hard link do dump de domingo
+└── ULTIMO_SUCESSO   carimbo do último backup que deu certo
+```
+
+Tudo `root:root`, diretórios 700 e arquivos 600 — dump de banco é cópia
+integral de dado pessoal (LGPD).
+
+### Retenção: 14 diários + 4 semanais
+
+GFS reduzido, e os números têm motivo:
+
+- **14 diários** cobrem o caso realista de "só perceberam o estrago duas semanas
+  depois" — erro de apuração costuma aparecer no fechamento do mês seguinte.
+- **4 semanais** estendem o alcance para ~1 mês com custo de disco quase zero:
+  o semanal é um **hard link** para o diário de domingo, o mesmo inode. Só
+  passa a ocupar espaço próprio quando o diário correspondente é podado.
+- Teto: 18 cópias no pior caso. Ajustável por `RETENCAO_DIARIOS` /
+  `RETENCAO_SEMANAIS`.
+- **Não há mensal/anual de propósito.** Retenção legal de marcação é problema do
+  expurgo LGPD e do AFD assinado (registro fiscal), não do backup operacional.
+  Backup aqui existe para **restaurar**, não para arquivar.
+
+### Verificar se está rodando
+
+```bash
+# Próximo disparo e último disparo
+systemctl list-timers --all 'ponto-backup@*'
+
+# Última execução deu certo?
+systemctl status ponto-backup@prod.service
+journalctl -u ponto-backup@prod --since '2 days ago' --no-pager
+
+# Resposta mais direta: quando foi o último sucesso, e o que tem no disco
+sudo cat /var/backups/ponto/prod/ULTIMO_SUCESSO
+sudo ls -lh /var/backups/ponto/prod/diario | tail -5
+sudo du -sh /var/backups/ponto
+```
+
+Um backup que nunca foi restaurado não é backup. **Ensaie o Caso C num banco
+descartável** (`--banco ... --criar-banco`) periodicamente e compare contagens —
+é o único jeito de saber que funciona antes de precisar que funcione.
+
+### Cópia externa (opcional, **desligada, não configurada**)
+
+Nenhuma credencial de S3/B2/rclone existe neste projeto, e inventar uma seria
+pior que não ter: daria falsa sensação de off-site. O gancho está pronto e
+inerte — `PONTO_BACKUP_UPLOAD_CMD`, vazio por padrão, recebe o caminho do dump
+em `$1`. Para ligar de verdade, o operador precisa (a) escolher o destino,
+(b) provisionar a credencial na VPS, (c) declarar o comando num override do
+systemd (nunca editando a unit):
+
+```bash
+sudo systemctl edit ponto-backup@prod
+# [Service]
+# Environment=PONTO_BACKUP_UPLOAD_CMD=rclone copy "$1" remoto:ponto-backups/
+```
+
+Se o upload falhar, o backup local continua íntegro, mas o serviço termina em
+`failed` — o alarme não pode ser silencioso.
+
+---
+
 ## Anexo — Diferenças hml × prd
 
 | | homologação | produção |
@@ -492,8 +686,11 @@ docker run --rm -it --network ponto-prd-interna --entrypoint sh minio/mc
    por ser arquivo não rastreado, mas não tem histórico, revisão nem backup —
    se a VPS for perdida, o script vai junto. O `deploy-prod.sh` nasceu
    versionado de propósito. Vale trazer o de hml para o repo também.
-2. **Backup do banco de produção não existe.** Bloqueante antes do primeiro
-   cliente real (ver Caso C).
+2. **Backup do banco existe, mas só no disco da própria VPS.** O mecanismo está
+   pronto e testado ponta a ponta (ver [Parte V](#parte-v--backup-do-banco));
+   o que falta é a cópia **externa** — enquanto ela não existir, perder a VPS
+   inteira significa perder os backups junto. Deixou de ser bloqueante para o
+   primeiro cliente, continua sendo dívida real.
 3. **`RETENCAO_MARCACOES_DIAS` / `RETENCAO_IMAGENS_DIAS`** aparecem nos dois
    `.env*.example` mas **nenhum** dos composes as injeta nos containers.
    Confirmar de onde o código de expurgo LGPD lê a retenção antes do primeiro

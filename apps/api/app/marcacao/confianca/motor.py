@@ -47,6 +47,14 @@ class SinaisRegistro:
     distancia_geocerca_metros: float | None = None
     precisao_insuficiente: bool = False
     score_facial: float | None = None
+    #: Veredito binario do `facial-svc` (`/verificar`), quando `fotoBase64` veio
+    #: na marcacao. **Nao** e redundante com `score_facial`: o motor recusa por
+    #: desenho devolver a similaridade e o limiar (`PONTO-SCORE-003` tem
+    #: `expoe_regra: false` -- quem testa mascara impressa nao pode receber o
+    #: placar e iterar ate acertar), entao a API tem o veredito e nao tem o
+    #: numero. Gravar um `score_facial` sintetico so para preencher a coluna
+    #: seria inventar valor (ADR-014); o veredito entra como sinal proprio.
+    facial_verificado: bool | None = None
     liveness_aprovado: bool | None = None
     attestation_veredito: str = "indisponivel"
     root_detectado: bool | None = None

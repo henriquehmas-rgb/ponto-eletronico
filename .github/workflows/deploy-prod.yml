@@ -63,6 +63,8 @@ jobs:
   guarda:
     name: Producao · guarda
     runs-on: ubuntu-latest
+    # So compara strings; nao faz checkout nem chama a API do GitHub.
+    permissions: {}
     steps:
       - name: Confere a frase de confirmacao
         shell: bash
@@ -148,7 +150,15 @@ jobs:
     # Segundo portao humano, alem da frase de confirmacao. Configure required
     # reviewers em Settings > Environments > producao. Se o environment nao
     # existir, crie-o ANTES do primeiro disparo (ver runbook, passo 6).
+    #
+    # Com o repositorio publico, o environment deixa de ser so um portao humano
+    # e vira TAMBEM a barreira de branch: configure Settings > Environments >
+    # producao > Deployment branches and tags = "Selected branches" > `main`.
+    # Essa regra e aplicada pelo servidor do GitHub e, ao contrario do `if:`
+    # do job `guarda`, nao pode ser removida editando o YAML num PR de fork.
     environment: producao
+    # Roda um script local na VPS; nao usa a API do GitHub.
+    permissions: {}
     steps:
       - name: Roda infra/deploy-prod.sh localmente (ja estamos na VPS)
         # O proprio script faz git fetch/reset --hard a partir de

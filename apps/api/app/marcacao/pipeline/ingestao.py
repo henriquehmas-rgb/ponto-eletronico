@@ -84,7 +84,7 @@ from app.core.erros import ErroDeAplicacao
 from app.core.seguranca import Sujeito
 from app.marcacao.confianca.motor import ResultadoConfianca, SinaisRegistro, avaliar_confianca
 from app.marcacao.dominio.registro import DadosMarcacao, persistir_marcacao, rep_p_ativo
-from app.marcacao.pipeline import eventos_marcacao, idempotencia
+from app.marcacao.pipeline import eventos_marcacao, facial, idempotencia
 from app.organizacao.geocerca import GeocercaUnidade, dentro_da_geocerca
 from app.organizacao.redes import FaixaPermitida, ip_autorizado
 from app.schemas import contrato
@@ -428,17 +428,23 @@ def _sinais_do_corpo(
     dentro_geocerca: bool | None,
     distancia_geocerca_metros: float | None,
     velocidade_desde_ultima_kmh: float | None,
+    facial_verificado: bool | None = None,
 ) -> SinaisRegistro:
     """Monta `SinaisRegistro` a partir dos campos do corpo, tal como
     informados pelo cliente (nenhum e verificado criptograficamente nesta
     fase -- ver docstring de `app.marcacao.confianca.motor`), mais os sinais
     que o PROPRIO `registrar_marcacao` ja calculou nesta chamada (geocerca) ou
     que `app.antifraude.geografia` calculou por consulta ao banco
-    (velocidade). `score_facial`/`liveness_aprovado`/`attestation_veredito`
-    continuam sem fonte real nesta fase: `facial-svc` (`/verificar`,
-    `/liveness`) segue como stub 501 desde a Fase 0 (achado registrado em
-    `docs/backlog.md`) e nao ha verificacao de attestation no servidor sem F7
-    (ADR-014) -- `nao_aplicavel`/`None`, nunca um valor inventado.
+    (velocidade), mais `facial_verificado`, que veio do `facial-svc` de verdade
+    (`app.marcacao.pipeline.facial`).
+
+    `score_facial` continua `None` **mesmo quando houve verificacao facial**, e
+    isso e deliberado: `/verificar` nao devolve a similaridade nem o limiar
+    (`PONTO-SCORE-003` tem `expoe_regra: false`), entao nao existe numero real
+    para gravar -- o veredito vai em `facial_verificado`. `liveness_aprovado`
+    (`/liveness`) e `attestation_veredito` seguem sem fonte: o primeiro nao tem
+    caller ainda, o segundo nao tem verificacao no servidor sem F7 (ADR-014).
+    `nao_aplicavel`/`None`, nunca um valor inventado.
     """
     flags = corpo.flags_integridade or {}
     return SinaisRegistro(
@@ -446,6 +452,7 @@ def _sinais_do_corpo(
         distancia_geocerca_metros=distancia_geocerca_metros,
         precisao_insuficiente=False,
         score_facial=None,
+        facial_verificado=facial_verificado,
         liveness_aprovado=None,
         attestation_veredito="nao_aplicavel",
         root_detectado=flags.get("rootDetectado"),
@@ -744,11 +751,27 @@ async def registrar_marcacao(
         sessao, tenant_id=tenant_id, dispositivo_id=corpo.dispositivo_id
     )
 
+    # Verificacao facial REAL contra o `facial-svc` quando `fotoBase64` veio no
+    # corpo (o campo existia no contrato desde a Fase 0 e era ignorado ate
+    # agora). Rosto que nao bate aborta aqui com `PONTO-SCORE-003`, levantado de
+    # dentro do cliente; motor fora do ar devolve "sem sinal" + aviso, nunca
+    # recusa -- a justificativa completa esta em `app.marcacao.pipeline.facial`.
+    resultado_facial = await facial.verificar_captura(
+        sessao,
+        tenant_id=tenant_id,
+        colaborador_id=colaborador.id,
+        foto_base64=corpo.foto_base64,
+        usuario_id=sujeito.usuario_id,
+    )
+    if resultado_facial.aviso is not None:
+        avisos.append(resultado_facial.aviso)
+
     sinais = _sinais_do_corpo(
         corpo,
         dentro_geocerca=dentro_geocerca,
         distancia_geocerca_metros=distancia_geocerca_metros,
         velocidade_desde_ultima_kmh=deslocamento.velocidade_kmh,
+        facial_verificado=resultado_facial.aprovado,
     )
     politica_antifraude = PoliticaAntifraude(
         pesos=politica.pesos,

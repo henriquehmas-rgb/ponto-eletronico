@@ -32,9 +32,10 @@ concurrency:
   group: seguranca-${{ github.ref }}
   cancel-in-progress: true
 
+# Menor privilegio: o padrao do workflow e so leitura. `security-events: write`
+# (necessario para o upload do SARIF) e concedido apenas ao job `semgrep`.
 permissions:
   contents: read
-  security-events: write
 
 env:
   PYTHON_VERSION: "3.12"
@@ -49,6 +50,12 @@ jobs:
   semgrep:
     name: Semgrep · SAST
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Unico job que precisa de escrita: envia o SARIF ao Code Scanning.
+      # Em PR de fork o GITHUB_TOKEN e read-only mesmo assim, e o passo de
+      # upload ja e `continue-on-error: true`.
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 

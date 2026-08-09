@@ -299,6 +299,21 @@ def _sinais_categoria_biometria(
         resultado.append(
             _sinal("similaridade_facial", "biometria", REAL, sinais.score_facial, pontuacao)
         )
+    elif sinais.facial_verificado is not None:
+        # Caminho real desde que `app.marcacao.pipeline.facial` passou a chamar
+        # `facial-svc:/verificar`: o motor da veredito, nunca placar (o limiar
+        # e a similaridade nao trafegam por desenho -- ver `facial_verificado`
+        # em `SinaisRegistro`). Reprovacao normalmente nem chega aqui: o motor
+        # responde `403 PONTO-SCORE-003` e o pipeline aborta antes do score.
+        resultado.append(
+            _sinal(
+                "similaridade_facial",
+                "biometria",
+                REAL,
+                sinais.facial_verificado,
+                100.0 if sinais.facial_verificado else 0.0,
+            )
+        )
     elif politica.exige_facial:
         # A politica do tenant EXIGE similaridade facial e nenhum sinal
         # chegou -- diferente de "canal sem suporte" (ver constante acima).

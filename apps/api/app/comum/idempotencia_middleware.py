@@ -152,7 +152,6 @@ ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
         ("POST", "/v1/equipes"),  # F9b
         ("POST", "/v1/fechamentos"),  # F10
         ("POST", "/v1/feriado-conjuntos"),  # F3
-        ("POST", "/v1/integracoes/folha"),  # F13
         ("POST", "/v1/jornadas"),  # F3
         ("POST", "/v1/lgpd/consentimentos"),  # F14
         ("POST", "/v1/lgpd/solicitacoes-titular"),  # F14
@@ -223,10 +222,18 @@ ROTAS_COM_DEDUP_REAL: Final[frozenset[tuple[str, str]]] = frozenset(
 #:   (`POST marcacoes` / F5; `POST|PATCH|DELETE webhooks`,
 #:   `webhooks/{id}/entregas/{id}/reenviar` / F13; `POST admin/api-clients`,
 #:   `POST admin/api-clients/{id}/chaves`,
-#:   `DELETE admin/api-clients/{id}/chaves/{id}` / F13;
-#:   `integracoes/folha/{id}/exportar`, `importacoes` / F13) -- chamam
-#:   `abrir_operacao`/`concluir_operacao` diretamente, na MESMA transação da
-#:   lógica de negócio (dedup estritamente melhor que a deste middleware).
+#:   `DELETE admin/api-clients/{id}/chaves/{id}` / F13; `POST integracoes/folha`
+#:   (`integracoesFolha.criar`), `integracoes/folha/{id}/exportar`,
+#:   `importacoes` / F13) -- chamam `abrir_operacao`/`concluir_operacao`
+#:   diretamente, na MESMA transação da lógica de negócio (dedup
+#:   estritamente melhor que a deste middleware). `POST integracoes/folha`
+#:   estava, até 08/08/2026, duplicado nas DUAS listas (esta e
+#:   `ROTAS_COM_DEDUP_REAL`) -- como os escopos de dedup eram diferentes
+#:   (`POST:/v1/integracoes/folha` vs `integracoesFolha.criar`) não havia
+#:   deadlock, só uma chave redundante em `idempotencia_chaves` e a dedup do
+#:   handler nunca chegando a rodar no replay (o middleware curto-circuitava
+#:   antes). Removida da lista exata: a dedup própria do handler, na mesma
+#:   transação, é a fonte de verdade correta aqui.
 #: * **Sem `Idempotency-Key` no contrato**
 #:   (`PUT relatorios/preferencias-colunas`) -- adicionar dedup aqui faria o
 #:   middleware recusar (`PONTO-IDEM-001`) uma chamada hoje válida: seria

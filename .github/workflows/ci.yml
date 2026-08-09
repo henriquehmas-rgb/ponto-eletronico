@@ -33,6 +33,50 @@
 #
 # REMOVER apos o fim da Fase 0: com o monorepo completo, os `if:` devem cair e
 # todos os jobs passam a ser incondicionais.
+#
+# -----------------------------------------------------------------------------
+# MODELO DE SEGURANCA: PR DE FORK x RUNNER SELF-HOSTED  (LEIA ANTES DE REVISAR
+# QUALQUER PR VINDO DE FORA)
+# -----------------------------------------------------------------------------
+# Este repositorio usa um runner self-hosted na VPS de producao/homologacao
+# (`runs-on: [self-hosted, ponto-vps]`, jobs `deploy-hml-aplicar` aqui e
+# `deploy-prod-aplicar` em deploy-prod.yml). O runner roda como `ghrunner`,
+# que pertence ao grupo `docker` — na pratica, equivalente a root na VPS.
+#
+# A propria documentacao do GitHub desaconselha runner self-hosted em
+# repositorio publico: "forks of your public repository can potentially run
+# dangerous code on your self-hosted runner machine by creating a pull request
+# that executes the code in a workflow".
+#
+# PONTO CRUCIAL, QUE NAO E OBVIO: num evento `pull_request`, o GitHub executa a
+# versao do arquivo de workflow QUE ESTA NO PR, nao a versao da `main`. Logo os
+# `if: github.ref == 'refs/heads/main' && github.event_name == 'push'` abaixo
+# protegem contra disparo ACIDENTAL, mas NAO contra um PR malicioso — o
+# atacante simplesmente apaga o `if:` (ou aponta qualquer job para
+# `[self-hosted, ponto-vps]`) na copia dele do arquivo. NENHUMA linha deste
+# YAML consegue impedir isso sozinha.
+#
+# O que realmente protege (tudo fora deste arquivo, em Settings do repo):
+#   1. Settings > Actions > General > "Approval for running fork pull request
+#      workflows from contributors" = "Require approval for all external
+#      contributors". Sem isso, um contribuidor ja conhecido dispara workflow
+#      de PR sem aprovacao humana.
+#   2. Settings > Environments > `homologacao` / `producao` com
+#      "Deployment branches" limitado a `main`. Essa regra e aplicada pelo
+#      servidor do GitHub: um job com `environment:` NAO roda a partir de um
+#      ref que nao seja `main`, mesmo que o YAML do PR mande. E por isso que
+#      `deploy-hml-aplicar` declara `environment: homologacao` — a protecao
+#      mora na configuracao do environment, nao aqui.
+#   3. Branch protection em `main` exigindo review, para que o caminho
+#      "push direto em main" continue sendo so do dono.
+#
+# Ao revisar um PR externo: LEIA O DIFF DE .github/workflows/ ANTES de clicar
+# em "Approve and run". Qualquer PR de fork que toque em arquivo de workflow,
+# em `infra/` ou em Dockerfile merece desconfianca por padrao.
+#
+# Nota: `pull_request_target` NAO e usado em lugar nenhum deste repositorio, de
+# proposito — esse gatilho roda com o contexto (e os segredos) do branch base.
+# Nao introduza.
 # =============================================================================
 
 name: CI
@@ -1290,6 +1334,17 @@ jobs:
     # fica sem uso neste job, mas nao foi removida do servidor -- continua
     # disponivel como via manual de disparo fora do CI.
     runs-on: [self-hosted, ponto-vps]
+    # UNICA protecao deste job que sobrevive a um PR de fork malicioso (ver o
+    # bloco "MODELO DE SEGURANCA" no cabecalho): o `if:` acima esta na copia do
+    # arquivo que o atacante controla, mas a regra de "Deployment branches" do
+    # environment e aplicada pelo servidor do GitHub. Configure em
+    # Settings > Environments > homologacao > Deployment branches and tags =
+    # "Selected branches" > `main`. NAO configure required reviewers aqui: hml
+    # e deliberadamente automatico a cada push em main (ver deploy-prod.yml).
+    environment: homologacao
+    # Este job nao usa a API do GitHub para nada — roda um script local na VPS.
+    # Token sem permissao alguma reduz o estrago caso o runner seja abusado.
+    permissions: {}
     steps:
       - name: Roda infra/deploy-hml.sh localmente (ja estamos na VPS)
         # O proprio script faz `git fetch`/`reset --hard origin/main` a
