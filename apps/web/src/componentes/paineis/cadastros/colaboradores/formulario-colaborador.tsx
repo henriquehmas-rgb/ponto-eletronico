@@ -171,6 +171,8 @@ export function FormularioColaborador({
           obrigatorio
           inputMode="numeric"
           maxLength={11}
+          placeholder="Apenas números, ex.: 12345678900"
+          dica="Digite somente os 11 números, sem pontos nem traço."
           erro={errors.cpf?.message}
           {...register("cpf", {
             required: "Informe o CPF.",
