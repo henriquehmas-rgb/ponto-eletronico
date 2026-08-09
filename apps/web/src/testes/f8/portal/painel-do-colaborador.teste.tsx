@@ -93,6 +93,27 @@ describe("/eu — painel do colaborador (T2)", () => {
     expect(screen.getByText("Não foi possível carregar suas marcações")).toBeInTheDocument();
   });
 
+  it("saldo 404 (sem conta de banco de horas) mostra estado vazio, não o alerta de erro", () => {
+    useEspelhoDePontoMock.mockReturnValue(
+      estadoDeSucesso({ dados: [], paginacao: { temMais: false, limite: 100 } }),
+    );
+    useSaldoBancoHorasMock.mockReturnValue(
+      estadoDeErro(
+        new ErroDaApi(404, {
+          type: "about:blank",
+          title: "Recurso nao encontrado",
+          status: 404,
+          codigo: "PONTO-REC-001",
+        }),
+      ),
+    );
+
+    render(<PainelDoColaborador />);
+
+    expect(screen.getByText("Sem conta de banco de horas para este perfil.")).toBeInTheDocument();
+    expect(screen.queryByText("Não foi possível carregar seu saldo")).not.toBeInTheDocument();
+  });
+
   it('tem um link de destaque para "/eu/registrar"', () => {
     useEspelhoDePontoMock.mockReturnValue(
       estadoDeSucesso({ dados: [], paginacao: { temMais: false, limite: 100 } }),

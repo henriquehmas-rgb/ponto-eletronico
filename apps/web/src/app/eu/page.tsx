@@ -150,6 +150,17 @@ export default function PainelDoColaborador() {
 
       {saldo.isPending ? (
         <Esqueleto className="h-32 w-full rounded-suave" />
+      ) : saldo.isError && ehErroDaApi(saldo.error) && saldo.error.status === 404 ? (
+        // Colaborador sem conta de banco de horas (ex.: perfis administrativos
+        // sem jornada de compensação vinculada) é estado normal, não falha —
+        // achado real em ponto-hml, 09/08/2026 (o 404 esperado do backend
+        // estava caindo no mesmo alerta vermelho de erro de servidor).
+        <Cartao className="gap-1 rounded-suave p-4 shadow-flutuante-cartao">
+          <p className="estilo-titulo-secao text-texto-primario">Banco de horas</p>
+          <p className="estilo-legenda text-texto-terciario">
+            Sem conta de banco de horas para este perfil.
+          </p>
+        </Cartao>
       ) : saldo.isError ? (
         <Alerta variant="erro">
           <AlertaTitulo>Não foi possível carregar seu saldo</AlertaTitulo>
