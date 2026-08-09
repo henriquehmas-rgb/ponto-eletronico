@@ -91,7 +91,7 @@ def _para_schema(schema_cls: type[BaseModel], origem: Any, **extras: Any) -> Any
     # produto navegando `/eu/perfil` em ponto-hml: "Sessões ativas" travava
     # carregando pra sempre).
     for chave, valor in dados.items():
-        if isinstance(valor, (IPv4Address, IPv6Address)):
+        if isinstance(valor, IPv4Address | IPv6Address):
             dados[chave] = str(valor)
     dados.update(extras)
     return schema_cls.model_validate(dados)

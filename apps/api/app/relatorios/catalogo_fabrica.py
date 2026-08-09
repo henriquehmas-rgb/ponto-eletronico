@@ -430,10 +430,10 @@ CATALOGO_RELATORIOS_DE_FABRICA: list[DefinicaoRelatorioFabrica] = [
     ),
 ]
 
-assert len(CATALOGO_RELATORIOS_DE_FABRICA) == 24, "O catalogo precisa ter os 24 relatorios."
-assert len({item.codigo for item in CATALOGO_RELATORIOS_DE_FABRICA}) == 24, (
-    "codigo de relatorio duplicado."
-)
+if len(CATALOGO_RELATORIOS_DE_FABRICA) != 24:
+    raise AssertionError("O catalogo precisa ter os 24 relatorios.")
+if len({item.codigo for item in CATALOGO_RELATORIOS_DE_FABRICA}) != 24:
+    raise AssertionError("codigo de relatorio duplicado.")
 
 
 def _sobrescrever_com_datasets_operacionais() -> list[DefinicaoRelatorioFabrica]:
