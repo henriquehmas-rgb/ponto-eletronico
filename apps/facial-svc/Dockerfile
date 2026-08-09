@@ -114,13 +114,21 @@ FROM base AS dependencias
 # falha. O `build-essential` e removido no fim da MESMA camada — ele existe para
 # compilar e nao pode sobrar numa imagem que recebe imagem de rosto pela rede.
 # `libgomp1` fica: e o OpenMP que o ONNX Runtime usa para paralelizar em CPU.
+# `libxcb1`/`libgl1`/`libglib2.0-0` ficam: mesmo `opencv-python-headless` (a
+# variante sem GUI, ja usada aqui) e publicado com o wheel do manylinux
+# linkando dinamicamente contra essas libs -- sem elas o processo nem sobe
+# (`ImportError: libxcb.so.1`, depois `libGL.so.1`), achado real no primeiro
+# deploy real deste servico com o motor de verdade (09/08/2026), corrigido
+# iterativamente reproduzindo o erro num build isolado ate o import limpar.
+# Nao e dependencia de GUI/X11 de fato -- nenhum servidor X roda em runtime,
+# e so um residuo do build do wheel headless que a distro publica.
 COPY apps/facial-svc/pyproject.toml apps/facial-svc/README.md ./
 RUN mkdir -p facial/motor facial/rotas \
     && : > facial/__init__.py \
     && : > facial/motor/__init__.py \
     && : > facial/rotas/__init__.py \
     && apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libgomp1 \
+    && apt-get install -y --no-install-recommends build-essential libgomp1 libxcb1 libgl1 libglib2.0-0 \
     && pip install --no-cache-dir . \
     && apt-get purge -y --auto-remove build-essential \
     && rm -rf /var/lib/apt/lists/*
