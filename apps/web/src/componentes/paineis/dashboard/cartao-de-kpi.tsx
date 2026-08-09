@@ -11,10 +11,14 @@ export interface CartaoDeKpiProps {
   carregando?: boolean;
 }
 
-/** Cartão de indicador numérico único — bloco básico dos KPIs do dashboard (T2). */
+/**
+ * Cartão de indicador numérico único — bloco básico dos KPIs do dashboard (T2).
+ * Visual: catálogo #5 de `docs/design-system-oficial.md` (tile de KPI,
+ * cartão flutuante padrão).
+ */
 export function CartaoDeKpi({ rotulo, valor, descricao, carregando = false }: CartaoDeKpiProps) {
   return (
-    <Cartao>
+    <Cartao className="rounded-suave shadow-flutuante-cartao">
       <CartaoConteudo className="flex flex-col gap-1">
         <p className="estilo-legenda uppercase text-texto-terciario">{rotulo}</p>
         {carregando ? (

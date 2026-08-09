@@ -1,6 +1,8 @@
 "use client";
 
+import { Globe, MonitorSmartphone, Plug, Smartphone, Tablet } from "lucide-react";
 import { useState } from "react";
+import type { ComponentType } from "react";
 
 import { DialogoConfirmacao } from "@/componentes/paineis/cadastros/_shared/dialogo-confirmacao";
 import { mensagemDeErroApi } from "@/componentes/paineis/cadastros/_shared/erro-amigavel";
@@ -10,11 +12,11 @@ import {
   paraCorpoDeDispositivo,
   type ValoresFormularioDispositivo,
 } from "@/componentes/paineis/cadastros/dispositivos/formulario-dispositivo";
-import { type ColunaDeTabela, TabelaDeDados } from "@/componentes/dominio/tabela-de-dados";
 import { Alerta, AlertaDescricao } from "@/componentes/ui/alert";
 import { Selo } from "@/componentes/ui/badge";
 import { Botao } from "@/componentes/ui/button";
 import { Dialogo, DialogoCabecalho, DialogoConteudo, DialogoTitulo } from "@/componentes/ui/dialog";
+import { Esqueleto } from "@/componentes/ui/skeleton";
 import { useColaboradores } from "@/ganchos/use-colaboradores";
 import {
   useAtualizarDispositivo,
@@ -35,6 +37,15 @@ const SELO_POR_STATUS: Record<string, "sucesso" | "atencao" | "erro" | "neutro">
   bloqueado: "erro",
   revogado: "neutro",
   substituido: "neutro",
+};
+
+const ICONE_POR_TIPO: Record<string, ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
+  terminal: MonitorSmartphone,
+  totem: MonitorSmartphone,
+  celular: Smartphone,
+  tablet: Tablet,
+  navegador: Globe,
+  integracao: Plug,
 };
 
 export default function PaginaDeDispositivos() {
@@ -66,66 +77,20 @@ export default function PaginaDeDispositivos() {
     }
   }
 
-  const colunas: ColunaDeTabela<Dispositivo>[] = [
-    {
-      id: "nome",
-      cabecalho: "Dispositivo",
-      renderizarCelula: (d) => (
-        <button
-          type="button"
-          className="text-left hover:underline"
-          onClick={() => {
-            setEditando(d);
-            setDialogoAberto(true);
-          }}
-        >
-          {d.nome ?? d.identificador ?? d.id}
-        </button>
-      ),
-      larguraPx: 220,
-    },
-    { id: "tipo", cabecalho: "Tipo", renderizarCelula: (d) => d.tipo ?? "—", larguraPx: 110 },
-    {
-      id: "plataforma",
-      cabecalho: "Plataforma",
-      renderizarCelula: (d) => d.plataforma ?? "—",
-      larguraPx: 110,
-    },
-    {
-      id: "status",
-      cabecalho: "Situação",
-      renderizarCelula: (d) => (
-        <Selo variant={SELO_POR_STATUS[d.status ?? ""] ?? "neutro"}>{d.status ?? "—"}</Selo>
-      ),
-      larguraPx: 120,
-    },
-    {
-      id: "acoes",
-      cabecalho: "Ações",
-      renderizarCelula: (d) => (
-        <div className="flex gap-2">
-          <PortaoDePermissao permissao="dispositivos.editar">
-            <Botao variant="secundaria" tamanho="compacto" onClick={() => setVinculando(d)}>
-              Vincular
-            </Botao>
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="dispositivos.excluir">
-            <Botao variant="destrutiva" tamanho="compacto" onClick={() => setExcluindo(d)}>
-              Excluir
-            </Botao>
-          </PortaoDePermissao>
-        </div>
-      ),
-      larguraPx: 200,
-    },
-  ];
+  const dispositivos = consulta.data?.dados ?? [];
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="estilo-titulo-pagina text-texto-primario">Dispositivos</h1>
+        <div>
+          <h1 className="estilo-titulo-pagina text-texto-primario">Dispositivos</h1>
+          <p className="estilo-corpo text-texto-terciario">
+            {dispositivos.length} dispositivo(s) cadastrado(s)
+          </p>
+        </div>
         <PortaoDePermissao permissao="dispositivos.criar">
           <Botao
+            className="rounded-pleno"
             onClick={() => {
               setEditando(null);
               setDialogoAberto(true);
@@ -142,13 +107,66 @@ export default function PaginaDeDispositivos() {
         </Alerta>
       ) : null}
 
-      <TabelaDeDados
-        linhas={consulta.data?.dados ?? []}
-        colunas={colunas}
-        obterId={(d) => d.id ?? ""}
-        carregando={consulta.isPending}
-        mensagemVazia="Nenhum dispositivo cadastrado."
-      />
+      {consulta.isPending ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, indice) => (
+            <Esqueleto key={indice} className="h-[74px] w-full rounded-suave" />
+          ))}
+        </div>
+      ) : dispositivos.length === 0 ? (
+        <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+          <p className="estilo-corpo text-texto-secundario">Nenhum dispositivo cadastrado.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {dispositivos.map((d) => {
+            const Icone = ICONE_POR_TIPO[d.tipo ?? ""] ?? MonitorSmartphone;
+            return (
+              <div
+                key={d.id}
+                className="flex flex-wrap items-center gap-3 rounded-suave bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-suave bg-acao-sutil-fundo text-acao-sutil-texto">
+                  <Icone aria-hidden className="size-[18px]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    className="truncate text-left text-[14px] font-medium text-texto-primario hover:underline"
+                    onClick={() => {
+                      setEditando(d);
+                      setDialogoAberto(true);
+                    }}
+                  >
+                    {d.nome ?? d.identificador ?? d.id}
+                  </button>
+                  <p className="truncate text-[12px] text-texto-terciario">
+                    {d.tipo ?? "—"} · {d.plataforma ?? "—"}
+                  </p>
+                </div>
+                {d.identificador ? (
+                  <span className="estilo-tabular text-[11.5px] text-texto-desabilitado">
+                    {d.identificador}
+                  </span>
+                ) : null}
+                <Selo variant={SELO_POR_STATUS[d.status ?? ""] ?? "neutro"}>{d.status ?? "—"}</Selo>
+                <div className="flex gap-2">
+                  <PortaoDePermissao permissao="dispositivos.editar">
+                    <Botao variant="secundaria" tamanho="compacto" onClick={() => setVinculando(d)}>
+                      Vincular
+                    </Botao>
+                  </PortaoDePermissao>
+                  <PortaoDePermissao permissao="dispositivos.excluir">
+                    <Botao variant="destrutiva" tamanho="compacto" onClick={() => setExcluindo(d)}>
+                      Excluir
+                    </Botao>
+                  </PortaoDePermissao>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Dialogo open={dialogoAberto} onOpenChange={setDialogoAberto}>
         <DialogoConteudo className="sm:max-w-2xl">

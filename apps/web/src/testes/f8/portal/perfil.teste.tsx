@@ -21,6 +21,9 @@ vi.mock("@/ganchos/use-perfil", () => ({
 vi.mock("@/lib/sessao", () => ({
   useSessao: () => ({ sair: sairMock }),
 }));
+vi.mock("@/componentes/tema/provedor-de-tema", () => ({
+  useTema: () => ({ preferencia: "sistema", resolvido: "claro", definirPreferencia: vi.fn() }),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: substituirRota }),
 }));
@@ -77,7 +80,7 @@ describe("/eu/perfil (T5)", () => {
   it("mostra dados cadastrais e as sessões ativas, marcando a atual", () => {
     render(<PerfilDoColaborador />);
 
-    expect(screen.getByText("Maria Colaboradora")).toBeInTheDocument();
+    expect(screen.getAllByText("Maria Colaboradora").length).toBeGreaterThan(0);
     expect(screen.getByText("(esta sessão)")).toBeInTheDocument();
   });
 

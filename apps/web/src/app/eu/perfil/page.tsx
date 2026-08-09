@@ -7,6 +7,7 @@ import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
 import { Botao } from "@/componentes/ui/button";
 import { Cartao, CartaoCabecalho, CartaoConteudo, CartaoTitulo } from "@/componentes/ui/card";
 import { Esqueleto } from "@/componentes/ui/skeleton";
+import { AlternadorDeTema } from "@/componentes/tema/alternador-de-tema";
 import {
   useColaborador,
   useDispositivos,
@@ -17,6 +18,15 @@ import { ehErroDaApi, type Esquema } from "@/lib/api";
 import { formatarDataHora } from "@/lib/formatacao";
 import { useSessao } from "@/lib/sessao";
 
+/** Iniciais (até duas letras) a partir do nome — só para o avatar, decorativo. */
+function iniciaisDoNome(nome: string | undefined): string {
+  if (!nome) return "—";
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  const primeira = partes[0]?.[0] ?? "";
+  const ultima = partes.length > 1 ? (partes[partes.length - 1]?.[0] ?? "") : "";
+  return `${primeira}${ultima}`.toUpperCase() || "—";
+}
+
 export default function PerfilDoColaborador() {
   const sessao = useSessao();
   const router = useRouter();
@@ -24,6 +34,8 @@ export default function PerfilDoColaborador() {
   const dispositivos = useDispositivos();
   const sessoes = useSessoesAtivas();
   const revogar = useRevogarSessao();
+
+  const nomeExibido = colaborador.data?.nomeSocial || colaborador.data?.nomeCompleto;
 
   async function aoRevogar(sessaoListada: Esquema<"Sessao">) {
     if (!sessaoListada.id) return;
@@ -40,7 +52,25 @@ export default function PerfilDoColaborador() {
     <div className="flex flex-col gap-6">
       <h1 className="estilo-titulo-pagina text-texto-primario">Perfil</h1>
 
-      <Cartao>
+      <div className="flex items-center gap-4">
+        {colaborador.isPending ? (
+          <Esqueleto className="size-14 shrink-0 rounded-pleno" />
+        ) : (
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-pleno bg-acao-sutil-fundo text-xl font-semibold text-acao-sutil-texto">
+            {iniciaisDoNome(nomeExibido)}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="estilo-titulo-secao truncate text-texto-primario">
+            {colaborador.isPending ? "…" : (nomeExibido ?? "—")}
+          </p>
+          <p className="estilo-legenda text-texto-terciario">
+            {colaborador.data?.matricula ? `Matrícula ${colaborador.data.matricula}` : "—"}
+          </p>
+        </div>
+      </div>
+
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Dados cadastrais</CartaoTitulo>
         </CartaoCabecalho>
@@ -87,7 +117,7 @@ export default function PerfilDoColaborador() {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Dispositivos vinculados</CartaoTitulo>
         </CartaoCabecalho>
@@ -130,7 +160,7 @@ export default function PerfilDoColaborador() {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Sessões ativas</CartaoTitulo>
         </CartaoCabecalho>
@@ -179,6 +209,20 @@ export default function PerfilDoColaborador() {
               ))}
             </ul>
           )}
+        </CartaoConteudo>
+      </Cartao>
+
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
+        <CartaoCabecalho>
+          <CartaoTitulo>Preferências</CartaoTitulo>
+        </CartaoCabecalho>
+        <CartaoConteudo>
+          <div className="flex items-center justify-between gap-3 py-2">
+            <span className="estilo-corpo font-semibold text-texto-primario">
+              Tema da interface
+            </span>
+            <AlternadorDeTema />
+          </div>
         </CartaoConteudo>
       </Cartao>
     </div>

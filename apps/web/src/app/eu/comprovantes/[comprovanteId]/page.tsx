@@ -1,8 +1,11 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
+import { Botao } from "@/componentes/ui/button";
 import { Cartao, CartaoCabecalho, CartaoConteudo, CartaoTitulo } from "@/componentes/ui/card";
 import { Esqueleto } from "@/componentes/ui/skeleton";
 import { useComprovante } from "@/ganchos/use-comprovantes";
@@ -21,7 +24,20 @@ export default function DetalheDeComprovante() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="estilo-titulo-pagina text-texto-primario">Comprovante</h1>
+      <div className="flex items-center gap-3">
+        <Botao
+          asChild
+          variant="secundaria"
+          tamanho="icone-toque"
+          className="rounded-pleno shadow-flutuante-chip"
+          aria-label="Voltar para comprovantes"
+        >
+          <Link href="/eu/comprovantes">
+            <ArrowLeft className="size-4" />
+          </Link>
+        </Botao>
+        <h1 className="estilo-titulo-pagina text-texto-primario">Comprovante</h1>
+      </div>
 
       {comprovante.isPending ? (
         <Esqueleto className="h-64 w-full" />
@@ -35,7 +51,7 @@ export default function DetalheDeComprovante() {
           </AlertaDescricao>
         </Alerta>
       ) : comprovante.data ? (
-        <Cartao>
+        <Cartao className="rounded-pronunciado shadow-flutuante-alta">
           <CartaoCabecalho>
             <CartaoTitulo>Comprovante {comprovante.data.numero}</CartaoTitulo>
           </CartaoCabecalho>

@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
@@ -139,7 +140,7 @@ export default function NovaSolicitacao() {
             Protocolo {protocolo}. Acompanhe o andamento em Solicitações.
           </AlertaDescricao>
         </Alerta>
-        <Botao asChild variant="secundaria" className="w-fit">
+        <Botao asChild variant="secundaria" className="w-fit rounded-grande">
           <Link href="/eu/solicitacoes">Voltar para solicitações</Link>
         </Botao>
       </div>
@@ -148,7 +149,20 @@ export default function NovaSolicitacao() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="estilo-titulo-pagina text-texto-primario">Nova solicitação</h1>
+      <div className="flex items-center gap-3">
+        <Botao
+          asChild
+          variant="secundaria"
+          tamanho="icone-toque"
+          className="rounded-pleno shadow-flutuante-chip"
+          aria-label="Voltar para solicitações"
+        >
+          <Link href="/eu/solicitacoes">
+            <ArrowLeft className="size-4" />
+          </Link>
+        </Botao>
+        <h1 className="estilo-titulo-pagina text-texto-primario">Nova solicitação</h1>
+      </div>
 
       {criar.isError && ehIndisponivel(criar.error) ? (
         <Alerta variant="info">
@@ -172,7 +186,7 @@ export default function NovaSolicitacao() {
         </Alerta>
       ) : null}
 
-      <Cartao>
+      <Cartao className="rounded-pronunciado shadow-flutuante-alta">
         <CartaoConteudo>
           {tipos.isPending ? (
             <Esqueleto className="h-48 w-full" />
@@ -252,7 +266,12 @@ export default function NovaSolicitacao() {
                 <MensagemDeErro>{formulario.formState.errors.descricao?.message}</MensagemDeErro>
               </div>
 
-              <Botao type="submit" tamanho="toque" disabled={criar.isPending}>
+              <Botao
+                type="submit"
+                tamanho="toque"
+                className="rounded-grande"
+                disabled={criar.isPending}
+              >
                 {criar.isPending ? "Enviando…" : "Enviar solicitação"}
               </Botao>
             </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 import { type AtalhoDePeriodo, SeletorDePeriodo } from "@/componentes/dominio/seletor-de-periodo";
@@ -48,6 +49,14 @@ function CelulaDeSaldo({ minutos }: { minutos: number }): ReactNode {
       {saldo.textoComSinal}
     </span>
   );
+}
+
+/** Soma de um campo de minutos sobre a apuração do período — usada só nos dois tiles de resumo, não recalcula nada que a API já não tenha mandado. */
+function somarMinutos(
+  linhas: Esquema<"ApuracaoDia">[] | undefined,
+  campo: "trabalhadoMinutos" | "saldoMinutos",
+): number {
+  return (linhas ?? []).reduce((total, linha) => total + (linha[campo] ?? 0), 0);
 }
 
 export default function ExtratoDoColaborador() {
@@ -150,11 +159,40 @@ export default function ExtratoDoColaborador() {
     },
   ];
 
+  const totalTrabalhado = somarMinutos(apuracoes.data?.dados, "trabalhadoMinutos");
+  const totalSaldo = somarMinutos(apuracoes.data?.dados, "saldoMinutos");
+  const saldoDoPeriodo = formatarSaldo(totalSaldo);
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="estilo-titulo-pagina text-texto-primario">Extrato</h1>
+      <div>
+        <h1 className="estilo-titulo-pagina text-texto-primario">Extrato</h1>
+        <p className="estilo-legenda mt-1 text-texto-terciario">Espelho de ponto do período</p>
+      </div>
 
-      <Cartao>
+      {!apuracoes.isPending && !apuracoes.isError ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-suave bg-fundo-superficie p-4 shadow-flutuante-cartao">
+            <p className="estilo-legenda text-texto-terciario">Saldo do período</p>
+            <p
+              className={cn(
+                "estilo-numero-destaque mt-2",
+                CLASSE_COR_POR_SINAL[saldoDoPeriodo.sinal],
+              )}
+            >
+              {saldoDoPeriodo.textoComSinal}
+            </p>
+          </div>
+          <div className="rounded-suave bg-fundo-superficie p-4 shadow-flutuante-cartao">
+            <p className="estilo-legenda text-texto-terciario">Horas trabalhadas</p>
+            <p className="estilo-tabular mt-2 text-lg font-semibold text-texto-primario">
+              {minutosParaHHMM(totalTrabalhado)}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoConteudo>
           <SeletorDePeriodo
             inicio={periodo.inicio}
@@ -168,7 +206,7 @@ export default function ExtratoDoColaborador() {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Apuração do período</CartaoTitulo>
         </CartaoCabecalho>
@@ -195,7 +233,7 @@ export default function ExtratoDoColaborador() {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Extrato de banco de horas</CartaoTitulo>
         </CartaoCabecalho>
@@ -245,6 +283,10 @@ export default function ExtratoDoColaborador() {
           )}
         </CartaoConteudo>
       </Cartao>
+
+      <Botao asChild variant="secundaria" tamanho="toque" className="rounded-grande">
+        <Link href="/eu/comprovantes">Ver comprovantes</Link>
+      </Botao>
     </div>
   );
 }

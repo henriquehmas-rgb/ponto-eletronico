@@ -1,5 +1,6 @@
 "use client";
 
+import { LayoutGrid } from "lucide-react";
 import { useState } from "react";
 
 import { Selo } from "@/componentes/ui/badge";
@@ -12,14 +13,6 @@ import {
   SelecaoValor,
 } from "@/componentes/ui/select";
 import { Esqueleto } from "@/componentes/ui/skeleton";
-import {
-  TabelaBase,
-  TabelaBaseCabecalho,
-  TabelaBaseCabecalhoDeColuna,
-  TabelaBaseCelula,
-  TabelaBaseCorpo,
-  TabelaBaseLinha,
-} from "@/componentes/ui/table";
 import { useEmpresas } from "@/ganchos/use-empresas";
 import { useEscalas, useExcluirEscala } from "@/ganchos/use-escalas";
 import { PortaoDePermissao } from "@/lib/permissoes";
@@ -102,7 +95,7 @@ export function ListaDeEscalas() {
           </SelecaoConteudo>
         </Selecao>
         <PortaoDePermissao permissao="escalas.criar">
-          <Botao type="button" onClick={abrirCriacao}>
+          <Botao type="button" className="rounded-pleno" onClick={abrirCriacao}>
             Nova escala
           </Botao>
         </PortaoDePermissao>
@@ -114,82 +107,73 @@ export function ListaDeEscalas() {
         <p className="estilo-corpo text-estado-erro-texto" role="alert">
           {mensagemDeErroApi(escalas.error)}
         </p>
+      ) : (escalas.data?.dados ?? []).length === 0 ? (
+        <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+          <p className="estilo-corpo text-texto-secundario">Nenhuma escala cadastrada.</p>
+        </div>
       ) : (
-        <TabelaBase>
-          <TabelaBaseCabecalho>
-            <TabelaBaseLinha>
-              <TabelaBaseCabecalhoDeColuna>Código</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Nome</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Padrão</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Dias do ciclo</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Situação</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>
-                <span className="sr-only">Ações</span>
-              </TabelaBaseCabecalhoDeColuna>
-            </TabelaBaseLinha>
-          </TabelaBaseCabecalho>
-          <TabelaBaseCorpo>
-            {(escalas.data?.dados ?? []).length === 0 ? (
-              <TabelaBaseLinha>
-                <TabelaBaseCelula colSpan={6} className="text-center text-texto-secundario">
-                  Nenhuma escala cadastrada.
-                </TabelaBaseCelula>
-              </TabelaBaseLinha>
-            ) : (
-              (escalas.data?.dados ?? []).map((escala) => (
-                <TabelaBaseLinha key={escala.id}>
-                  <TabelaBaseCelula className="estilo-tabular">{escala.codigo}</TabelaBaseCelula>
-                  <TabelaBaseCelula>{escala.nome}</TabelaBaseCelula>
-                  <TabelaBaseCelula>{escala.tipo}</TabelaBaseCelula>
-                  <TabelaBaseCelula className="estilo-tabular">{escala.diasCiclo}</TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    <Selo variant={escala.ativo ? "sucesso" : "neutro"}>
-                      {escala.ativo ? "Ativa" : "Inativa"}
-                    </Selo>
-                  </TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    <div className="flex gap-2">
-                      <PortaoDePermissao permissao="escalas.editar">
-                        <Botao
-                          type="button"
-                          variant="secundaria"
-                          tamanho="compacto"
-                          onClick={() => {
-                            abrirEdicao(escala);
-                          }}
-                        >
-                          Editar
-                        </Botao>
-                        <Botao
-                          type="button"
-                          variant="secundaria"
-                          tamanho="compacto"
-                          onClick={() => {
-                            abrirAtribuicao(escala);
-                          }}
-                        >
-                          Atribuir
-                        </Botao>
-                      </PortaoDePermissao>
-                      <PortaoDePermissao permissao="escalas.excluir">
-                        <Botao
-                          type="button"
-                          variant="destrutiva"
-                          tamanho="compacto"
-                          onClick={() => {
-                            definirEscalaParaExcluir(escala);
-                          }}
-                        >
-                          Excluir
-                        </Botao>
-                      </PortaoDePermissao>
-                    </div>
-                  </TabelaBaseCelula>
-                </TabelaBaseLinha>
-              ))
-            )}
-          </TabelaBaseCorpo>
-        </TabelaBase>
+        <div className="flex flex-col gap-2">
+          {(escalas.data?.dados ?? []).map((escala) => (
+            <div
+              key={escala.id}
+              className="flex flex-wrap items-center gap-3 rounded-suave bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-suave bg-acao-sutil-fundo text-acao-sutil-texto">
+                <LayoutGrid aria-hidden="true" className="size-[18px]" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-texto-primario">
+                  {escala.nome}
+                  <span className="ml-2 estilo-tabular text-[12px] text-texto-terciario">
+                    {escala.codigo}
+                  </span>
+                </p>
+                <p className="truncate text-[12px] text-texto-terciario">
+                  {escala.tipo} · {escala.diasCiclo} dias de ciclo
+                </p>
+              </div>
+              <Selo variant={escala.ativo ? "sucesso" : "neutro"}>
+                {escala.ativo ? "Ativa" : "Inativa"}
+              </Selo>
+              <div className="flex gap-2">
+                <PortaoDePermissao permissao="escalas.editar">
+                  <Botao
+                    type="button"
+                    variant="secundaria"
+                    tamanho="compacto"
+                    onClick={() => {
+                      abrirEdicao(escala);
+                    }}
+                  >
+                    Editar
+                  </Botao>
+                  <Botao
+                    type="button"
+                    variant="secundaria"
+                    tamanho="compacto"
+                    onClick={() => {
+                      abrirAtribuicao(escala);
+                    }}
+                  >
+                    Atribuir
+                  </Botao>
+                </PortaoDePermissao>
+                <PortaoDePermissao permissao="escalas.excluir">
+                  <Botao
+                    type="button"
+                    variant="destrutiva"
+                    tamanho="compacto"
+                    onClick={() => {
+                      definirEscalaParaExcluir(escala);
+                    }}
+                  >
+                    Excluir
+                  </Botao>
+                </PortaoDePermissao>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="flex justify-end">

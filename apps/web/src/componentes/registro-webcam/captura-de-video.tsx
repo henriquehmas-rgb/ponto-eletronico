@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
 import { Botao } from "@/componentes/ui/button";
+import { Cartao } from "@/componentes/ui/card";
 import { Esqueleto } from "@/componentes/ui/skeleton";
 import type { EstadoDaPermissaoDeCamera } from "@/ganchos/use-captura-webcam";
 
@@ -44,20 +45,20 @@ export function CapturaDeVideo({
 
   if (estado === "solicitando") {
     return (
-      <div
+      <Cartao
         role="status"
         aria-live="polite"
-        className="flex flex-col items-center gap-[var(--espacamento-2)]"
+        className="items-center gap-[var(--espacamento-2)] rounded-suave p-[var(--espacamento-4)] shadow-flutuante-cartao"
       >
         <Esqueleto className="aspect-video w-full" />
         <p className="estilo-legenda text-texto-secundario">Aguardando permissão da câmera…</p>
-      </div>
+      </Cartao>
     );
   }
 
   if (estado === "negada") {
     return (
-      <Alerta variant="atencao">
+      <Alerta variant="atencao" className="rounded-suave shadow-flutuante-cartao">
         <AlertaTitulo>Permissão de câmera negada</AlertaTitulo>
         <AlertaDescricao>
           Para registrar o ponto pela webcam, autorize o acesso à câmera nas configurações do
@@ -80,7 +81,7 @@ export function CapturaDeVideo({
 
   if (estado === "indisponivel") {
     return (
-      <Alerta variant="erro">
+      <Alerta variant="erro" className="rounded-suave shadow-flutuante-cartao">
         <AlertaTitulo>Câmera indisponível</AlertaTitulo>
         <AlertaDescricao>
           Não encontramos uma câmera neste dispositivo. Use um computador ou celular com câmera para
@@ -90,6 +91,10 @@ export function CapturaDeVideo({
     );
   }
 
+  // Estado "concedida": renderizado dentro do painel escuro fixo de captura
+  // (`FluxoDeRegistro`) — a moldura oval, o vinheteamento e o recorte
+  // arredondado já vêm do contêiner pai, então o `<video>` aqui só precisa
+  // preencher o espaço disponível.
   return (
     <video
       ref={(elemento) => {
@@ -100,7 +105,7 @@ export function CapturaDeVideo({
       playsInline
       muted
       aria-label="Captura ao vivo da câmera para registro de ponto"
-      className="-scale-x-100 aspect-video w-full rounded-medio bg-fundo-inverso object-cover"
+      className="-scale-x-100 size-full object-cover"
     />
   );
 }

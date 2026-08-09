@@ -1,6 +1,4 @@
-import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
-import { Esqueleto } from "@/componentes/ui/skeleton";
-import { MAXIMO_DE_TENTATIVAS, type TipoDeDesafio } from "@/lib/deteccao/prova-de-vida";
+import { MAXIMO_DE_TENTATIVAS, JANELA_DO_DESAFIO_MS, type TipoDeDesafio } from "@/lib/deteccao/prova-de-vida";
 import type { SituacaoDaProvaDeVida } from "@/ganchos/use-prova-de-vida";
 
 /**
@@ -11,6 +9,12 @@ import type { SituacaoDaProvaDeVida } from "@/ganchos/use-prova-de-vida";
  * ativo" (com contador regressivo) e "reprovado nesta tentativa" (antes de
  * uma nova tentativa começar). Os estados finais (aprovado/reprovado
  * definitivo) são responsabilidade de `ConfirmacaoDeRegistro`.
+ *
+ * Único lugar onde este componente é usado é dentro do painel escuro fixo de
+ * captura (`FluxoDeRegistro`, que envolve a árvore em `data-tema="escuro"` —
+ * ver comentário lá). Por isso usa normalmente os tokens semânticos
+ * `texto-*`/`estado-*`: dentro dessa subárvore eles já resolvem para o par
+ * escuro, independente do tema real escolhido pelo usuário.
  */
 export interface DesafioDeProvaDeVidaProps {
   situacao: Extract<
@@ -41,32 +45,42 @@ export function DesafioDeProvaDeVida({
         aria-live="polite"
         className="flex flex-col items-center gap-[var(--espacamento-2)]"
       >
-        <Esqueleto className="h-[var(--espacamento-8)] w-full" />
-        <p className="estilo-legenda text-texto-secundario">Carregando verificação de presença…</p>
+        <div className="h-1.5 w-full animate-pulse rounded-pleno bg-texto-primario/15" />
+        <p className="text-2xs text-texto-primario/70">Carregando verificação de presença…</p>
       </div>
     );
   }
 
   if (situacao === "reprovado_tentativa") {
     return (
-      <Alerta variant="atencao" aria-live="polite">
-        <AlertaTitulo>Não foi dessa vez</AlertaTitulo>
-        <AlertaDescricao>Preparando uma nova tentativa…</AlertaDescricao>
-      </Alerta>
+      <div aria-live="polite" className="flex flex-col items-center gap-1 text-center">
+        <p className="text-md font-semibold text-estado-atencao-icone">Não foi dessa vez</p>
+        <p className="text-2xs text-texto-primario/70">Preparando uma nova tentativa…</p>
+      </div>
     );
   }
 
   const instrucao = desafio ? INSTRUCAO_POR_DESAFIO[desafio] : "";
+  const totalDeSegundos = Math.ceil(JANELA_DO_DESAFIO_MS / 1000);
+  const progresso = totalDeSegundos > 0 ? (segundosRestantes / totalDeSegundos) * 100 : 0;
 
   return (
-    <div className="flex flex-col items-center gap-[var(--espacamento-3)] text-center">
-      <p aria-live="polite" className="estilo-titulo-secao">
-        {instrucao}
-      </p>
-      <p aria-hidden="true" className="estilo-numero-destaque text-texto-primario">
-        {segundosRestantes}
-      </p>
-      <p className="estilo-legenda text-texto-secundario">
+    <div className="flex w-full flex-col items-center gap-3 text-center">
+      <div className="flex items-center gap-2">
+        <p aria-live="polite" className="text-lg font-semibold text-balance text-texto-primario">
+          {instrucao}
+        </p>
+        <span aria-hidden="true" className="font-mono text-sm font-semibold tabular-nums text-texto-primario/70">
+          {segundosRestantes}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-pleno bg-texto-primario/15">
+        <div
+          className="h-full rounded-pleno bg-estado-sucesso-icone transition-[width] duration-300 ease-linear"
+          style={{ width: `${progresso}%` }}
+        />
+      </div>
+      <p className="text-2xs text-texto-primario/60">
         Tentativa {tentativa} de {MAXIMO_DE_TENTATIVAS}
       </p>
     </div>

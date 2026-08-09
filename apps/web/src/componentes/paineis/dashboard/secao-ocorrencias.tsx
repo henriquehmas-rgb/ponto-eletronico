@@ -41,7 +41,7 @@ export function SecaoOcorrencias({ escopo }: { escopo: FiltroDeEscopo }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Ocorrências abertas</CartaoTitulo>
         </CartaoCabecalho>
@@ -71,7 +71,7 @@ export function SecaoOcorrencias({ escopo }: { escopo: FiltroDeEscopo }) {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Ocorrências por mês (últimos 6 meses)</CartaoTitulo>
         </CartaoCabecalho>

@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 
-import { type ColunaDeTabela, TabelaDeDados } from "@/componentes/dominio/tabela-de-dados";
 import { mensagemDeErroApi } from "@/componentes/paineis/cadastros/_shared/erro-amigavel";
 import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
 import { Selo } from "@/componentes/ui/badge";
 import { Botao } from "@/componentes/ui/button";
 import { Dialogo, DialogoCabecalho, DialogoConteudo, DialogoTitulo } from "@/componentes/ui/dialog";
+import { Esqueleto } from "@/componentes/ui/skeleton";
 import { AreaDeTexto } from "@/componentes/ui/textarea";
 import {
   type MarcacaoSuspeita,
@@ -24,6 +24,15 @@ const SELO_POR_CLASSIFICACAO: Record<string, "sucesso" | "atencao" | "erro" | "n
   media: "atencao",
   baixa: "erro",
   bloqueada: "erro",
+};
+
+/** Círculo de score: mesmo par fundo+texto do Selo de classificação
+ * (`estado.<x>Fundo`/`estado.<x>Texto`), nunca cor isolada. */
+const CIRCULO_POR_CLASSIFICACAO: Record<string, string> = {
+  alta: "bg-estado-sucesso-fundo text-estado-sucesso-texto",
+  media: "bg-estado-atencao-fundo text-estado-atencao-texto",
+  baixa: "bg-estado-erro-fundo text-estado-erro-texto",
+  bloqueada: "bg-estado-erro-fundo text-estado-erro-texto",
 };
 
 interface SinalExplicabilidade {
@@ -62,60 +71,7 @@ export default function PaginaDeAntifraude() {
   const consulta = useMarcacoesSuspeitas({ habilitado: temPermissaoSensivel });
   const [detalhe, setDetalhe] = useState<MarcacaoSuspeita | null>(null);
 
-  const colunas: ColunaDeTabela<MarcacaoSuspeita>[] = [
-    {
-      id: "colaborador",
-      cabecalho: "Colaborador",
-      renderizarCelula: (item) => (
-        <button
-          type="button"
-          className="text-left hover:underline"
-          onClick={() => setDetalhe(item)}
-        >
-          {item.nomeColaborador ?? item.item.colaboradorId ?? "—"}
-        </button>
-      ),
-      larguraPx: 220,
-    },
-    {
-      id: "canal",
-      cabecalho: "Canal",
-      renderizarCelula: (item) => item.item.canal ?? "—",
-      larguraPx: 100,
-    },
-    {
-      id: "quando",
-      cabecalho: "Quando",
-      renderizarCelula: (item) =>
-        item.item.datahoraMarcacao ? formatarDataHora(item.item.datahoraMarcacao) : "—",
-      larguraPx: 170,
-    },
-    {
-      id: "score",
-      cabecalho: "Score",
-      renderizarCelula: (item) => (
-        <div className="flex items-center gap-2">
-          <span className="estilo-corpo tabular-nums">{item.item.scoreConfianca ?? "—"}</span>
-          <Selo
-            variant={SELO_POR_CLASSIFICACAO[item.item.classificacaoConfianca ?? ""] ?? "neutro"}
-          >
-            {item.item.classificacaoConfianca ?? "—"}
-          </Selo>
-        </div>
-      ),
-      larguraPx: 160,
-    },
-    {
-      id: "acoes",
-      cabecalho: "Ações",
-      renderizarCelula: (item) => (
-        <Botao variant="secundaria" tamanho="compacto" onClick={() => setDetalhe(item)}>
-          Ver e decidir
-        </Botao>
-      ),
-      larguraPx: 180,
-    },
-  ];
+  const itens = consulta.data ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -147,13 +103,80 @@ export default function PaginaDeAntifraude() {
           </Alerta>
         ) : null}
 
-        <TabelaDeDados
-          linhas={consulta.data ?? []}
-          colunas={colunas}
-          obterId={(item) => item.item.marcacaoId}
-          carregando={consulta.isPending}
-          mensagemVazia="Nenhuma marcação pendente de revisão."
-        />
+        {consulta.isPending ? (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 3 }).map((_, indice) => (
+              <Esqueleto key={indice} className="h-[94px] w-full rounded-suave" />
+            ))}
+          </div>
+        ) : itens.length === 0 ? (
+          <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+            <p className="estilo-corpo text-texto-secundario">
+              Nenhuma marcação pendente de revisão.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {itens.map((item) => {
+              const classificacao = item.item.classificacaoConfianca ?? "";
+              const bloco = extrairExplicabilidade(item.item.flagsIntegridade);
+              const sinais = (bloco?.scoreExplicabilidade ?? []).filter(
+                (sinal) => sinal.disponibilidade === "real" && (sinal.contribuicao ?? 0) > 0,
+              );
+              return (
+                <div
+                  key={item.item.marcacaoId}
+                  className="flex flex-wrap items-center gap-4 rounded-suave bg-fundo-superficie p-[var(--espacamento-4)] shadow-flutuante-cartao"
+                >
+                  <div
+                    className={
+                      "flex size-[58px] shrink-0 flex-col items-center justify-center rounded-pleno " +
+                      (CIRCULO_POR_CLASSIFICACAO[classificacao] ?? "bg-fundo-sutil text-texto-secundario")
+                    }
+                  >
+                    <span className="font-mono text-[18px] font-semibold leading-none tabular-nums">
+                      {item.item.scoreConfianca ?? "—"}
+                    </span>
+                    <span className="text-[8.5px] font-semibold uppercase opacity-80">Score</span>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      className="text-left text-[14px] font-medium text-texto-primario hover:underline"
+                      onClick={() => setDetalhe(item)}
+                    >
+                      {item.nomeColaborador ?? item.item.colaboradorId ?? "—"}
+                    </button>
+                    <p className="mt-0.5 text-[12px] text-texto-terciario">
+                      {item.item.canal ?? "—"} ·{" "}
+                      {item.item.datahoraMarcacao ? formatarDataHora(item.item.datahoraMarcacao) : "—"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Selo variant={SELO_POR_CLASSIFICACAO[classificacao] ?? "neutro"}>
+                        {classificacao || "—"}
+                      </Selo>
+                      {sinais.map((sinal) => (
+                        <Selo key={sinal.sinal} variant="atencao">
+                          {sinal.sinal}
+                        </Selo>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Botao
+                    variant="secundaria"
+                    tamanho="compacto"
+                    className="rounded-pleno"
+                    onClick={() => setDetalhe(item)}
+                  >
+                    Ver e decidir
+                  </Botao>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </PortaoDePermissao>
 
       <Dialogo open={detalhe !== null} onOpenChange={(aberto) => !aberto && setDetalhe(null)}>

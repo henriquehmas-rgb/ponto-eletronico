@@ -41,7 +41,7 @@ export function SecaoColaboradores({ escopo }: { escopo: FiltroDeEscopo }) {
         descricao={`${total} no total do escopo selecionado`}
         carregando={carregando}
       />
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Colaboradores por situação</CartaoTitulo>
         </CartaoCabecalho>

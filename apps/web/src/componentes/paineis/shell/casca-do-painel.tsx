@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode, type SVGProps } from "react";
 
 import { Botao } from "@/componentes/ui/button";
 import { Esqueleto } from "@/componentes/ui/skeleton";
@@ -17,6 +17,12 @@ import { cn } from "@/lib/utils";
  * para uma rota `/painel/entrar`, que não existe — PCF F9b §2/§9 proibição 3).
  * `ProvedorDeSessao` é montado por `apps/web/src/app/painel/layout.tsx`, que
  * envolve este componente.
+ *
+ * Visual: padrão oficial de "superfícies macias" (`docs/design-system-oficial.md`,
+ * 09/08/2026) — barra lateral com itens em pílula e cartão de usuário
+ * flutuante no rodapé, traduzido do protótipo `SEEG Ponto.dc.html` (linhas
+ * 647-670) para os primitivos reais do projeto. `children` continua com a
+ * mesma assinatura — todas as rotas de `/painel/*` dependem desta casca.
  *
  * Cada item de navegação além do próprio dashboard é individualmente
  * habilitado por `<PortaoDePermissao>` (RBAC por permissão exata, nunca por
@@ -50,55 +56,103 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
     return null;
   }
 
+  const nome = sessao.usuario?.nome ?? "";
+  const iniciais =
+    nome
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((parte) => parte.charAt(0).toUpperCase())
+      .join("") || "?";
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8 sm:flex-row">
-      <nav aria-label="Navegação do painel" className="flex shrink-0 flex-col gap-1 sm:w-56">
-        <p className="estilo-legenda px-3 pb-1 text-texto-terciario">{sessao.usuario?.nome}</p>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-8 sm:flex-row sm:items-start">
+      <aside className="flex shrink-0 flex-col gap-6 sm:sticky sm:top-8 sm:w-60">
+        <div className="flex items-center gap-2 px-3">
+          <IconeLogo className="h-[21px] w-[21px] text-acao-primaria-fundo" />
+          <span className="font-display text-[14px] font-bold tracking-[-0.01em] text-texto-primario">
+            SEEG PONTO
+          </span>
+        </div>
 
-        <ItemDeNavegacao href="/painel" rotulo="Painel" caminhoAtual={caminhoAtual} />
+        <nav aria-label="Navegação do painel" className="flex flex-col gap-1">
+          <ItemDeNavegacao
+            href="/painel"
+            rotulo="Painel"
+            caminhoAtual={caminhoAtual}
+            icone={IconeVisaoGeral}
+          />
 
-        <PortaoDePermissao permissao="empresas.ler">
-          <ItemDeNavegacao
-            href="/painel/cadastros/empresas"
-            rotulo="Cadastros"
-            caminhoAtual={caminhoAtual}
-            prefixoAtivo="/painel/cadastros"
-          />
-        </PortaoDePermissao>
-        <PortaoDePermissao permissao="apuracoes.ler">
-          <ItemDeNavegacao href="/painel/apuracao" rotulo="Apuração" caminhoAtual={caminhoAtual} />
-        </PortaoDePermissao>
-        <PortaoDePermissao permissao="escalas.ler">
-          <ItemDeNavegacao href="/painel/escalas" rotulo="Escalas" caminhoAtual={caminhoAtual} />
-        </PortaoDePermissao>
-        <PortaoDePermissao permissao="webhooks.ler">
-          <ItemDeNavegacao
-            href="/painel/integracoes"
-            rotulo="Integrações"
-            caminhoAtual={caminhoAtual}
-            prefixoAtivo="/painel/integracoes"
-          />
-        </PortaoDePermissao>
-        <PortaoDePermissao permissao="marcacoes.ler_sensivel">
-          <ItemDeNavegacao
-            href="/painel/antifraude"
-            rotulo="Antifraude"
-            caminhoAtual={caminhoAtual}
-            prefixoAtivo="/painel/antifraude"
-          />
-        </PortaoDePermissao>
+          <PortaoDePermissao permissao="empresas.ler">
+            <ItemDeNavegacao
+              href="/painel/cadastros/empresas"
+              rotulo="Cadastros"
+              caminhoAtual={caminhoAtual}
+              prefixoAtivo="/painel/cadastros"
+              icone={IconeCadastros}
+            />
+          </PortaoDePermissao>
+          <PortaoDePermissao permissao="apuracoes.ler">
+            <ItemDeNavegacao
+              href="/painel/apuracao"
+              rotulo="Apuração"
+              caminhoAtual={caminhoAtual}
+              icone={IconeApuracao}
+            />
+          </PortaoDePermissao>
+          <PortaoDePermissao permissao="escalas.ler">
+            <ItemDeNavegacao
+              href="/painel/escalas"
+              rotulo="Escalas"
+              caminhoAtual={caminhoAtual}
+              icone={IconeEscalas}
+            />
+          </PortaoDePermissao>
+          <PortaoDePermissao permissao="webhooks.ler">
+            <ItemDeNavegacao
+              href="/painel/integracoes"
+              rotulo="Integrações"
+              caminhoAtual={caminhoAtual}
+              prefixoAtivo="/painel/integracoes"
+              icone={IconeIntegracoes}
+            />
+          </PortaoDePermissao>
+          <PortaoDePermissao permissao="marcacoes.ler_sensivel">
+            <ItemDeNavegacao
+              href="/painel/antifraude"
+              rotulo="Antifraude"
+              caminhoAtual={caminhoAtual}
+              prefixoAtivo="/painel/antifraude"
+              icone={IconeAntifraude}
+            />
+          </PortaoDePermissao>
+        </nav>
 
-        <Botao
-          type="button"
-          variant="sutil"
-          className="mt-4 justify-start"
-          onClick={() => {
-            void sessao.sair().then(() => router.replace("/"));
-          }}
-        >
-          Sair
-        </Botao>
-      </nav>
+        <div className="mt-auto flex flex-col gap-2">
+          <div className="flex items-center gap-[var(--espacamento-3)] rounded-suave bg-fundo-sutil p-3 shadow-flutuante-cartao">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pleno bg-gradient-to-br from-marca-300 to-marca-600 text-[12px] font-semibold text-texto-inverso"
+            >
+              {iniciais}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12.5px] font-semibold text-texto-primario">{nome}</p>
+              <p className="truncate text-[11px] text-texto-terciario">{sessao.usuario?.email}</p>
+            </div>
+          </div>
+          <Botao
+            type="button"
+            variant="sutil"
+            className="justify-start rounded-pleno"
+            onClick={() => {
+              void sessao.sair().then(() => router.replace("/"));
+            }}
+          >
+            Sair
+          </Botao>
+        </div>
+      </aside>
       <main id="conteudo-do-painel" className="min-w-0 flex-1">
         {children}
       </main>
@@ -111,12 +165,14 @@ function ItemDeNavegacao({
   rotulo,
   caminhoAtual,
   prefixoAtivo,
+  icone: Icone,
 }: {
   href: string;
   rotulo: string;
   caminhoAtual: string;
   /** Prefixo alternativo para marcar "ativo" (ex.: qualquer sub-rota de `/painel/cadastros`). */
   prefixoAtivo?: string;
+  icone: (props: SVGProps<SVGSVGElement>) => ReactNode;
 }) {
   const base = prefixoAtivo ?? href;
   const ativo =
@@ -126,11 +182,103 @@ function ItemDeNavegacao({
       href={href}
       aria-current={ativo ? "page" : undefined}
       className={cn(
-        "estilo-corpo rounded-pequeno px-3 py-2 text-texto-secundario hover:bg-fundo-sutil",
-        ativo && "bg-acao-sutil-fundo text-acao-sutil-texto",
+        "estilo-corpo flex items-center gap-[11px] rounded-pleno px-3 py-2.5 text-texto-secundario",
+        "hover:bg-fundo-sutil",
+        ativo && "bg-acao-sutil-fundo font-medium text-acao-sutil-texto hover:bg-acao-sutil-fundo",
       )}
     >
-      {rotulo}
+      <Icone aria-hidden="true" className="h-[17px] w-[17px] shrink-0" />
+      <span className="flex-1">{rotulo}</span>
     </Link>
+  );
+}
+
+/** Marca gráfica (check estilizado) — mesmo traço do protótipo (`SEEG Ponto.dc.html`, l. 649). */
+function IconeLogo(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 32 32" fill="none" {...props}>
+      <path
+        d="M8.6 18.6 13.6 24.1 24.2 7.6"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M6.4 26 H25.6" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function propsIcone(props: SVGProps<SVGSVGElement>) {
+  return {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    ...props,
+  };
+}
+
+function IconeVisaoGeral(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13" y="13" width="7.5" height="7.5" rx="1.5" />
+    </svg>
+  );
+}
+
+function IconeCadastros(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 20c0-3.6 2.5-6 5.5-6s5.5 2.4 5.5 6" />
+      <circle cx="17" cy="7.5" r="2.3" />
+      <path d="M15 12.2c2.4.2 4 2.2 4 5.3" />
+    </svg>
+  );
+}
+
+function IconeApuracao(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <rect x="3.5" y="5" width="17" height="15" rx="3" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3.5v3" />
+      <path d="M16 3.5v3" />
+      <path d="M8.5 14.5l2.4 2.4 4.6-5" />
+    </svg>
+  );
+}
+
+function IconeEscalas(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7v5l3.2 2" />
+    </svg>
+  );
+}
+
+function IconeIntegracoes(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <path d="M9 15 15 9" />
+      <path d="M8 13.5 5.8 15.7a3 3 0 0 1-4.2-4.2L3.8 9.3" />
+      <path d="M16 10.7l2.2-2.2a3 3 0 0 0-4.2-4.2L11.8 6.5" />
+    </svg>
+  );
+}
+
+function IconeAntifraude(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <path d="M12 3.5 19.5 6.5V11.5C19.5 16 16.5 19.5 12 20.5C7.5 19.5 4.5 16 4.5 11.5V6.5Z" />
+      <path d="M9 12l2 2 4-4.5" />
+    </svg>
   );
 }

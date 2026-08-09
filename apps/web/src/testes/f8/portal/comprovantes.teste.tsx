@@ -40,12 +40,13 @@ describe("/eu/comprovantes (T4)", () => {
 
     render(<ListaDeComprovantes />);
 
-    expect(screen.getByText("0001")).toBeInTheDocument();
-    expect(screen.getByText("42")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ver comprovante" })).toHaveAttribute(
-      "href",
-      "/eu/comprovantes/c1",
-    );
+    expect(
+      screen.getByText((_, elemento) => elemento?.textContent === "Comprovante 0001"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, elemento) => (elemento?.textContent ?? "").startsWith("NSR 42")),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver" })).toHaveAttribute("href", "/eu/comprovantes/c1");
   });
 
   it("estado vazio mostra mensagem amigável", () => {

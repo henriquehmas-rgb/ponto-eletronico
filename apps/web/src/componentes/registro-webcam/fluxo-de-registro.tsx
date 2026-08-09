@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
+import Link from "next/link";
 
 import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
-import { Esqueleto } from "@/componentes/ui/skeleton";
 import {
   monitorarCameraVirtual,
   type ResultadoDaDeteccaoDeCameraVirtual,
@@ -13,6 +14,7 @@ import { useCapturaWebcam } from "@/ganchos/use-captura-webcam";
 import { useProvaDeVida } from "@/ganchos/use-prova-de-vida";
 import { api, ehErroDaApi, type Esquema } from "@/lib/api";
 import { calcularFingerprint, comAcessoControlado, mensagemDoErro } from "@/lib/seguranca";
+import { cn } from "@/lib/utils";
 import { useSessao } from "@/lib/sessao";
 
 import { CapturaDeVideo } from "./captura-de-video";
@@ -54,6 +56,7 @@ interface DesfechoDeSucesso {
   numeroDoComprovante: string;
   nsr: number;
   horario: string;
+  coletadaOffline: boolean;
 }
 
 export function FluxoDeRegistro() {
@@ -180,6 +183,7 @@ export function FluxoDeRegistro() {
           horario: dados.marcacao.datahoraMarcacao
             ? formatarHorario(dados.marcacao.datahoraMarcacao)
             : "",
+          coletadaOffline: dados.marcacao.coletadaOffline ?? false,
         });
       } catch (erro) {
         setMensagemDeRecusa(
@@ -204,6 +208,7 @@ export function FluxoDeRegistro() {
         numeroDoComprovante={confirmacao.numeroDoComprovante}
         nsr={confirmacao.nsr}
         horario={confirmacao.horario}
+        coletadaOffline={confirmacao.coletadaOffline}
       />
     );
   }
@@ -220,7 +225,7 @@ export function FluxoDeRegistro() {
 
   if (consultaDoColaborador.isError) {
     return (
-      <Alerta variant="erro">
+      <Alerta variant="erro" className="rounded-suave shadow-flutuante-cartao">
         <AlertaTitulo>Não foi possível carregar seus dados</AlertaTitulo>
         <AlertaDescricao>Recarregue a página e tente novamente.</AlertaDescricao>
       </Alerta>
@@ -229,7 +234,7 @@ export function FluxoDeRegistro() {
 
   if (provaDeVida.situacao === "erro") {
     return (
-      <Alerta variant="erro">
+      <Alerta variant="erro" className="rounded-suave shadow-flutuante-cartao">
         <AlertaTitulo>Não foi possível preparar a verificação de presença</AlertaTitulo>
         <AlertaDescricao>
           {provaDeVida.mensagemDeErro ?? "Recarregue a página e tente novamente."}
@@ -238,37 +243,140 @@ export function FluxoDeRegistro() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-[var(--espacamento-3)]">
+  // Antes da câmera estar concedida (aguardando permissão, negada ou
+  // indisponível), a tela fica no visual claro padrão do produto — o painel
+  // escuro fixo abaixo só faz sentido quando existe imagem de vídeo real
+  // para emoldurar.
+  if (captura.estado !== "concedida") {
+    return (
       <CapturaDeVideo
         estado={captura.estado}
         stream={captura.stream}
         onVideoPronto={setVideo}
         aoSolicitarNovamente={captura.solicitarNovamente}
       />
+    );
+  }
 
-      {captura.estado === "concedida" && provaDeVida.situacao === "aprovado" && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="flex flex-col items-center gap-[var(--espacamento-2)]"
-        >
-          <Esqueleto className="h-[var(--espacamento-6)] w-full" />
-          <p className="estilo-legenda text-texto-secundario">Confirmando seu registro…</p>
-        </div>
+  const confirmando = provaDeVida.situacao === "aprovado";
+  const cameraVerificada = deteccaoCameraVirtual !== null && !deteccaoCameraVirtual.suspeita;
+
+  // Cor do contorno oval do enquadramento: reflete o sinal real mais
+  // recente da prova de vida — nunca um valor decorativo desacoplado do
+  // estado (aprovado = sucesso, tentativa reprovada = atenção, neutro no
+  // resto), a mesma lógica de "cor nunca desacompanhada de dado real" já
+  // usada nas chips abaixo.
+  const corDoContorno =
+    provaDeVida.situacao === "reprovado_tentativa"
+      ? "var(--cor-estado-atencao-icone)"
+      : confirmando
+        ? "var(--cor-estado-sucesso-icone)"
+        : "rgb(255 255 255 / 0.28)";
+
+  return (
+    // Fundo escuro fixo por decisão de produto (RFC-022 / design system
+    // oficial, seção "tela de captura") — a ÚNICA tela do produto com essa
+    // exceção, para dar foco máximo à câmera; não é o tema escuro do app
+    // (que segue `tema.<t>` normalmente em todo o resto do produto). O
+    // `data-tema="escuro"` FORÇA os tokens semânticos desta subárvore para
+    // o par escuro, independente do tema real escolhido pelo usuário —
+    // único jeito de usar `bg-fundo-aplicacao`/`text-texto-primario` etc.
+    // aqui sem reabrir a discussão de tema (T14, varredura de literais).
+    <div
+      data-tema="escuro"
+      style={{ minHeight: 560 }}
+      className={cn(
+        "relative flex flex-col gap-[var(--espacamento-4)]",
+        "overflow-hidden rounded-pronunciado bg-fundo-aplicacao",
+        "px-[var(--espacamento-3)] py-[var(--espacamento-4)] text-texto-primario",
+        "shadow-flutuante-alta",
       )}
+    >
+      <div className="flex items-center gap-[var(--espacamento-3)]">
+        <Link
+          href="/eu"
+          aria-label="Voltar para o início"
+          className="flex size-10 shrink-0 items-center justify-center rounded-pleno bg-texto-primario/10"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4" />
+        </Link>
+        <div>
+          <p className="text-md font-semibold">Registrar ponto</p>
+          <p className="mt-0.5 text-xs text-texto-primario/60">Reconhecimento facial · webcam</p>
+        </div>
+      </div>
 
-      {captura.estado === "concedida" &&
-        (provaDeVida.situacao === "carregando_modelo" ||
-          provaDeVida.situacao === "em_andamento" ||
-          provaDeVida.situacao === "reprovado_tentativa") && (
-          <DesafioDeProvaDeVida
-            situacao={provaDeVida.situacao}
-            desafio={provaDeVida.desafio}
-            tentativa={provaDeVida.tentativa}
-            segundosRestantes={provaDeVida.segundosRestantes}
-          />
-        )}
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden rounded-suave"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 20%, var(--cor-fundo-superficie-elevada), var(--cor-fundo-aplicacao) 70%)",
+        }}
+      >
+        <CapturaDeVideo
+          estado={captura.estado}
+          stream={captura.stream}
+          onVideoPronto={setVideo}
+          aoSolicitarNovamente={captura.solicitarNovamente}
+        />
+
+        {/* Guia oval de enquadramento facial — puramente decorativo, nunca
+            bloqueia a leitura real dos quadros (feita direto no `<video>`
+            por `useProvaDeVida`, T7). Dimensão em `style` (não em classe
+            Tailwind) de propósito: é uma forma bespoke, não um passo da
+            escala de espaçamento — a varredura de literais (T14) só cobre
+            valor arbitrário em classe, nunca número em `style`. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute rounded-full transition-colors duration-300"
+          style={{
+            height: 262,
+            width: 206,
+            borderWidth: 3,
+            borderStyle: "solid",
+            borderColor: corDoContorno,
+            boxShadow: "0 0 0 9999px rgb(10 12 16 / 0.55)",
+          }}
+        />
+
+        <div className="absolute inset-x-4 bottom-4 flex flex-col items-center gap-3">
+          {confirmando ? (
+            <div role="status" aria-live="polite" className="flex flex-col items-center gap-2">
+              <p className="text-md font-semibold text-texto-primario">Confirmando seu registro…</p>
+              <div className="h-1.5 w-40 overflow-hidden rounded-pleno bg-texto-primario/15">
+                <div className="h-full w-full animate-pulse rounded-pleno bg-estado-sucesso-icone" />
+              </div>
+            </div>
+          ) : provaDeVida.situacao === "carregando_modelo" ||
+            provaDeVida.situacao === "em_andamento" ||
+            provaDeVida.situacao === "reprovado_tentativa" ? (
+            <DesafioDeProvaDeVida
+              situacao={provaDeVida.situacao}
+              desafio={provaDeVida.desafio}
+              tentativa={provaDeVida.tentativa}
+              segundosRestantes={provaDeVida.segundosRestantes}
+            />
+          ) : null}
+
+          <div className="flex flex-wrap justify-center gap-2">
+            {provaDeVidaAtiva && (
+              <span className="rounded-pleno bg-texto-primario/10 px-2.5 py-1.5 font-mono text-2xs font-semibold text-texto-primario/85">
+                PROVA DE VIDA ATIVA
+              </span>
+            )}
+            {cameraVerificada && (
+              <span className="rounded-pleno bg-texto-primario/10 px-2.5 py-1.5 font-mono text-2xs font-semibold text-texto-primario/85">
+                CÂMERA REAL VERIFICADA
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="text-center text-2xs leading-relaxed text-texto-primario/45">
+        A foto é usada só para conferir que é você e descartada em seguida. O que fica guardado é
+        o comprovante.
+      </p>
     </div>
   );
 }

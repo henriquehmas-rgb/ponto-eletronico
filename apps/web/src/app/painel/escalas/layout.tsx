@@ -25,7 +25,7 @@ export default function LayoutDeEscalas({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Navegação de escalas"
-        className="flex gap-1 border-b border-borda-sutil pb-2"
+        className="flex flex-wrap items-center gap-1.5 rounded-pleno bg-fundo-sutil p-1.5 w-fit"
       >
         <ItemDeSubNavegacao href="/painel/escalas" rotulo="Grade" caminhoAtual={caminhoAtual} />
         <PortaoDePermissao permissao="turnos.ler">
@@ -64,8 +64,8 @@ function ItemDeSubNavegacao({
       href={href}
       aria-current={ativo ? "page" : undefined}
       className={cn(
-        "estilo-rotulo rounded-pequeno px-3 py-2 text-texto-secundario hover:bg-fundo-sutil",
-        ativo && "bg-acao-sutil-fundo text-acao-sutil-texto",
+        "estilo-rotulo rounded-pleno px-3.5 py-1.5 text-texto-secundario transition-colors duration-imediata ease-padrao hover:text-texto-primario",
+        ativo && "bg-fundo-superficie text-texto-primario shadow-flutuante-chip",
       )}
     >
       {rotulo}

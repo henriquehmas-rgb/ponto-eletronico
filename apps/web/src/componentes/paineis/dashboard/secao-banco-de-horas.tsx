@@ -68,7 +68,7 @@ export function SecaoBancoDeHoras() {
           : {})}
       />
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Evolução do saldo (últimos 6 meses)</CartaoTitulo>
         </CartaoCabecalho>

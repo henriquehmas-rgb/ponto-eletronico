@@ -27,7 +27,7 @@ export function AcompanhamentoDeExecucao({ execucaoId }: AcompanhamentoDeExecuca
   const emAndamento = execucao.status === "enfileirado" || execucao.status === "processando";
 
   return (
-    <div className="flex flex-col gap-2 rounded-medio border border-borda-sutil bg-fundo-superficie p-4">
+    <div className="flex flex-col gap-2 rounded-suave bg-fundo-superficie p-4 shadow-flutuante-cartao">
       <div className="flex items-center justify-between">
         <p className="estilo-corpo font-medium text-texto-primario">
           {ROTULO_STATUS_EXECUCAO[execucao.status ?? ""] ?? execucao.status}
@@ -59,7 +59,7 @@ export function AcompanhamentoDeExecucao({ execucaoId }: AcompanhamentoDeExecuca
       ) : null}
 
       {execucao.status === "concluido" && execucao.urlDownload ? (
-        <Botao asChild variant="primaria" tamanho="compacto" className="w-fit">
+        <Botao asChild variant="primaria" tamanho="compacto" className="w-fit rounded-pleno">
           <a href={execucao.urlDownload} target="_blank" rel="noreferrer">
             Baixar resultado
           </a>

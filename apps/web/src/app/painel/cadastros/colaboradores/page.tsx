@@ -1,5 +1,6 @@
 "use client";
 
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -84,11 +85,31 @@ export default function PaginaDeColaboradores() {
     {
       id: "nomeCompleto",
       cabecalho: "Nome",
-      renderizarCelula: (c) => (
-        <Link href={`/painel/cadastros/colaboradores/${c.id}`} className="hover:underline">
-          {c.nomeSocial ?? c.nomeCompleto}
-        </Link>
-      ),
+      renderizarCelula: (c) => {
+        const nomeExibido = c.nomeSocial ?? c.nomeCompleto ?? "";
+        const iniciais =
+          nomeExibido
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((parte) => parte[0]?.toUpperCase())
+            .join("") || "—";
+        return (
+          <Link
+            href={`/painel/cadastros/colaboradores/${c.id}`}
+            className="flex min-w-0 items-center gap-2.5 hover:underline"
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-7 shrink-0 items-center justify-center rounded-pleno bg-acao-sutil-fundo text-[11px] font-semibold text-acao-sutil-texto"
+            >
+              {iniciais}
+            </span>
+            <span className="truncate">{nomeExibido}</span>
+          </Link>
+        );
+      },
       valorDeOrdenacao: (c) => c.nomeCompleto ?? "",
       ordenavel: true,
       larguraPx: 240,
@@ -164,6 +185,7 @@ export default function PaginaDeColaboradores() {
           </PortaoDePermissao>
           <PortaoDePermissao permissao="colaboradores.criar">
             <Botao
+              className="rounded-pleno"
               onClick={() => {
                 setEditando(null);
                 setDialogoAberto(true);
@@ -175,13 +197,19 @@ export default function PaginaDeColaboradores() {
         </div>
       </header>
 
-      <Entrada
-        placeholder="Buscar por nome, matrícula ou CPF…"
-        value={busca}
-        onChange={(evento) => setBusca(evento.target.value)}
-        className="max-w-sm"
-        aria-label="Buscar colaboradores"
-      />
+      <div className="relative max-w-sm">
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-3.5 size-[13px] -translate-y-1/2 text-texto-terciario"
+        />
+        <Entrada
+          placeholder="Buscar por nome, matrícula ou CPF…"
+          value={busca}
+          onChange={(evento) => setBusca(evento.target.value)}
+          className="rounded-pleno border-transparent bg-fundo-superficie pl-9 shadow-flutuante-chip"
+          aria-label="Buscar colaboradores"
+        />
+      </div>
 
       {consulta.isError ? (
         <Alerta variant="erro">

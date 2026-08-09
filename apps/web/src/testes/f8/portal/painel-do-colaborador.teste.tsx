@@ -13,6 +13,14 @@ vi.mock("@/ganchos/use-espelho-de-ponto", () => ({
 vi.mock("@/ganchos/use-banco-de-horas", () => ({
   useSaldoBancoHoras: (...args: unknown[]) => useSaldoBancoHorasMock(...args),
 }));
+vi.mock("@/lib/sessao", () => ({
+  useSessao: () => ({
+    usuario: { id: "u1", nome: "Henrique Mascarenhas", email: "henrique@seeg.com.br" },
+    tenant: null,
+    autenticado: true,
+    carregando: false,
+  }),
+}));
 
 function estadoDeSucesso<T>(data: T) {
   return { data, isPending: false, isError: false, error: null };
@@ -31,7 +39,7 @@ describe("/eu — painel do colaborador (T2)", () => {
 
     render(<PainelDoColaborador />);
 
-    expect(screen.getAllByText("Meu dia").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(document.querySelectorAll('[data-slot="esqueleto"]').length).toBeGreaterThan(0);
   });
 
@@ -43,7 +51,7 @@ describe("/eu — painel do colaborador (T2)", () => {
 
     render(<PainelDoColaborador />);
 
-    expect(screen.getByText("Nenhuma marcação registrada hoje.")).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma marcação hoje")).toBeInTheDocument();
   });
 
   it("estado carregado mostra as marcações do dia", () => {
@@ -62,8 +70,8 @@ describe("/eu — painel do colaborador (T2)", () => {
 
     render(<PainelDoColaborador />);
 
-    expect(screen.getByText("NSR 42")).toBeInTheDocument();
-    expect(screen.getByText("NSR 43")).toBeInTheDocument();
+    expect(screen.getByText((_, elemento) => elemento?.textContent === "NSR 42 · Web")).toBeInTheDocument();
+    expect(screen.getByText((_, elemento) => elemento?.textContent === "NSR 43 · Web")).toBeInTheDocument();
     expect(screen.getByText("Saldo credor")).toBeInTheDocument();
   });
 

@@ -57,7 +57,7 @@ export function SecaoApuracao({ escopo }: { escopo: FiltroDeEscopo }) {
         />
       </div>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Extras, faltas e atrasos por dia</CartaoTitulo>
         </CartaoCabecalho>
@@ -83,7 +83,7 @@ export function SecaoApuracao({ escopo }: { escopo: FiltroDeEscopo }) {
         </CartaoConteudo>
       </Cartao>
 
-      <Cartao>
+      <Cartao className="rounded-suave shadow-flutuante-cartao">
         <CartaoCabecalho>
           <CartaoTitulo>Tendência de horas extras (últimos 6 meses)</CartaoTitulo>
         </CartaoCabecalho>

@@ -233,7 +233,12 @@ export function ExecucaoDeRelatorio({ codigo }: ExecucaoDeRelatorioProps) {
         />
       ) : null}
 
-      <Botao type="button" onClick={aoExecutar} disabled={executar.isPending} className="w-fit">
+      <Botao
+        type="button"
+        onClick={aoExecutar}
+        disabled={executar.isPending}
+        className="w-fit rounded-pleno"
+      >
         {executar.isPending ? "Executando…" : "Executar relatório"}
       </Botao>
 

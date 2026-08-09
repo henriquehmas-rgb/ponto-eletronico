@@ -166,7 +166,7 @@ export function GradeVisualDeEscala() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-suave bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao">
         <SeletorDePeriodo
           inicio={periodo.inicio}
           fim={periodo.fim}
@@ -198,9 +198,11 @@ export function GradeVisualDeEscala() {
       {carregando ? (
         <Esqueleto className="h-64 w-full" />
       ) : equipe.membros.length === 0 ? (
-        <p className="estilo-corpo text-texto-secundario">
-          Nenhum vínculo ativo visível para montar a grade.
-        </p>
+        <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+          <p className="estilo-corpo text-texto-secundario">
+            Nenhum vínculo ativo visível para montar a grade.
+          </p>
+        </div>
       ) : (
         <>
           <GradeDeEscala datas={datas} linhas={linhas} />

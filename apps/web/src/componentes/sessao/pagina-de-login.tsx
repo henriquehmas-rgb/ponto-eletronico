@@ -8,13 +8,7 @@ import { z } from "zod";
 
 import { Alerta, AlertaDescricao, AlertaTitulo } from "@/componentes/ui/alert";
 import { Botao } from "@/componentes/ui/button";
-import {
-  Cartao,
-  CartaoCabecalho,
-  CartaoConteudo,
-  CartaoDescricao,
-  CartaoTitulo,
-} from "@/componentes/ui/card";
+import { Cartao } from "@/componentes/ui/card";
 import { Entrada } from "@/componentes/ui/input";
 import { Rotulo } from "@/componentes/ui/label";
 import { MensagemDeErro } from "@/componentes/ui/mensagem-de-erro";
@@ -173,9 +167,9 @@ function ConteudoDeLogin() {
   if (sessao.carregando) {
     return (
       <section className="mx-auto flex w-full max-w-sm flex-col gap-4 px-6 py-16">
+        <Esqueleto className="h-16 w-16 rounded-suave" />
         <Esqueleto className="h-8 w-40" />
-        <Esqueleto className="h-10 w-full" />
-        <Esqueleto className="h-10 w-full" />
+        <Esqueleto className="h-40 w-full rounded-pronunciado" />
       </section>
     );
   }
@@ -187,14 +181,30 @@ function ConteudoDeLogin() {
 
   return (
     <section className="mx-auto flex w-full max-w-sm flex-col gap-6 px-6 py-16">
-      <div>
-        <p className="estilo-rotulo uppercase text-texto-terciario">SEEG Ponto</p>
-        <h1 className="estilo-titulo-pagina mt-2 text-texto-primario">Entrar</h1>
-        <p className="estilo-corpo mt-1 text-texto-secundario">
-          {tenantResolvidoPorSubdominio
-            ? (consultaTenant.data?.nomeExibicao ?? consultaTenant.data?.slug)
-            : "Prova justa da jornada."}
-        </p>
+      <div className="flex flex-col gap-4">
+        <div
+          aria-hidden="true"
+          className="flex h-16 w-16 items-center justify-center rounded-suave bg-gradient-to-br from-acao-primaria-fundo via-acao-primaria-fundo-hover to-acao-primaria-fundo-ativo shadow-flutuante-alta"
+        >
+          <svg viewBox="0 0 32 32" fill="none" className="h-8 w-8 text-texto-inverso">
+            <path
+              d="M8.6 18.6 13.6 24.1 24.2 7.6"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path d="M6.4 26 H25.6" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="estilo-titulo-pagina text-texto-primario">Entrar</h1>
+          <p className="estilo-corpo mt-1 text-texto-secundario">
+            {tenantResolvidoPorSubdominio
+              ? (consultaTenant.data?.nomeExibicao ?? consultaTenant.data?.slug)
+              : "Prova justa da jornada."}
+          </p>
+        </div>
       </div>
 
       {erro ? (
@@ -205,112 +215,120 @@ function ConteudoDeLogin() {
       ) : null}
 
       {etapa === "credenciais" ? (
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Credenciais de acesso</CartaoTitulo>
-            <CartaoDescricao>Use o e-mail e a senha cadastrados pela sua empresa.</CartaoDescricao>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <form
-              className="flex flex-col gap-4"
-              noValidate
-              onSubmit={(evento) => {
-                void formularioCredenciais.handleSubmit(aoSubmeterCredenciais)(evento);
-              }}
-            >
+        <Cartao className="gap-4 rounded-pronunciado p-[var(--espacamento-5)] shadow-flutuante-alta">
+          <div>
+            <p className="estilo-titulo-cartao text-texto-primario">Credenciais de acesso</p>
+            <p className="estilo-corpo mt-1 text-texto-secundario">
+              Use o e-mail e a senha cadastrados pela sua empresa.
+            </p>
+          </div>
+          <form
+            className="flex flex-col gap-4"
+            noValidate
+            onSubmit={(evento) => {
+              void formularioCredenciais.handleSubmit(aoSubmeterCredenciais)(evento);
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Rotulo htmlFor="email">E-mail</Rotulo>
+              <Entrada
+                id="email"
+                type="email"
+                autoComplete="username"
+                aria-invalid={Boolean(formularioCredenciais.formState.errors.email)}
+                {...formularioCredenciais.register("email")}
+              />
+              <MensagemDeErro>
+                {formularioCredenciais.formState.errors.email?.message}
+              </MensagemDeErro>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Rotulo htmlFor="senha">Senha</Rotulo>
+              <Entrada
+                id="senha"
+                type="password"
+                autoComplete="current-password"
+                aria-invalid={Boolean(formularioCredenciais.formState.errors.senha)}
+                {...formularioCredenciais.register("senha")}
+              />
+              <MensagemDeErro>
+                {formularioCredenciais.formState.errors.senha?.message}
+              </MensagemDeErro>
+            </div>
+
+            {!tenantResolvidoPorSubdominio ? (
               <div className="flex flex-col gap-1.5">
-                <Rotulo htmlFor="email">E-mail</Rotulo>
+                <Rotulo htmlFor="tenant">Identificador da empresa (tenant)</Rotulo>
                 <Entrada
-                  id="email"
-                  type="email"
-                  autoComplete="username"
-                  aria-invalid={Boolean(formularioCredenciais.formState.errors.email)}
-                  {...formularioCredenciais.register("email")}
+                  id="tenant"
+                  autoComplete="off"
+                  placeholder="ex.: acme"
+                  aria-invalid={Boolean(formularioCredenciais.formState.errors.tenant)}
+                  {...formularioCredenciais.register("tenant")}
                 />
                 <MensagemDeErro>
-                  {formularioCredenciais.formState.errors.email?.message}
+                  {formularioCredenciais.formState.errors.tenant?.message}
                 </MensagemDeErro>
               </div>
+            ) : null}
 
-              <div className="flex flex-col gap-1.5">
-                <Rotulo htmlFor="senha">Senha</Rotulo>
-                <Entrada
-                  id="senha"
-                  type="password"
-                  autoComplete="current-password"
-                  aria-invalid={Boolean(formularioCredenciais.formState.errors.senha)}
-                  {...formularioCredenciais.register("senha")}
-                />
-                <MensagemDeErro>
-                  {formularioCredenciais.formState.errors.senha?.message}
-                </MensagemDeErro>
-              </div>
-
-              {!tenantResolvidoPorSubdominio ? (
-                <div className="flex flex-col gap-1.5">
-                  <Rotulo htmlFor="tenant">Identificador da empresa (tenant)</Rotulo>
-                  <Entrada
-                    id="tenant"
-                    autoComplete="off"
-                    placeholder="ex.: acme"
-                    aria-invalid={Boolean(formularioCredenciais.formState.errors.tenant)}
-                    {...formularioCredenciais.register("tenant")}
-                  />
-                  <MensagemDeErro>
-                    {formularioCredenciais.formState.errors.tenant?.message}
-                  </MensagemDeErro>
-                </div>
-              ) : null}
-
-              <Botao type="submit" disabled={enviando} tamanho="toque">
-                {enviando ? "Entrando…" : "Entrar"}
-              </Botao>
-            </form>
-          </CartaoConteudo>
+            <Botao type="submit" disabled={enviando} tamanho="toque" className="mt-1.5 rounded-grande">
+              {enviando ? "Entrando…" : "Entrar"}
+            </Botao>
+          </form>
         </Cartao>
       ) : (
-        <Cartao>
-          <CartaoCabecalho>
-            <CartaoTitulo>Confirme o segundo fator</CartaoTitulo>
-            <CartaoDescricao>Informe o código do seu aplicativo autenticador.</CartaoDescricao>
-          </CartaoCabecalho>
-          <CartaoConteudo>
-            <form
-              className="flex flex-col gap-4"
-              noValidate
-              onSubmit={(evento) => {
-                void formularioMfa.handleSubmit(aoSubmeterMfa)(evento);
+        <Cartao className="gap-4 rounded-pronunciado p-[var(--espacamento-5)] shadow-flutuante-alta">
+          <div>
+            <p className="estilo-titulo-cartao text-texto-primario">Confirme o segundo fator</p>
+            <p className="estilo-corpo mt-1 text-texto-secundario">
+              Informe o código do seu aplicativo autenticador.
+            </p>
+          </div>
+          <form
+            className="flex flex-col gap-4"
+            noValidate
+            onSubmit={(evento) => {
+              void formularioMfa.handleSubmit(aoSubmeterMfa)(evento);
+            }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <Rotulo htmlFor="codigo">Código</Rotulo>
+              <Entrada
+                id="codigo"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                aria-invalid={Boolean(formularioMfa.formState.errors.codigo)}
+                {...formularioMfa.register("codigo")}
+              />
+              <MensagemDeErro>{formularioMfa.formState.errors.codigo?.message}</MensagemDeErro>
+            </div>
+
+            <Botao type="submit" disabled={enviando} tamanho="toque" className="rounded-grande">
+              {enviando ? "Verificando…" : "Confirmar"}
+            </Botao>
+            <Botao
+              type="button"
+              variant="sutil"
+              className="rounded-grande"
+              onClick={() => {
+                definirEtapa("credenciais");
+                definirErro(null);
               }}
             >
-              <div className="flex flex-col gap-1.5">
-                <Rotulo htmlFor="codigo">Código</Rotulo>
-                <Entrada
-                  id="codigo"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  aria-invalid={Boolean(formularioMfa.formState.errors.codigo)}
-                  {...formularioMfa.register("codigo")}
-                />
-                <MensagemDeErro>{formularioMfa.formState.errors.codigo?.message}</MensagemDeErro>
-              </div>
-
-              <Botao type="submit" disabled={enviando} tamanho="toque">
-                {enviando ? "Verificando…" : "Confirmar"}
-              </Botao>
-              <Botao
-                type="button"
-                variant="sutil"
-                onClick={() => {
-                  definirEtapa("credenciais");
-                  definirErro(null);
-                }}
-              >
-                Voltar
-              </Botao>
-            </form>
-          </CartaoConteudo>
+              Voltar
+            </Botao>
+          </form>
         </Cartao>
       )}
+
+      <p
+        className="estilo-identificador text-center text-texto-terciario"
+        style={{ letterSpacing: "0.06em" }}
+      >
+        REP-P · PORTARIA MTP Nº 671/2021
+      </p>
     </section>
   );
 }

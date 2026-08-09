@@ -60,16 +60,18 @@ export function CoberturaPorTurno({
 
   if (cobertura.length === 0) {
     return (
-      <p className="estilo-corpo text-texto-secundario">
-        Nenhum turno resolvido no período para calcular cobertura.
-      </p>
+      <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+        <p className="estilo-corpo text-texto-secundario">
+          Nenhum turno resolvido no período para calcular cobertura.
+        </p>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
       <h2 className="estilo-titulo-secao text-texto-primario">Cobertura por turno</h2>
-      <div className="max-h-96 max-w-full overflow-auto rounded-medio border border-borda-sutil">
+      <div className="max-h-96 max-w-full overflow-auto rounded-medio border border-borda-sutil shadow-baixa">
         <table className="w-full border-collapse">
           <thead>
             <tr>

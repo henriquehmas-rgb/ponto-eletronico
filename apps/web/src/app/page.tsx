@@ -24,9 +24,16 @@ export default function Pagina() {
   return (
     <Suspense fallback={null}>
       <PaginaDeLogin />
-      <div className="mx-auto flex w-full max-w-sm flex-col gap-2 px-6 pb-16">
-        <BotoesLoginOidc />
-        <BotaoLoginSaml />
+      <div className="mx-auto flex w-full max-w-sm flex-col gap-4 px-6 pb-16">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-borda-sutil" />
+          <span className="estilo-legenda text-texto-terciario">ou</span>
+          <div className="h-px flex-1 bg-borda-sutil" />
+        </div>
+        <div className="flex flex-col gap-2 rounded-pronunciado bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao [&_[data-slot=botao]]:rounded-grande">
+          <BotoesLoginOidc />
+          <BotaoLoginSaml />
+        </div>
       </div>
     </Suspense>
   );

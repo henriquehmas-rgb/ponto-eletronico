@@ -29,7 +29,7 @@ export function MarcacoesEmAberto({ escopo }: { escopo: FiltroDeEscopo }) {
   const consulta = useMarcacoesEmAberto(escopo);
 
   return (
-    <Cartao>
+    <Cartao className="rounded-suave shadow-flutuante-cartao">
       <CartaoCabecalho>
         <CartaoTitulo>Marcações em aberto hoje</CartaoTitulo>
       </CartaoCabecalho>

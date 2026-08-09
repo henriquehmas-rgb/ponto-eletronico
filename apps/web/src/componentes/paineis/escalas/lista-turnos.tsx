@@ -11,14 +11,6 @@ import {
   SelecaoItem,
   SelecaoValor,
 } from "@/componentes/ui/select";
-import {
-  TabelaBase,
-  TabelaBaseCabecalho,
-  TabelaBaseCabecalhoDeColuna,
-  TabelaBaseCelula,
-  TabelaBaseCorpo,
-  TabelaBaseLinha,
-} from "@/componentes/ui/table";
 import { Esqueleto } from "@/componentes/ui/skeleton";
 import { useEmpresas } from "@/ganchos/use-empresas";
 import { useTurnos } from "@/ganchos/use-turnos";
@@ -89,7 +81,7 @@ export function ListaDeTurnos() {
           </Selecao>
         </div>
         <PortaoDePermissao permissao="turnos.criar">
-          <Botao type="button" onClick={abrirCriacao}>
+          <Botao type="button" className="rounded-pleno" onClick={abrirCriacao}>
             Novo turno
           </Botao>
         </PortaoDePermissao>
@@ -101,69 +93,52 @@ export function ListaDeTurnos() {
         <p className="estilo-corpo text-estado-erro-texto" role="alert">
           {mensagemDeErroApi(turnos.error)}
         </p>
+      ) : (turnos.data?.dados ?? []).length === 0 ? (
+        <div className="rounded-suave border border-dashed border-borda-padrao p-6 text-center">
+          <p className="estilo-corpo text-texto-secundario">Nenhum turno cadastrado.</p>
+        </div>
       ) : (
-        <TabelaBase>
-          <TabelaBaseCabecalho>
-            <TabelaBaseLinha>
-              <TabelaBaseCabecalhoDeColuna>Código</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Nome</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Natureza</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Cor</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>Situação</TabelaBaseCabecalhoDeColuna>
-              <TabelaBaseCabecalhoDeColuna>
-                <span className="sr-only">Ações</span>
-              </TabelaBaseCabecalhoDeColuna>
-            </TabelaBaseLinha>
-          </TabelaBaseCabecalho>
-          <TabelaBaseCorpo>
-            {(turnos.data?.dados ?? []).length === 0 ? (
-              <TabelaBaseLinha>
-                <TabelaBaseCelula colSpan={6} className="text-center text-texto-secundario">
-                  Nenhum turno cadastrado.
-                </TabelaBaseCelula>
-              </TabelaBaseLinha>
-            ) : (
-              (turnos.data?.dados ?? []).map((turno) => (
-                <TabelaBaseLinha key={turno.id}>
-                  <TabelaBaseCelula className="estilo-tabular">{turno.codigo}</TabelaBaseCelula>
-                  <TabelaBaseCelula>{turno.nome}</TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    {turno.tipo ? ROTULO_TIPO_TURNO[turno.tipo] : "—"}
-                  </TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="size-3 shrink-0 rounded-pleno border border-borda-sutil"
-                        style={{ backgroundColor: turno.cor }}
-                      />
-                      <span className="estilo-tabular">{turno.cor}</span>
-                    </span>
-                  </TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    <Selo variant={turno.ativo ? "sucesso" : "neutro"}>
-                      {turno.ativo ? "Ativo" : "Inativo"}
-                    </Selo>
-                  </TabelaBaseCelula>
-                  <TabelaBaseCelula>
-                    <PortaoDePermissao permissao="turnos.editar">
-                      <Botao
-                        type="button"
-                        variant="secundaria"
-                        tamanho="compacto"
-                        onClick={() => {
-                          abrirEdicao(turno);
-                        }}
-                      >
-                        Editar
-                      </Botao>
-                    </PortaoDePermissao>
-                  </TabelaBaseCelula>
-                </TabelaBaseLinha>
-              ))
-            )}
-          </TabelaBaseCorpo>
-        </TabelaBase>
+        <div className="flex flex-col gap-2">
+          {(turnos.data?.dados ?? []).map((turno) => (
+            <div
+              key={turno.id}
+              className="flex flex-wrap items-center gap-3 rounded-suave bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao"
+            >
+              <span
+                aria-hidden="true"
+                className="size-3 shrink-0 rounded-pleno border border-borda-sutil"
+                style={{ backgroundColor: turno.cor }}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-texto-primario">
+                  {turno.nome}
+                  <span className="ml-2 estilo-tabular text-[12px] text-texto-terciario">
+                    {turno.codigo}
+                  </span>
+                </p>
+                <p className="truncate text-[12px] text-texto-terciario">
+                  {turno.tipo ? ROTULO_TIPO_TURNO[turno.tipo] : "—"} ·{" "}
+                  <span className="estilo-tabular">{turno.cor}</span>
+                </p>
+              </div>
+              <Selo variant={turno.ativo ? "sucesso" : "neutro"}>
+                {turno.ativo ? "Ativo" : "Inativo"}
+              </Selo>
+              <PortaoDePermissao permissao="turnos.editar">
+                <Botao
+                  type="button"
+                  variant="secundaria"
+                  tamanho="compacto"
+                  onClick={() => {
+                    abrirEdicao(turno);
+                  }}
+                >
+                  Editar
+                </Botao>
+              </PortaoDePermissao>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="flex justify-end">

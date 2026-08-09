@@ -239,6 +239,7 @@ export function GradeDeApuracao() {
           <Botao
             type="button"
             variant="secundaria"
+            className="rounded-pleno"
             onClick={() => {
               definirRecalculoAberto(true);
             }}
@@ -385,7 +386,7 @@ export function GradeDeApuracao() {
 function Legenda() {
   const tipos = Object.keys(MARCADOR_TIPO_DIA) as (keyof typeof MARCADOR_TIPO_DIA)[];
   return (
-    <details className="rounded-medio border border-borda-sutil p-2">
+    <details className="rounded-suave bg-fundo-superficie p-3 shadow-flutuante-chip">
       <summary className="estilo-rotulo cursor-pointer text-texto-secundario">
         Legenda dos marcadores
       </summary>
