@@ -26,6 +26,9 @@ vi.mock("@/componentes/paineis/dashboard/secao-banco-de-horas", () => ({
 vi.mock("@/componentes/paineis/dashboard/marcacoes-em-aberto", () => ({
   MarcacoesEmAberto: () => <div data-testid="secao-marcacoes-em-aberto" />,
 }));
+vi.mock("@/componentes/paineis/dashboard/fila-de-aprovacoes", () => ({
+  FilaDeAprovacoes: () => <div data-testid="secao-fila-de-aprovacoes" />,
+}));
 
 function sessaoComPermissoes(permissoes: string[]) {
   return { sessao: { permissoes }, carregando: false, erro: null };
@@ -50,6 +53,7 @@ describe("PainelDeIndicadores (T2 — RBAC por seção, nunca por papel)", () =>
     expect(screen.queryByTestId("secao-ocorrencias")).not.toBeInTheDocument();
     expect(screen.queryByTestId("secao-banco-de-horas")).not.toBeInTheDocument();
     expect(screen.queryByTestId("secao-marcacoes-em-aberto")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("secao-fila-de-aprovacoes")).not.toBeInTheDocument();
   });
 
   it("sem banco_horas.ler, o cartão de saldo não renderiza — mesmo com todas as outras permissões", () => {
@@ -60,6 +64,7 @@ describe("PainelDeIndicadores (T2 — RBAC por seção, nunca por papel)", () =>
         "apuracoes.ler",
         "ocorrencias.ler",
         "marcacoes.ler",
+        "aprovacoes.ler",
       ]),
     );
 
@@ -69,6 +74,7 @@ describe("PainelDeIndicadores (T2 — RBAC por seção, nunca por papel)", () =>
     expect(screen.getByTestId("secao-apuracao")).toBeInTheDocument();
     expect(screen.getByTestId("secao-ocorrencias")).toBeInTheDocument();
     expect(screen.getByTestId("secao-marcacoes-em-aberto")).toBeInTheDocument();
+    expect(screen.getByTestId("secao-fila-de-aprovacoes")).toBeInTheDocument();
     expect(screen.queryByTestId("secao-banco-de-horas")).not.toBeInTheDocument();
   });
 
@@ -89,6 +95,17 @@ describe("PainelDeIndicadores (T2 — RBAC por seção, nunca por papel)", () =>
     expect(screen.queryByTestId("secao-colaboradores")).not.toBeInTheDocument();
     expect(screen.queryByTestId("secao-ocorrencias")).not.toBeInTheDocument();
     expect(screen.queryByTestId("secao-marcacoes-em-aberto")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("secao-fila-de-aprovacoes")).not.toBeInTheDocument();
     expect(screen.queryByTestId("secao-banco-de-horas")).not.toBeInTheDocument();
+  });
+
+  it("aprovacoes.ler controla a fila de aprovações isoladamente", () => {
+    useSessaoCompletaMock.mockReturnValue(sessaoComPermissoes(["aprovacoes.ler"]));
+
+    render(<PainelDeIndicadores />);
+
+    expect(screen.getByTestId("secao-fila-de-aprovacoes")).toBeInTheDocument();
+    expect(screen.queryByTestId("secao-apuracao")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("secao-marcacoes-em-aberto")).not.toBeInTheDocument();
   });
 });

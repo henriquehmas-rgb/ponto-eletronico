@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { PortaoDePermissao } from "@/lib/permissoes";
 
+import { FilaDeAprovacoes } from "./fila-de-aprovacoes";
 import { MarcacoesEmAberto } from "./marcacoes-em-aberto";
 import { SecaoApuracao } from "./secao-apuracao";
 import { SecaoBancoDeHoras } from "./secao-banco-de-horas";
@@ -32,21 +33,27 @@ export function PainelDeIndicadores() {
         <SeletorDeEscopo valor={escopo} aoMudar={definirEscopo} />
       </PortaoDePermissao>
 
-      <PortaoDePermissao permissao="colaboradores.ler">
-        <SecaoColaboradores escopo={escopo} />
-      </PortaoDePermissao>
-
       <PortaoDePermissao permissao="apuracoes.ler">
         <SecaoApuracao escopo={escopo} />
       </PortaoDePermissao>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PortaoDePermissao permissao="ocorrencias.ler">
-          <SecaoOcorrencias escopo={escopo} />
-        </PortaoDePermissao>
-
+      <div className="grid gap-4 lg:grid-cols-[1.55fr_1fr] lg:items-start">
         <PortaoDePermissao permissao="marcacoes.ler">
           <MarcacoesEmAberto escopo={escopo} />
+        </PortaoDePermissao>
+
+        <PortaoDePermissao permissao="aprovacoes.ler">
+          <FilaDeAprovacoes />
+        </PortaoDePermissao>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PortaoDePermissao permissao="colaboradores.ler">
+          <SecaoColaboradores escopo={escopo} />
+        </PortaoDePermissao>
+
+        <PortaoDePermissao permissao="ocorrencias.ler">
+          <SecaoOcorrencias escopo={escopo} />
         </PortaoDePermissao>
       </div>
 

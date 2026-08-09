@@ -45,6 +45,24 @@ export function useSolicitacoes(
   });
 }
 
+/** `GET /v1/solicitacoes/{solicitacaoId}` (`obterSolicitacao`) — usado pela fila de aprovações do `/painel` (T-painel). */
+export function useSolicitacao(
+  solicitacaoId: string | undefined,
+): UseQueryResult<Esquema<"Solicitacao">> {
+  return useQuery({
+    queryKey: ["solicitacao", solicitacaoId],
+    queryFn: async () => {
+      if (!solicitacaoId) throw new Error("solicitacaoId ausente");
+      const resultado = await api.GET("/v1/solicitacoes/{solicitacaoId}", {
+        params: { path: { solicitacaoId } },
+      });
+      if (resultado.error) throw resultado.error;
+      return resultado.data;
+    },
+    enabled: Boolean(solicitacaoId),
+  });
+}
+
 /**
  * `POST /v1/solicitacoes` (`criarSolicitacao`) — contrato real; o *handler*
  * ainda responde `501`/`PONTO-INT-005` (F10 pendente, §2 do PCF). A tela

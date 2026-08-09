@@ -1,6 +1,6 @@
 "use client";
 
-import { GraficoDePizza } from "@/componentes/graficos/graficos";
+import { corDaSerie } from "@/componentes/graficos/paleta";
 import { Cartao, CartaoCabecalho, CartaoConteudo, CartaoTitulo } from "@/componentes/ui/card";
 import {
   useContagemColaboradoresPorStatus,
@@ -53,7 +53,21 @@ export function SecaoColaboradores({ escopo }: { escopo: FiltroDeEscopo }) {
               Nenhum colaborador no escopo selecionado.
             </p>
           ) : (
-            <GraficoDePizza fatias={fatias} altura={240} />
+            <ul className="flex flex-col gap-2.5">
+              {fatias.map((fatia, indice) => (
+                <li key={fatia.chave} className="flex items-center gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="size-2.5 shrink-0 rounded-pleno"
+                    style={{ background: corDaSerie(indice) }}
+                  />
+                  <span className="estilo-corpo flex-1 text-texto-secundario">{fatia.rotulo}</span>
+                  <span className="estilo-tabular font-semibold text-texto-primario">
+                    {fatia.valor}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </CartaoConteudo>
       </Cartao>
