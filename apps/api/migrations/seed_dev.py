@@ -891,6 +891,41 @@ def semeia_tipos_solicitacao(
             resumo.soma("tipos_solicitacao")
 
 
+def semeia_relatorios_de_fabrica(sessao: Session, tenant_id: uuid.UUID, resumo: Resumo) -> None:
+    """Os 24 relatorios "de fabrica" (F11 SS2.2) -- ver
+    `app.relatorios.catalogo_fabrica`, achado real de 09/08/2026 (nenhum
+    codigo de producao fazia este INSERT ate agora, so a fixture de teste).
+    """
+    from app.relatorios.catalogo import (
+        montar_agrupamentos,
+        montar_colunas_disponiveis,
+        montar_filtros_disponiveis,
+    )
+    from app.relatorios.catalogo_fabrica import CATALOGO_RELATORIOS_DE_FABRICA
+
+    for item in CATALOGO_RELATORIOS_DE_FABRICA:
+        _, criou = _obter_ou_criar(
+            sessao,
+            contrato.RelatorioDefinicao,
+            {"tenant_id": tenant_id, "codigo": item.codigo},
+            {
+                "nome": item.nome,
+                "categoria": item.categoria,
+                "sistema": True,
+                "dataset": item.dataset,
+                "colunas_disponiveis": montar_colunas_disponiveis(item.colunas),
+                "filtros_disponiveis": montar_filtros_disponiveis(item.filtros),
+                "agrupamentos": montar_agrupamentos(item.agrupamentos),
+                "formatos": item.formatos,
+                "permissao_codigo": "relatorios.executar",
+                "assincrono": item.assincrono,
+                "ativo": True,
+            },
+        )
+        if criou:
+            resumo.soma("relatorio_definicoes")
+
+
 def semeia_feriados(
     sessao: Session, tenant_id: uuid.UUID, unidade_id: uuid.UUID, resumo: Resumo
 ) -> None:
