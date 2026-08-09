@@ -1,9 +1,9 @@
-# Ponto Eletrônico
+# SEEG Ponto — Ponto Eletrônico REP-P
 
 Sistema de ponto eletrônico **REP-P** multiempresa (SaaS), em conformidade com a
 Portaria MTP 671/2021. Registra jornada por cinco canais — terminal facial
 Control iD, aplicativo móvel, navegador, totem/quiosque e API — e entrega o que
-o software de ponto precisa entregar de fato: marcação imutável com NSR sem
+um software de ponto precisa entregar de fato: marcação imutável com NSR sem
 lacunas, motor de jornada e cálculo, banco de horas completo, workflow de
 aprovações, mais de 20 relatórios gerenciais e os arquivos fiscais AFD e AEJ
 assinados digitalmente em CAdES.
@@ -17,10 +17,12 @@ tratada como dado pessoal sensível (LGPD art. 5º, II): o motor facial é
 self-hosted, o template fica cifrado com chave separada da base, e imagem crua
 não trafega para a nuvem quando há processamento na borda.
 
-> **Estado atual: Fase 0 — Contrato e Andaime.**
-> Os contratos estão sendo congelados e os esqueletos de serviço sobem
-> respondendo healthcheck. Endpoints de negócio ainda retornam `501 Not
-> Implemented` — isso é intencional, não uma pendência esquecida.
+> **Estado atual: em desenvolvimento ativo.**
+> As fases de backend, web e conformidade estão implementadas; o aplicativo
+> móvel nativo (Flutter) ainda não — o portal web já funciona como PWA
+> instalável em navegadores móveis. O sistema **não** está homologado no INPI e
+> ainda depende de certificado e-CNPJ A1 ICP-Brasil para assinar os arquivos
+> fiscais em produção. Não use como REP-P oficial sem completar esses passos.
 
 ---
 
@@ -36,7 +38,7 @@ não trafega para a nuvem quando há processamento na borda.
 | Mobile | Flutter · Riverpod · Drift (SQLite) |
 | Facial | Motor próprio self-hosted (`facial-svc`, ArcFace/ONNX) |
 | Terminais | `device-gw` — protocolo Control iD (Push + Monitor) |
-| Proxy | Traefik **já existente** na VPS (este projeto não sobe outro nas portas 80/443) |
+| Proxy | Traefik (esperado como já existente no host; este projeto não sobe outro nas portas 80/443) |
 | Observabilidade | OpenTelemetry · Prometheus · Grafana · Loki · Sentry |
 | CI/CD | GitHub Actions |
 
@@ -55,7 +57,7 @@ não trafega para a nuvem quando há processamento na borda.
 **1. Clone e entre no diretório**
 
 ```bash
-git clone <url-do-repositorio> ponto-eletronico
+git clone https://github.com/henriquehmas-rgb/ponto-eletronico.git
 cd ponto-eletronico
 ```
 
@@ -161,10 +163,10 @@ executado com outras settings do ARQ (jobs cron).
 
 ## Deploy
 
-O deploy é em VPS Ubuntu com Docker e um **Traefik global já existente**. Este
-projeto **não** publica as portas 80/443 e **não** sobe outro proxy — apenas
-anexa os serviços expostos à rede externa do Traefik e declara as rotas por
-label:
+O deploy de referência é em VPS Ubuntu com Docker e um **Traefik global já
+existente**. Este projeto **não** publica as portas 80/443 e **não** sobe outro
+proxy — apenas anexa os serviços expostos à rede externa do Traefik e declara as
+rotas por label:
 
 | Host | Serviço |
 |---|---|
@@ -175,7 +177,7 @@ label:
 
 Postgres, Redis, MinIO e `facial-svc` vivem apenas na rede interna e não são
 alcançáveis de fora. O console do MinIO não é publicado em produção: o acesso é
-por túnel SSH (`ssh -L 9001:localhost:9001 usuario@vps`).
+por túnel SSH.
 
 Validação da configuração sem subir nada:
 
@@ -196,6 +198,24 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml config --quiet
 - Chaves JWT, certificado ICP-Brasil e credenciais de terminal são montados por
   volume, nunca embutidos em imagem.
 
+**Encontrou uma vulnerabilidade?** Veja [SECURITY.md](SECURITY.md) — reporte de
+forma privada, não abra uma issue pública.
+
+---
+
+## Licença
+
+Este repositório é público apenas para leitura. Nenhuma licença de uso, cópia,
+modificação ou redistribuição é concedida. © SEEG Serviços de Tecnologia da
+Informação. Todos os direitos reservados — veja [LICENSE](LICENSE).
+
+---
+
+## Contribuições
+
+Este repositório é publicado para transparência e consulta. Issues e pull
+requests de terceiros não são aceitos no momento.
+
 ---
 
 ## Documentação
@@ -204,13 +224,17 @@ docker compose --env-file infra/.env -f infra/docker-compose.yml config --quiet
   decisões fundadoras, canais de registro, motor de jornada, banco de horas,
   segurança e antifraude, conformidade REP-P, catálogo de relatórios, API
   pública, riscos.
-- **[FASES-E-AGENTES.md](FASES-E-AGENTES.md)** — plano de execução: as 16 fases,
-  o mecanismo que permite N agentes em paralelo sem quebrar contexto, ownership
-  de arquivos, critérios de aceite e o protocolo de RFC.
+- **[FASES-E-AGENTES.md](FASES-E-AGENTES.md)** — plano de execução: as fases, o
+  mecanismo que permite N agentes em paralelo sem quebrar contexto, ownership de
+  arquivos, critérios de aceite e o protocolo de RFC.
+- **[docs/adr/](docs/adr/)** — decisões de arquitetura registradas (ADRs).
 - **[packages/contracts/README.md](packages/contracts/README.md)** — por que o
   contrato é congelado e como propor mudança.
 
+> Boa parte de `docs/` é documentação de **processo interno de construção**
+> (relatórios de fase, RFCs, backlog de débito técnico). É útil para entender
+> como as decisões foram tomadas, mas não é manual de uso do produto.
+
 ---
 
-Projeto interno da **SEEG Serviços de Tecnologia da Informação** (CNPJ
-60.258.502/0001-49). Repositório privado.
+Desenvolvido pela **SEEG Serviços de Tecnologia da Informação**.
