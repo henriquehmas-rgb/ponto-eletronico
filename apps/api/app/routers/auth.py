@@ -33,6 +33,7 @@ da fase (mesmo padrao de `app/routers/admin.py`).
 
 from __future__ import annotations
 
+from ipaddress import IPv4Address, IPv6Address
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -81,6 +82,17 @@ def _para_schema(schema_cls: type[BaseModel], origem: Any, **extras: Any) -> Any
     aplica `extras` por cima para os campos computados que nao sao coluna.
     """
     dados = {nome: getattr(origem, nome, None) for nome in schema_cls.model_fields}
+    # A coluna `ip` (`SessaoOrm.ip`, tipo `INET`) volta do driver como
+    # `ipaddress.IPv4Address`/`IPv6Address`, nao `str` -- o schema do
+    # contrato declara `ip: str`, e pydantic v2 nao converte esses tipos
+    # implicitamente. Sem isto, `GET /v1/auth/sessoes` derruba com 500
+    # ("resposta fora do contrato") em qualquer sessao com IP gravado, o que
+    # e a normalidade, nao a excecao. Achado real, 09/08/2026 (dono do
+    # produto navegando `/eu/perfil` em ponto-hml: "Sessões ativas" travava
+    # carregando pra sempre).
+    for chave, valor in dados.items():
+        if isinstance(valor, (IPv4Address, IPv6Address)):
+            dados[chave] = str(valor)
     dados.update(extras)
     return schema_cls.model_validate(dados)
 
