@@ -3,9 +3,9 @@
   "$description": "Sistema de design tokens do Ponto Eletronico (REP-P multiempresa), no formato W3C Design Tokens (DTCG). FONTE DA VERDADE congelada na Fase 0: nenhuma fase posterior altera este arquivo sem RFC aprovada (protocolo em docs/rfc/README.md). ORGANIZACAO: 'primitivo' guarda os valores crus (rampas de cor 50..950, escala tipografica, grade de 8 pt); 'tema.claro' e 'tema.escuro' guardam os tokens SEMANTICOS, com caminhos identicos nos dois temas, cada um apontando por alias para um primitivo. O produto NUNCA consome primitivo diretamente na interface: consome sempre o token semantico do tema ativo. UNIDADES: tokens do tipo dimension usam o objeto {value, unit} do DTCG; converta para CSS concatenando (16 + 'px'). Cor em hexadecimal maiusculo de 6 digitos, ou 8 digitos quando ha alfa. CONTRASTE: todos os pares texto-sobre-fundo e elemento-de-interface deste arquivo foram MEDIDOS (nao estimados) pela formula da WCAG 2.2 a partir do hexadecimal final de 8 bits. A tabela completa com os ratios esta em $extensions['br.com.seeg.ponto'].contraste.pares.",
   "$extensions": {
     "br.com.seeg.ponto": {
-      "versao": "1.1.0",
-      "atualizadoEm": "2026-07-26",
-      "fase": "F0 - Fundacao e Contratos (tipografia atualizada pela identidade visual oficial, RFC-003)",
+      "versao": "1.2.0",
+      "atualizadoEm": "2026-08-09",
+      "fase": "F0 - Fundacao e Contratos (tipografia atualizada pela identidade visual oficial, RFC-003; raio/sombra estendidos para o padrao \"superficies macias\" pela RFC-022)",
       "agente": "A1c",
       "metodo": {
         "espacoDeCor": "As rampas foram geradas em OKLCH com luminosidade alvo fixa por passo (identica em todas as familias) e croma em curva de sino com pico no passo 500, depois convertidas para sRGB com reducao de croma ate caber no gamut. Consequencia pratica: o passo 600 de qualquer familia tem aproximadamente a mesma luminosidade percebida, entao trocar a cor de marca NAO quebra o contraste dos componentes.",
@@ -2464,6 +2464,22 @@
       },
       "$description": "Nivel 3. Dialogo, folha inferior no mobile, contorno de foto."
     },
+    "suave": {
+      "$type": "dimension",
+      "$value": {
+        "value": 22,
+        "unit": "px"
+      },
+      "$description": "Nivel 4 (RFC-022, padrao visual \"superficies macias\"). Cartao padrao do celular e do painel: resumo do dia, item de lista, tile de KPI."
+    },
+    "pronunciado": {
+      "$type": "dimension",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "Nivel 5 (RFC-022). Cartao de destaque, folha modal, sheet inferior no celular."
+    },
     "pleno": {
       "$type": "dimension",
       "$value": {
@@ -3286,6 +3302,31 @@
             }
           ],
           "$description": "Nivel 3. Elemento modal: dialogo, folha lateral, painel de comando."
+        },
+        "flutuanteChip": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#161A1E0D", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2, "unit": "px" }, "spread": { "value": 0, "unit": "px" } },
+            { "color": "#161A1E59", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 6, "unit": "px" }, "blur": { "value": 14, "unit": "px" }, "spread": { "value": -10, "unit": "px" } }
+          ],
+          "$description": "Nivel 4 (RFC-022, \"superficies macias\"). Pilula de navegacao, botao-chip, badge com sombra."
+        },
+        "flutuanteCartao": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#161A1E0A", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2, "unit": "px" }, "spread": { "value": 0, "unit": "px" } },
+            { "color": "#161A1E4D", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 16, "unit": "px" }, "blur": { "value": 32, "unit": "px" }, "spread": { "value": -20, "unit": "px" } },
+            { "color": "#FFFFFFBF", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0, "unit": "px" }, "inset": true }
+          ],
+          "$description": "Nivel 5 (RFC-022). Cartao padrao — a maioria das superficies do celular e do painel."
+        },
+        "flutuanteAlta": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#161A1E66", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 28, "unit": "px" }, "blur": { "value": 64, "unit": "px" }, "spread": { "value": -28, "unit": "px" } },
+            { "color": "#161A1E0D", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 2, "unit": "px" }, "blur": { "value": 6, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }
+          ],
+          "$description": "Nivel 6 (RFC-022). Folha modal, dialogo, cartao de confirmacao pos-marcacao."
         }
       }
     },
@@ -3792,6 +3833,29 @@
             }
           ],
           "$description": "Nivel 3. Elemento modal."
+        },
+        "flutuanteChip": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#00000080", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2, "unit": "px" }, "spread": { "value": 0, "unit": "px" } }
+          ],
+          "$description": "Nivel 4 (RFC-022, \"superficies macias\"). Pilula de navegacao, botao-chip, badge com sombra."
+        },
+        "flutuanteCartao": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#00000073", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2, "unit": "px" }, "spread": { "value": 0, "unit": "px" } },
+            { "color": "#000000CC", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 16, "unit": "px" }, "blur": { "value": 32, "unit": "px" }, "spread": { "value": -20, "unit": "px" } },
+            { "color": "#FFFFFF0B", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 0, "unit": "px" }, "spread": { "value": 0, "unit": "px" }, "inset": true }
+          ],
+          "$description": "Nivel 5 (RFC-022). Cartao padrao — a maioria das superficies do celular e do painel."
+        },
+        "flutuanteAlta": {
+          "$type": "shadow",
+          "$value": [
+            { "color": "#000000D9", "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 28, "unit": "px" }, "blur": { "value": 64, "unit": "px" }, "spread": { "value": -28, "unit": "px" } }
+          ],
+          "$description": "Nivel 6 (RFC-022). Folha modal, dialogo, cartao de confirmacao pos-marcacao."
         }
       }
     }
