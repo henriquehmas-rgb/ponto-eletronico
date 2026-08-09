@@ -225,7 +225,17 @@ jobs:
           for proj in apps/*/pyproject.toml; do
             dir=$(dirname "$proj")
             echo "::group::pip install -e $dir"
-            pip install -e "$dir[dev]" || pip install -e "$dir"
+            # Sem fallback de proposito (achado real de 09/08, triagem de PR do
+            # Dependabot): "|| pip install -e $dir" escondia silenciosamente
+            # qualquer ResolutionImpossible de dependencia pinada em conflito
+            # (ex. pytest==9 vs pytest-asyncio==0.24.0<9 em apps/worker) -- o
+            # job continuava verde porque caia pro app SEM as deps de dev,
+            # entao o pytest instalado globalmente (PY_TOOLING acima) rodava
+            # os testes sem nunca exercitar a versao que o Dependabot propos.
+            # Todos os 4 apps hoje declaram o extra "dev" (confirmado em
+            # apps/*/pyproject.toml); se algum novo app nao declarar, o erro
+            # de instalacao deve estourar aqui, nao ser mascarado.
+            pip install -e "$dir[dev]"
             echo "::endgroup::"
           done
 
@@ -414,7 +424,17 @@ jobs:
           for proj in apps/*/pyproject.toml; do
             dir=$(dirname "$proj")
             echo "::group::pip install -e $dir"
-            pip install -e "$dir[dev]" || pip install -e "$dir"
+            # Sem fallback de proposito (achado real de 09/08, triagem de PR do
+            # Dependabot): "|| pip install -e $dir" escondia silenciosamente
+            # qualquer ResolutionImpossible de dependencia pinada em conflito
+            # (ex. pytest==9 vs pytest-asyncio==0.24.0<9 em apps/worker) -- o
+            # job continuava verde porque caia pro app SEM as deps de dev,
+            # entao o pytest instalado globalmente (PY_TOOLING acima) rodava
+            # os testes sem nunca exercitar a versao que o Dependabot propos.
+            # Todos os 4 apps hoje declaram o extra "dev" (confirmado em
+            # apps/*/pyproject.toml); se algum novo app nao declarar, o erro
+            # de instalacao deve estourar aqui, nao ser mascarado.
+            pip install -e "$dir[dev]"
             echo "::endgroup::"
           done
 
@@ -663,7 +683,17 @@ jobs:
           for proj in apps/api/pyproject.toml; do
             dir=$(dirname "$proj")
             echo "::group::pip install -e $dir"
-            pip install -e "$dir[dev]" || pip install -e "$dir"
+            # Sem fallback de proposito (achado real de 09/08, triagem de PR do
+            # Dependabot): "|| pip install -e $dir" escondia silenciosamente
+            # qualquer ResolutionImpossible de dependencia pinada em conflito
+            # (ex. pytest==9 vs pytest-asyncio==0.24.0<9 em apps/worker) -- o
+            # job continuava verde porque caia pro app SEM as deps de dev,
+            # entao o pytest instalado globalmente (PY_TOOLING acima) rodava
+            # os testes sem nunca exercitar a versao que o Dependabot propos.
+            # Todos os 4 apps hoje declaram o extra "dev" (confirmado em
+            # apps/*/pyproject.toml); se algum novo app nao declarar, o erro
+            # de instalacao deve estourar aqui, nao ser mascarado.
+            pip install -e "$dir[dev]"
             echo "::endgroup::"
           done
 

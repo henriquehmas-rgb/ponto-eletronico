@@ -372,8 +372,13 @@ def _construir_indice(templates: frozenset[tuple[str, str]]) -> _NoIndice:
                 "ROTAS_COM_DEDUP_REAL_TEMPLATE tem literal e curinga no mesmo nível: "
                 f"{sorted(str(c) for c in filhos)}"
             )
-        for chave in filhos:
-            filho = no[chave]
+        # Nome proprio (`filho_chave`, e nao `chave`): `chave` ja foi ligada no
+        # laco de construcao acima como `str`, e reusa-la sobre `filhos`
+        # (`list[object]`, porque `_MARCA_FIM` nao e string) quebra o
+        # `mypy --strict` do gate. Nada a ver com esta tarefa -- correcao de
+        # passagem de erro pre-existente em `main`.
+        for filho_chave in filhos:
+            filho = no[filho_chave]
             if isinstance(filho, dict):
                 pendentes.append(filho)
     return raiz
