@@ -38,7 +38,16 @@ from app.schemas import contrato
 
 roteador = APIRouter(tags=["empresas"])
 
-_ORDENACAO_PADRAO = "criado_em:desc"
+#: camelCase, nao snake_case -- `app.organizacao.empresas.CAMPOS_ORDENAVEIS`
+#: usa as chaves do contrato publico (`razaoSocial`, `cnpj`, `nomeFantasia`,
+#: `criadoEm`), unico modulo de `organizacao` que difere do padrao snake_case
+#: dos demais (`unidades`, `estrutura`). Cliente que OMITE `ordenar` cai neste
+#: default; um valor snake_case aqui reproduz sempre o mesmo `PONTO-VAL-005`
+#: ("Campo de ordenacao desconhecido") que o comentario de CAMPOS_ORDENAVEIS
+#: ja registra ter corrigido do lado do cliente -- so que o default do lado
+#: do servidor ficou pra tras. Achado real, 09/08/2026: GET /v1/empresas sem
+#: `ordenar` (dashboard, `useEmpresasDoTenant`) sempre respondia 400.
+_ORDENACAO_PADRAO = "criadoEm:desc"
 
 # Uma instancia por operacao (nao uma fabrica chamada de novo dentro do
 # handler): mesmo motivo documentado em `app.comum.limitador_taxa`
