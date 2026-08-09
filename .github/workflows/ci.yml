@@ -983,7 +983,7 @@ jobs:
           # "F14 / A2"; 2026-08-07 para os dois de log-injection). (ruleId,
           # caminho-relativo-ao-repo, linha).
           ACHADOS_TRIADOS = {
-              ("py/weak-sensitive-data-hashing", "apps/api/app/comum/autenticacao_cliente.py", 131),
+              ("py/weak-sensitive-data-hashing", "apps/api/app/comum/autenticacao_cliente.py", 138),
               ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/mfa/backup_codes.py", 34),
               ("py/weak-sensitive-data-hashing", "apps/api/app/identidade/tokens/oauth.py", 196),
               ("py/url-redirection", "apps/api/app/routers/sso.py", 181),
