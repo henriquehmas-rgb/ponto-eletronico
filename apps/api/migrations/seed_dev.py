@@ -1134,6 +1134,7 @@ def semeia(
     tipos_tratamento = semeia_tipos_tratamento(sessao, tenant_id, resumo)
     semeia_tipos_solicitacao(sessao, tenant_id, tipos_tratamento, resumo)
     semeia_feriados(sessao, tenant_id, unidade.id, resumo)
+    semeia_relatorios_de_fabrica(sessao, tenant_id, resumo)
 
     return tenant_id
 
