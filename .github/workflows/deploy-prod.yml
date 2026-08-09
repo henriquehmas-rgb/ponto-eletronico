@@ -126,6 +126,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Ver o comentario equivalente em ci.yml (job deploy-hml): `web` inlina
+      # NEXT_PUBLIC_* no bundle do navegador em tempo de BUILD, sem override
+      # possivel em runtime. `vars.DOMINIO_PRD` precisa estar configurado nas
+      # variaveis do repositorio ANTES do primeiro deploy real de producao --
+      # sem ele, o build cai no default do Dockerfile (`localhost:8000`) e
+      # nenhuma tela autenticada do portal funciona (achado real de 09/08/2026
+      # em hml, mesma classe de bug).
       - name: Build e publica ${{ matrix.servico }}:${{ inputs.tag }}
         uses: docker/build-push-action@v6
         with:
@@ -133,6 +140,9 @@ jobs:
           file: apps/${{ matrix.servico }}/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ponto-${{ matrix.servico }}:${{ inputs.tag }}
+          build-args: |
+            AMBIENTE=prd
+            NEXT_PUBLIC_API_URL=https://api.ponto.${{ vars.DOMINIO_PRD }}
           cache-from: type=gha,scope=${{ matrix.servico }}
           cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
 

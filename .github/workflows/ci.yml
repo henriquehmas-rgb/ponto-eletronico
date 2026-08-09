@@ -1336,6 +1336,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `web` (Next.js) inlina NEXT_PUBLIC_* no bundle do NAVEGADOR em tempo de
+      # BUILD -- nao ha override em runtime, diferente dos servicos Python
+      # (que leem AMBIENTE/etc. de novo a cada boot). Sem passar estes
+      # build-args, o Dockerfile cai nos defaults (`AMBIENTE=prd`,
+      # `NEXT_PUBLIC_API_URL=http://localhost:8000`), e TODA chamada do
+      # navegador para a API falha em produção/hml — achado real, 09/08/2026
+      # (primeiro deploy com o motor facial: portal carregava mas nenhuma
+      # tela autenticada funcionava, com o badge errado "PRD" em hml).
+      # Passar os dois args sempre (para os 5 servicos do matrix) e inofensivo
+      # para quem nao os declara -- o Dockerfile so os define quando existem.
       - name: Build e publica ${{ matrix.servico }}
         uses: docker/build-push-action@v6
         with:
@@ -1343,6 +1353,9 @@ jobs:
           file: apps/${{ matrix.servico }}/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ponto-${{ matrix.servico }}:latest
+          build-args: |
+            AMBIENTE=hml
+            NEXT_PUBLIC_API_URL=https://api.ponto.${{ vars.DOMINIO_HML }}
           cache-from: type=gha,scope=${{ matrix.servico }}
           cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
 
