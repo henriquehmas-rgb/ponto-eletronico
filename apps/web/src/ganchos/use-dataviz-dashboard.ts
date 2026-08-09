@@ -231,9 +231,21 @@ export function useTendenciaMensal(parametros: {
   });
 }
 
-/** Chaves de coluna assumidas por seção (ver docstring do módulo -- ajuste aqui se A2 fixar outro nome). */
-export const CHAVE_VALOR_HORAS_EXTRAS = "totalMinutos";
-export const CHAVE_VALOR_SALDO_BANCO_HORAS = "saldoMinutos";
-export const CHAVE_VALOR_OCORRENCIAS = "total";
+/**
+ * Chaves de coluna que o motor de relatórios (`app/relatorios/motor.py::
+ * _montar_consulta_agrupada`) realmente devolve quando `agrupamento=mes` --
+ * corrigido em 09/08/2026 (achado real: os 3 widgets sempre respondiam 400
+ * porque nem os nomes de coluna abaixo, nem o próprio agrupamento "mes",
+ * existiam em `relatorio_definicoes` antes do catálogo de fábrica ser
+ * semeado; ao testar com dado real, os nomes assumidos aqui também
+ * estavam errados). `minutos`/`saldoAposMinutos` são colunas reais de
+ * `COLUNAS_HORAS_EXTRAS`/`COLUNAS_BANCO_DE_HORAS`
+ * (`app/relatorios/datasets/operacionais.py`); `quantidadeRegistros` é a
+ * contagem que o motor sempre sintetiza ao agrupar
+ * (`app.relatorios.catalogo.COLUNA_QUANTIDADE`), nunca "total".
+ */
+export const CHAVE_VALOR_HORAS_EXTRAS = "minutos";
+export const CHAVE_VALOR_SALDO_BANCO_HORAS = "saldoAposMinutos";
+export const CHAVE_VALOR_OCORRENCIAS = "quantidadeRegistros";
 
 export type { Esquema };

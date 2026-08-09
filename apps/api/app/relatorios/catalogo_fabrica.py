@@ -28,6 +28,7 @@ Quem semeia, usando este catálogo:
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 from app.relatorios.catalogo import AgrupamentoCatalogo, ColunaCatalogo, FiltroCatalogo
@@ -433,3 +434,51 @@ assert len(CATALOGO_RELATORIOS_DE_FABRICA) == 24, "O catalogo precisa ter os 24 
 assert len({item.codigo for item in CATALOGO_RELATORIOS_DE_FABRICA}) == 24, (
     "codigo de relatorio duplicado."
 )
+
+
+def _sobrescrever_com_datasets_operacionais() -> list[DefinicaoRelatorioFabrica]:
+    """Os 11 datasets de `app/relatorios/datasets/operacionais.py` (itens
+    2-12) exportam `COLUNAS_*`/`FILTROS_*`/`AGRUPAMENTOS_*` PRÓPRIOS -- um
+    superconjunto do que a fixture de teste (`tests/f11/conftest.py`, fonte
+    do restante deste catálogo) declarava, escrito depois dela (docstring do
+    módulo: "corrida esperada de desenvolvimento em paralelo... um
+    superconjunto nunca quebra a fixture, só a enriquece"). A cópia acima
+    (mesma lista que a fixture) NÃO tinha `agrupamento=mes`, e usava nomes de
+    coluna diferentes dos que `motor.py::_montar_consulta_agrupada` de fato
+    produz -- achado real, 09/08/2026: os 3 widgets de tendência mensal do
+    painel de RH (`horas-extras`, `banco-de-horas`, `ocorrencias`) sempre
+    davam `400 PONTO-VAL-005` ao pedir `agrupamento=mes`, porque nenhuma das
+    24 linhas semeadas aceitava esse agrupamento. Troca as 11 entradas
+    operacionais pelas constantes reais do módulo, que já têm `mes`."""
+    from app.relatorios.datasets import operacionais as ds
+
+    mapa: dict[str, tuple[str, str, str]] = {
+        "espelho-jornada": ("ESPELHO_JORNADA", "COLUNAS", "AGRUPAMENTOS"),
+        "banco-de-horas": ("BANCO_DE_HORAS", "COLUNAS", "AGRUPAMENTOS"),
+        "horas-extras": ("HORAS_EXTRAS", "COLUNAS", "AGRUPAMENTOS"),
+        "adicional-noturno": ("ADICIONAL_NOTURNO", "COLUNAS", "AGRUPAMENTOS"),
+        "absenteismo": ("ABSENTEISMO", "COLUNAS", "AGRUPAMENTOS"),
+        "atrasos-saidas-antecipadas": ("ATRASOS_SAIDAS_ANTECIPADAS", "COLUNAS", "AGRUPAMENTOS"),
+        "faltas": ("FALTAS", "COLUNAS", "AGRUPAMENTOS"),
+        "tempo-real": ("TEMPO_REAL", "COLUNAS", "AGRUPAMENTOS"),
+        "ocorrencias": ("OCORRENCIAS", "COLUNAS", "AGRUPAMENTOS"),
+        "abonos-justificativas": ("ABONOS_JUSTIFICATIVAS", "COLUNAS", "AGRUPAMENTOS"),
+        "ferias-afastamentos": ("FERIAS_AFASTAMENTOS", "COLUNAS", "AGRUPAMENTOS"),
+    }
+    atualizado: list[DefinicaoRelatorioFabrica] = []
+    for item in CATALOGO_RELATORIOS_DE_FABRICA:
+        sufixo = mapa.get(item.codigo)
+        if sufixo is None:
+            atualizado.append(item)
+            continue
+        nome_sufixo, _, _ = sufixo
+        colunas = getattr(ds, f"COLUNAS_{nome_sufixo}")
+        filtros = getattr(ds, f"FILTROS_{nome_sufixo}")
+        agrupamentos = getattr(ds, f"AGRUPAMENTOS_{nome_sufixo}")
+        atualizado.append(
+            dataclasses.replace(item, colunas=colunas, filtros=filtros, agrupamentos=agrupamentos)
+        )
+    return atualizado
+
+
+CATALOGO_RELATORIOS_DE_FABRICA = _sobrescrever_com_datasets_operacionais()
