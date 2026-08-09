@@ -692,9 +692,14 @@ CREATE TABLE permissoes (
     codigo        TEXT NOT NULL,
     recurso       TEXT NOT NULL,
     acao          TEXT NOT NULL
+                  -- 'suporte' entrou por 0005_role_suporte_bypassrls: e a acao
+                  -- da unica permissao CROSS-tenant do produto
+                  -- (tenants.suporte, ver secao 20). Deliberadamente FORA de
+                  -- seed_dev._TODAS_AS_ACOES, para que nenhum curinga de
+                  -- perfil ("*") a conceda por acidente a um tenant cliente.
                   CHECK (acao IN ('ler','criar','editar','excluir','aprovar','exportar',
                                   'executar','assinar','administrar',
-                                  'configurar','reabrir','ler_sensivel')),
+                                  'configurar','reabrir','ler_sensivel','suporte')),
     descricao     TEXT NOT NULL,
     sensivel      BOOLEAN NOT NULL DEFAULT FALSE,
     modulo        TEXT NOT NULL,
@@ -4069,6 +4074,20 @@ END $$;
 -- simplesmente NAO recebe UPDATE nem DELETE nas tabelas append-only.
 -- Os blocos toleram falta de privilegio para que schema.sql permaneca
 -- executavel por um usuario sem CREATEROLE.
+--
+-- ROLES DE LOGIN (criadas por MIGRATION, nao por este arquivo -- as duas
+-- precisam de senha, que vem de variavel de ambiente e nunca e versionada):
+--   ponto_app_runtime  - 0004_role_login_app. Membro de ponto_app, SEM
+--                        BYPASSRLS. E a credencial de TODA requisicao HTTP
+--                        normal (app/db/sessao.py).
+--   ponto_app_suporte  - 0005_role_suporte_bypassrls. LOGIN + BYPASSRLS, e a
+--                        UNICA role de login com bypass. NAO e membro de
+--                        ponto_app: recebe explicitamente apenas
+--                        SELECT, INSERT em tenants e em auditoria. Usada so
+--                        por GET /v1/tenants e POST /v1/tenants
+--                        (app/db/sessao_suporte.py), atras da permissao
+--                        tenants.suporte. Toda chamada bem-sucedida grava
+--                        auditoria marcando o acesso como cross-tenant.
 -- =============================================================================
 
 DO $$

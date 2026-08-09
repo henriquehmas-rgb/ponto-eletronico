@@ -16,7 +16,7 @@ import functools
 import pathlib
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Ambiente = Literal["dev", "ci", "hml", "prd"]
@@ -57,7 +57,37 @@ class Configuracao(BaseSettings):
     #: troca de motor sem perder rastreabilidade (ADR-006, item 3): vetores de
     #: versoes diferentes nao sao comparaveis entre si, e sem esse carimbo a
     #: troca de motor invalidaria silenciosamente a base biometrica inteira.
-    facial_model_versao: str = "arcface-r100-v1"
+    #:
+    #: O default deixou de ser `arcface-r100-v1` quando o motor passou a existir
+    #: de verdade: o reconhecedor do pacote `buffalo_l` e o `w600k_r50` (ArcFace
+    #: ResNet**50** treinado em WebFace600K), e nao um R100. Carimbo que descreve
+    #: um modelo que nao e o carregado e pior que carimbo nenhum — ele mente com
+    #: aparencia de rastreabilidade.
+    facial_model_versao: str = "buffalo_l-w600k_r50-v1"
+
+    #: Pacote de modelos do InsightFace. `buffalo_l` = RetinaFace `det_10g` +
+    #: ArcFace `w600k_r50` (512-d), licenca aberta, roda em CPU.
+    facial_modelo_pacote: str = "buffalo_l"
+
+    #: Baixar os pesos na primeira execucao quando faltarem no volume.
+    #: **Desligado por padrao, e proibido em producao** (ver o validador abaixo):
+    #: em producao os pesos chegam pelo volume `facial-models`, versionados junto
+    #: com o deploy. Uma marcacao de ponto nao pode disparar um download de
+    #: ~300 MB, e um servico que busca peso na internet em tempo de execucao
+    #: depende de um repositorio de terceiro para funcionar.
+    facial_baixar_modelo: bool = False
+
+    #: Lado (px) da entrada do detector. 640 e o default do InsightFace e o ponto
+    #: de equilibrio entre alcance e custo de CPU.
+    facial_det_size: int = Field(default=640, ge=128, le=1920)
+
+    #: Confianca minima do detector para considerar que ha um rosto.
+    facial_det_thresh: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    #: Quadros minimos para julgar prova de vida. Dois e o piso conceitual: prova
+    #: de vida sobre imagem estatica unica e ilusao de seguranca — nem foto
+    #: impressa nem video em tela sao detectaveis de forma confiavel num quadro so.
+    facial_liveness_min_quadros: int = Field(default=2, ge=2, le=32)
 
     #: Limiar de similaridade para aceitar o par. Calibrado por cliente: a
     #: relacao entre falso positivo e falso negativo nao e a mesma numa portaria
@@ -92,6 +122,23 @@ class Configuracao(BaseSettings):
     # --- Observabilidade -------------------------------------------------------
     sentry_dsn: str = ""
     otel_exporter_otlp_endpoint: str = ""
+
+    @model_validator(mode="after")
+    def _download_nao_vale_em_producao(self) -> Configuracao:
+        """`FACIAL_BAIXAR_MODELO` e recusado em `hml`/`prd`.
+
+        Nao e preferencia de estilo. Ligado em producao, o servico passa a
+        depender de um repositorio de terceiro estar no ar para que uma marcacao
+        de ponto funcione, e passa a aceitar como valido qualquer peso que aquele
+        repositorio sirva no dia — inclusive um substituido. Em producao os pesos
+        chegam pelo volume `facial-models`, junto com o deploy.
+        """
+        if self.ambiente in ("hml", "prd") and self.facial_baixar_modelo:
+            raise ValueError(
+                "FACIAL_BAIXAR_MODELO nao pode ser verdadeiro em hml/prd: "
+                "popule o volume `facial-models` no deploy."
+            )
+        return self
 
     @computed_field  # type: ignore[prop-decorator]
     @property

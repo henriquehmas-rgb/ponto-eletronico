@@ -37,24 +37,70 @@ mantém só na rede `ponto-interna`, sem rota no Traefik e com
 
 ---
 
-## Estado: Fase 0 entrega andaime
+## Estado: motor implementado
 
 | Endpoint | Estado |
 |---|---|
 | `GET /health` | ✅ **funcional** — não toca disco; é o alvo do healthcheck |
 | `GET /ready` | ✅ **funcional** — confere se há peso `.onnx`; 503 `PONTO-INT-003` |
-| `POST /enroll` | 501 `PONTO-INT-005` — extração de template (F2) |
-| `POST /verificar` | 501 `PONTO-INT-005` — comparação contra templates (F2) |
-| `POST /liveness` | 501 `PONTO-INT-005` — prova de vida (F7) |
+| `POST /enroll` | ✅ detecção + embedding ArcFace 512-d + métricas de qualidade |
+| `POST /verificar` | ✅ 1:N por cosseno contra os templates de referência |
+| `POST /liveness` | ⚠️ **heurística** multi-quadro — ver a ressalva abaixo |
 
-Cada stub carrega, na docstring, o **contrato de entrada e de saída** previsto,
-para que o chamador da F2 e da F7 possa ser escrito e testado com dublê.
+### Qual modelo, e por quê
 
-**O motor não é carregado neste estado.** Não há `import onnxruntime`, e
-`onnxruntime`, `insightface`, `numpy` e `opencv` **não estão declarados** no
-`pyproject.toml`. Declarar biblioteca pesada antes de existir código que a use
-só faria a imagem crescer e o build do CI demorar. Elas entram na F2, junto com
-o código que as chama.
+Pacote **`buffalo_l`** do InsightFace, sobre **ONNX Runtime CPU**:
+
+| Peso | Papel | Tamanho |
+|---|---|---|
+| `det_10g.onnx` | detecção (RetinaFace ResNet50) | ~17 MB |
+| `w600k_r50.onnx` | reconhecimento (ArcFace ResNet50 @ WebFace600K, 512-d) | ~174 MB |
+| `1k3d68` / `2d106det` / `genderage` | **não carregados** (ver abaixo) | ~150 MB |
+
+Três razões, na ordem em que pesaram: **roda em CPU** (a VPS não tem GPU);
+**licença aberta e uso consolidado** (código MIT, pesos publicados pelo próprio
+projeto); e **não inventa nada** — ArcFace com limiar de cosseno é o arranjo
+1:1 mais documentado que existe, o que torna calibrar o limiar engenharia
+normal em vez de pesquisa. Descartados: `antelopev2` (pesos com cláusula
+não-comercial), dlib/`face_recognition` (precisão inferior) e qualquer SaaS —
+este último por decisão fundadora, não por técnica.
+
+**Desempenho medido na VPS** (8 vCPU, sob a carga normal dos outros serviços):
+`POST /enroll` com captura de 640×480 leva **~0,7 s** de ponta a ponta (mediana
+de 10; p90 ~0,88 s). O primeiro request após cada restart paga ~2,8 s a mais —
+é o carregamento preguiçoso dos pesos. Não é tempo real, e é folgadamente
+suficiente para uma marcação de ponto.
+
+O serviço carrega só `detection` e `recognition`. `genderage`, `2d106det` e
+`1k3d68` somam mais de 140 MB de RAM e latência para produzir gênero, idade e
+pose 3D — nada disso entra em decisão de ponto eletrônico, e **gênero e idade
+inferidos são dado pessoal que ninguém pediu**: extrair o que não se usa é criar
+passivo de LGPD de graça. A métrica de pose do bloco `qualidade` sai da
+geometria dos 5 pontos-chave que o detector já devolve.
+
+### Limiar de similaridade
+
+`FACIAL_LIMIAR_SIMILARIDADE`, padrão **0,42** (cosseno). Para ArcFace a faixa
+útil de 1:1 com FAR baixo fica entre 0,30 e 0,45; 0,42 fica no lado conservador
+dela de propósito — falso positivo em biometria de ponto é fraude trabalhista,
+falso negativo é um segundo pedido de nova captura. Os dois erros não custam a
+mesma coisa. Medido na suíte (seis identidades reais, duas imagens distintas de
+cada): mesma pessoa ≥ 0,90, pessoas diferentes ≤ 0,22.
+
+### Ressalva sobre `/liveness`
+
+O que está implementado é um conjunto de **heurísticas clássicas multi-quadro**
+(movimento entre quadros, textura de alta frequência, moiré de tela) — **não** é
+um classificador de anti-spoofing treinado. A família `MiniFASNet`
+(*Silent-Face-Anti-Spoofing*) publica pesos PyTorch, e as conversões ONNX que
+circulam são espelhos de terceiros sem cadeia de custódia: baixar peso
+biométrico de repositório não oficial para dentro de uma imagem de produção
+troca um risco técnico por um risco de cadeia de suprimentos pior.
+
+Consequência **normativa**: enquanto esta for a única prova de vida do sistema,
+o resultado de `/liveness` é **sinal de confiança** (alimenta `peso_biometria`
+do ADR-008) e não portão suficiente sozinho. A troca cabe atrás da mesma
+função (`julgar_liveness`) sem mexer no contrato HTTP.
 
 ### Por que `/health` não confere os pesos
 
@@ -66,17 +112,49 @@ em `/ready` e **diz** que faltam os pesos.
 
 ---
 
-## Pesos do modelo
+## Pesos do modelo — download na primeira execução, e o que fazemos com isso
 
-Os arquivos `.onnx` **não entram na imagem e não entram no git**: são grandes e
+Os arquivos `.onnx` **não entram na imagem e não entram no git**: são ~326 MB e
 têm ciclo de vida próprio. Chegam pelo volume `facial-models`, montado em
-`/models` (`FACIAL_MODEL_DIR`).
+`/models` (`FACIAL_MODEL_DIR`), no layout do InsightFace:
+`/models/buffalo_l/*.onnx`.
+
+O comportamento padrão do `insightface` é **baixar o pacote do GitHub na
+primeira execução**. Isso tem implicação direta de build de imagem, e a escolha
+foi feita explicitamente:
+
+| Opção | Veredito |
+|---|---|
+| Baixar em **runtime** | ❌ faz uma marcação de ponto depender de repositório de terceiro estar no ar, soma ~30 s ao primeiro request após cada restart, e aceita como válido o peso que aquele repositório servir naquele dia |
+| Baixar no **build** da imagem | ❌ 326 MB em cada tag, `docker build` do CI passa a depender de rede externa, e amarra o ciclo de vida dos pesos ao das releases de código |
+| **Volume**, populado por passo explícito de deploy | ✅ **escolhido** — pesos viram artefato versionado e verificável por hash, imagem continua enxuta, e trocar o motor deixa de exigir rebuild |
+
+Por isso `FACIAL_BAIXAR_MODELO` é **falso por padrão**, e a própria
+`Configuracao` **recusa** ligá-lo em `hml`/`prd` (levanta na validação, não
+avisa). Em `dev`/`ci` a conveniência ganha: ligue e o InsightFace popula
+`/models` sozinho.
 
 ```bash
-# Popular o volume em desenvolvimento (exemplo)
+# dev/ci: deixar o próprio serviço baixar
+FACIAL_BAIXAR_MODELO=1 uvicorn facial.main:app
+
+# deploy: popular o volume a partir de um artefato já baixado e conferido
 docker run --rm -v ponto-facial-models:/models -v "$PWD/pesos:/origem" \
-  alpine sh -c "cp /origem/*.onnx /models/"
+  alpine sh -c "cp -r /origem/buffalo_l /models/"
 ```
+
+Fora do container, o padrão dos testes é `~/.insightface/models` (a convenção do
+próprio InsightFace).
+
+### `FACIAL_MODEL_VERSAO` precisa descrever o modelo que está carregado
+
+O default deixou de ser `arcface-r100-v1` e passou a ser
+`buffalo_l-w600k_r50-v1`: o reconhecedor do `buffalo_l` é um ResNet**50**, não
+um R100. Carimbo que descreve um modelo que não é o carregado é pior que carimbo
+nenhum — ele mente com aparência de rastreabilidade, e é justamente esse carimbo
+que `biometria_templates.versao_modelo` usa para decidir o que é comparável com
+o quê. `POST /verificar` **recusa** (`400 PONTO-VAL-001`) templates carimbados
+com outra versão.
 
 ---
 
@@ -89,19 +167,32 @@ apps/facial-svc/
 ├── pyproject.toml
 ├── README.md
 ├── tests/
-│   └── test_andaime_facial_svc.py
+│   ├── conftest.py                 # AMBIENTE=ci e FACIAL_BAIXAR_MODELO antes do import
+│   ├── test_andaime_facial_svc.py  # contrato, catálogo de erros, healthchecks
+│   └── test_motor_facial.py        # pipeline real: detecção → embedding → veredito
 └── facial/
     ├── __init__.py
     ├── py.typed
     ├── config.py           # pydantic-settings; mesmos nomes do compose
     ├── log.py              # log estruturado JSON, sem nenhum dado biométrico
     ├── erros.py            # RFC 9457 + recorte de errors.yaml
+    ├── esquemas.py         # contrato Pydantic das três operações
     ├── main.py             # criar_aplicacao() / app
+    ├── motor/              # ÚNICA parte que carrega peso ONNX
+    │   ├── __init__.py
+    │   ├── imagem.py       # base64 → BGR, com tipo e tamanho antes da decodificação
+    │   ├── arcface.py      # InsightFace/ONNX: detecção, embedding, qualidade
+    │   ├── template.py     # serialização do vetor + similaridade de cosseno
+    │   └── liveness.py     # prova de vida heurística (ver ressalva)
     └── rotas/
         ├── __init__.py
-        ├── saude.py        # /health e /ready — funcionais
-        └── biometria.py    # /enroll, /verificar, /liveness — stubs 501
+        ├── saude.py        # /health e /ready
+        └── biometria.py    # /enroll, /verificar, /liveness — não importa numpy/cv2
 ```
+
+`facial/rotas/biometria.py` **não importa numpy, OpenCV nem InsightFace**. A
+fronteira é `facial.motor`, e ela existe para que trocar o motor — decisão
+prevista, e a razão de `modeloVersao` existir — não encoste no contrato HTTP.
 
 ### Por que o pacote se chama `facial`, e não `app`
 
@@ -135,5 +226,18 @@ uvicorn facial.main:app --reload
 python -c "from facial.main import app; print(len(app.routes))"
 ruff check apps/facial-svc && ruff format --check apps/facial-svc
 mypy apps packages          # a partir da raiz do monorepo, como o CI faz
-pytest apps/facial-svc/tests -q
+
+# A suíte do motor exige os pesos. Sem eles (e sem FACIAL_BAIXAR_MODELO), ela
+# é PULADA — nunca aprovada em silêncio.
+FACIAL_MODEL_DIR=~/.insightface/models FACIAL_BAIXAR_MODELO=1 \
+  pytest apps/facial-svc/tests -q
 ```
+
+`tests/test_motor_facial.py` roda o pipeline de ponta a ponta contra **rostos
+reais**: usa a foto de grupo `t1` que acompanha o próprio pacote `insightface`
+(repositório MIT), que tem seis pessoas distintas. Nenhuma imagem de rosto entra
+no repositório da SEEG — ela vem da dependência, em tempo de execução. De cada
+pessoa a suíte deriva duas imagens diferentes (margens, escalas e qualidades
+JPEG distintas), e prova: **mesma pessoa aprova com o índice certo entre seis
+templates; pessoas diferentes reprovam nas 30 comparações cruzadas; imagem sem
+rosto vira `400 PONTO-VAL-001` em `problem+json`**.

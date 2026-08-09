@@ -35,28 +35,32 @@ def test_sem_x_tenant_em_rota_que_toca_banco_responde_val_011(cliente: TestClien
     assert resposta.json()["codigo"] == "PONTO-VAL-011"
 
 
-def test_rota_ainda_stub_sem_x_tenant_nao_e_bloqueada_pelo_middleware(
+def test_rota_sem_sessao_db_sem_x_tenant_nao_e_bloqueada_pelo_middleware(
     cliente: TestClient,
 ) -> None:
-    """Regressao do andaime: uma rota de dominio que AINDA nao declara
-    `SessaoDb` (ainda `501`) nao e bloqueada pelo `TenantMiddleware` so por
-    faltar `X-Tenant` -- a exigencia de tenant e da dependencia de sessao, nao
-    de todo `/v1/...` incondicionalmente (ver docstring de
+    """Regressao do andaime: uma rota de dominio que NAO declara `SessaoDb`
+    (a sessao comum) nao e bloqueada pelo `TenantMiddleware` so por faltar
+    `X-Tenant` -- a exigencia de tenant e da dependencia de sessao, nao de
+    todo `/v1/...` incondicionalmente (ver docstring de
     `app/core/middleware.py:TenantMiddleware`).
 
-    `/v1/fiscal/afd` era o exemplo original (F1), trocado para `/v1/lgpd/
-    consentimentos` no fechamento da F13 (03/08/2026) -- mas a F14 (`Onda 5`,
-    seguranca/antifraude/LGPD) implementou `app/routers/lgpd.py` de verdade,
-    quebrando a mesma premissa outra vez. Trocado (orquestrador, fechamento
-    da F14, 2026-08-05) para `GET /v1/tenants` (`listarTenants`): confirmado
-    por leitura que `listar_tenants` em `app/routers/tenants.py` NAO declara
-    `SessaoDb` e levanta `NaoImplementado("listarTenants", fase="F1")` --
-    genuinamente 501 ainda, decisao de acesso do suporte da SEEG pendente
-    (ver docs/backlog.md, item "F1 / A2"). Se uma fase futura implementar
-    isso tambem, troque de novo -- e o mesmo padrao recorrente."""
+    Historico do exemplo usado aqui, porque ele ja trocou tres vezes:
+    `/v1/fiscal/afd` (F1) -> `/v1/lgpd/consentimentos` (fechamento da F13) ->
+    `GET /v1/tenants` (fechamento da F14, quando ainda era `501`). A rota
+    continua sendo `GET /v1/tenants`, mas ela deixou de ser stub: hoje e a
+    listagem cross-tenant do suporte da SEEG
+    (`0005_role_suporte_bypassrls`), que usa `SessaoDbSuporte` --
+    deliberadamente NAO o `SessaoDb` comum, e por isso segue sem depender de
+    `X-Tenant` resolvido.
+
+    O que o teste prova, entao, e o mesmo de antes: a recusa que chega NAO e a
+    do middleware/sessao (`PONTO-VAL-011`/`PONTO-TEN-*`) -- e a do portao de
+    autorizacao da propria rota (`401 PONTO-AUTH-002`, sem credencial), o que
+    so acontece porque a requisicao ATRAVESSOU o middleware sem `X-Tenant`.
+    """
     resposta = cliente.get("/v1/tenants")
-    assert resposta.status_code == 501
-    assert resposta.json()["codigo"] == "PONTO-INT-005"
+    assert resposta.status_code == 401, resposta.text
+    assert resposta.json()["codigo"] == "PONTO-AUTH-002"
 
 
 # -----------------------------------------------------------------------------

@@ -389,8 +389,10 @@ class Permissao(ChavePrimariaUUIDMixin, TimestampMixin, AuditoriaMixin, Base):
 
     __table_args__ = (
         sa.CheckConstraint(
+            # 'suporte': acao da permissao CROSS-tenant `tenants.suporte`,
+            # acrescentada por `0005_role_suporte_bypassrls` (ver schema.sql).
             "acao IN ('ler','criar','editar','excluir','aprovar','exportar','executar',"
-            "'assinar','administrar','configurar','reabrir','ler_sensivel')",
+            "'assinar','administrar','configurar','reabrir','ler_sensivel','suporte')",
             name="permissoes_acao_check",
         ),
         sa.UniqueConstraint("codigo", name="uq_permissoes_codigo"),

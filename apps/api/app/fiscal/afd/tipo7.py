@@ -114,34 +114,32 @@ def montar_registro_tipo7(
     return RegistroTipo7(nsr=nsr, linha=linha, hash_registro=hash_registro)
 
 
-async def _hash_anterior_semente(
-    sessao: AsyncSession, *, tenant_id: UUID, rep_p_id: UUID, primeiro_nsr: int
-) -> str | None:
-    """Recompõe o hash do ADR-012 do registro tipo "7" com
-    `nsr = primeiro_nsr - 1` (o elo anterior de verdade da cadeia do REP-P),
-    para semear o encadeamento quando o AFD gerado NÃO começa no NSR 1 do
-    REP-P (ex.: segundo AFD gerado para o mesmo REP-P, cobrindo um período
-    posterior).
+async def _marcacoes_da_cadeia_ate(
+    sessao: AsyncSession, *, tenant_id: UUID, rep_p_id: UUID, ate_nsr: int
+) -> Sequence[Marcacao]:
+    """Todas as marcações tipo "7" do REP-P com `nsr <= ate_nsr`, ordenadas
+    por NSR — **a cadeia de verdade do ADR-012**, não só as marcações que o
+    AFD sendo gerado vai imprimir.
 
-    **Por que isto é necessário** (achado de correção, não um detalhe
-    cosmético): o ADR-012 diz que "o primeiro registro tipo '7' da
-    SEQUÊNCIA DO REP-P" — o histórico inteiro, não desta chamada — omite o
-    8º insumo. Sem esta função, CADA geração de AFD trataria o primeiro
-    registro do PERÍODO PEDIDO como se fosse o primeiro da vida do REP-P,
-    quebrando o encadeamento sempre que `nsrInicial > 1`. Como o hash do
-    ADR-012 é calculado apenas em memória durante a geração (nunca
-    persistido em coluna própria — `marcacoes.hash_registro` é a cadeia
-    DIFERENTE de F5, §2.5, nunca reaproveitada aqui), a única forma correta
-    de recuperar o elo anterior é recalcular a cadeia inteira desde o NSR 1
-    até `primeiro_nsr - 1`. Isto é O(histórico do REP-P) por geração — uma
-    função determinística pura (SHA-256), então o custo é aceitável em
-    tarefa de fila/background, mas cresce com o tempo de vida do REP-P; se
-    isso se provar caro demais na prática, é achado de desempenho a
-    registrar em `docs/backlog.md`, não motivo para pular a correção aqui.
+    Mesmos filtros da consulta que alimenta o AFD
+    (`app.fiscal.afd.gerador._consultar_marcacoes_do_periodo`): só
+    `tipo_registro='7'` (a cadeia do campo nº 8 é só de registros tipo "7") e
+    nunca `canal='importacao'` (§2.8 — AFD de terceiro usa *namespace* de NSR
+    próprio e não entra neste arquivo, portanto também não entra nesta
+    cadeia). O único filtro que NÃO se aplica aqui é o de período: a cadeia
+    ignora `periodoInicio`/`periodoFim` de propósito (ver
+    `montar_registros_tipo7`).
+
+    Como o hash do ADR-012 é calculado apenas em memória durante a geração
+    (nunca persistido em coluna própria — `marcacoes.hash_registro` é a
+    cadeia DIFERENTE de F5, §2.5, nunca reaproveitada aqui), a única forma
+    correta de recuperar cada elo é recalcular a cadeia desde o NSR 1. Isto é
+    O(histórico do REP-P) por geração — SHA-256 puro e determinístico, custo
+    aceitável numa tarefa de fila/background, mas que cresce com o tempo de
+    vida do REP-P; se isso se provar caro demais na prática, é achado de
+    desempenho a registrar em `docs/backlog.md`, não motivo para voltar a
+    encadear errado.
     """
-    if primeiro_nsr <= 1:
-        return None
-
     resultado = await sessao.execute(
         select(Marcacao)
         .where(
@@ -149,27 +147,11 @@ async def _hash_anterior_semente(
             Marcacao.rep_p_id == rep_p_id,
             Marcacao.tipo_registro == "7",
             Marcacao.canal != "importacao",
-            Marcacao.nsr < primeiro_nsr,
+            Marcacao.nsr <= ate_nsr,
         )
         .order_by(Marcacao.nsr.asc())
     )
-    anteriores = resultado.scalars().all()
-
-    hash_anterior: str | None = None
-    for marcacao in anteriores:
-        hash_anterior = calcular_hash_tipo7(
-            InsumosHashTipo7(
-                nsr=marcacao.nsr,
-                tipo_registro="7",
-                datahora_marcacao=marcacao.datahora_marcacao,
-                cpf=marcacao.cpf,
-                datahora_gravacao=marcacao.datahora_gravacao,
-                identificador_coletor=CODIGO_COLETOR_POR_CANAL.get(marcacao.canal, "05"),
-                indicador_offline="1" if marcacao.coletada_offline else "0",
-            ),
-            hash_anterior,
-        )
-    return hash_anterior
+    return resultado.scalars().all()
 
 
 async def montar_registros_tipo7(
@@ -183,11 +165,30 @@ async def montar_registros_tipo7(
     montar qualquer registro tipo "7" e, se íntegra, monta todos os
     registros de `marcacoes` (já ordenada por NSR pelo chamador, T6),
     encadeando o hash de cada um ao hash do registro tipo "7" imediatamente
-    anterior — o primeiro registro da lista encadeia a partir do hash
-    recomputado do NSR imediatamente anterior NO REP-P (via
-    `_hash_anterior_semente`), não necessariamente `None`: só é `None` de
-    verdade quando `marcacoes[0].nsr == 1` (aí sim é o primeiro registro tipo
-    "7" da vida inteira do REP-P, ADR-012).
+    anterior **NA SEQUÊNCIA DO REP-P** — nunca ao anterior *desta lista*.
+
+    **O elo anterior é sempre o NSR imediatamente anterior do REP-P, mesmo
+    quando esse NSR não aparece neste AFD.** Só existe `hash_anterior=None`
+    de verdade no NSR 1, o primeiro registro tipo "7" da vida inteira do
+    REP-P (ADR-012, decisão 1). Por isso esta função varre a cadeia inteira
+    (`_marcacoes_da_cadeia_ate`, do NSR 1 até o maior NSR pedido) e devolve
+    apenas os registros pedidos: os elos intermediários são calculados, mas
+    não impressos.
+
+    **Por que "anterior no REP-P" e não "anterior no arquivo"** (correção do
+    resíduo do ADR-012, não detalhe cosmético): o NSR não é cronológico
+    (ADR-003) — uma marcação coletada *offline* recebe NSR na hora da
+    GRAVAÇÃO, mas entra no AFD pela `datahora_marcacao`, que pode cair fora
+    do período pedido. Um AFD filtrado por data pode então pular NSRs
+    intercalados. Encadear pelo "anterior da lista" faria o MESMO NSR receber
+    hashes DIFERENTES conforme o período escolhido na geração (um AFD do mês
+    que pula o NSR intercalado e um AFD do ano inteiro que o contém
+    divergiriam no campo nº 8 de todos os registros seguintes) — a cadeia
+    deixaria de ser reproduzível e auditável, a única propriedade que ela
+    existe para oferecer. A semântica "cadeia do REP-P" já era a fixada pelo
+    ADR-012 e já era aplicada ao PRIMEIRO registro de cada geração; esta
+    função apenas passou a aplicá-la a TODOS, em vez de misturar duas
+    semânticas dentro do mesmo arquivo.
 
     **Verificação de continuidade é sobre a sequência INTEIRA do REP-P**
     (`verificar_sequencia_nsr` chamada sem `nsr_de`/`nsr_ate`, que usa o
@@ -234,13 +235,20 @@ async def montar_registros_tipo7(
             },
         )
 
+    if not marcacoes:
+        return []
+
+    pedidas: dict[int, Marcacao] = {marcacao.nsr: marcacao for marcacao in marcacoes}
+    cadeia = await _marcacoes_da_cadeia_ate(
+        sessao, tenant_id=tenant_id, rep_p_id=rep_p_id, ate_nsr=max(pedidas)
+    )
+
     registros: list[RegistroTipo7] = []
     hash_anterior: str | None = None
-    if marcacoes:
-        hash_anterior = await _hash_anterior_semente(
-            sessao, tenant_id=tenant_id, rep_p_id=rep_p_id, primeiro_nsr=marcacoes[0].nsr
-        )
-    for marcacao in marcacoes:
+    for elo in cadeia:
+        # Para os NSRs pedidos usa-se o objeto que o chamador passou (mesma
+        # linha do banco); para os elos apenas encadeados, a linha lida aqui.
+        marcacao = pedidas.get(elo.nsr, elo)
         registro = montar_registro_tipo7(
             nsr=marcacao.nsr,
             cpf=marcacao.cpf,
@@ -250,6 +258,18 @@ async def montar_registros_tipo7(
             coletada_offline=marcacao.coletada_offline,
             hash_anterior=hash_anterior,
         )
-        registros.append(registro)
         hash_anterior = registro.hash_registro
+        if elo.nsr in pedidas:
+            registros.append(registro)
+
+    if len(registros) != len(pedidas):
+        # Só acontece se o chamador passar uma marcação que a própria cadeia
+        # do REP-P não contém (outro REP-P/tenant, `tipo_registro != '7'` ou
+        # `canal='importacao'`). Erro explícito em vez de gerar um AFD com
+        # menos linhas do que o chamador pediu, silenciosamente.
+        faltantes = sorted(set(pedidas) - {registro.nsr for registro in registros})
+        raise ValueError(
+            f"marcacoes com NSR {faltantes} nao pertencem a cadeia tipo 7 do REP-P "
+            f"{rep_p_id} (outro REP-P/tenant, tipo_registro != '7' ou canal='importacao')."
+        )
     return registros

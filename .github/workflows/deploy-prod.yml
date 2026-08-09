@@ -1,0 +1,177 @@
+# =============================================================================
+# Deploy · PRODUCAO (prd)
+# =============================================================================
+# ARQUIVO SEPARADO DO ci.yml DE PROPOSITO.
+#
+# O ci.yml dispara em `push` (main e f*-**) e em `pull_request`. Qualquer job
+# adicionado la herda esses gatilhos e passa a depender de um `if:` correto
+# para NAO rodar — um `if:` mal escrito num refactor futuro viraria um deploy
+# de producao acidental. Um workflow proprio cujo unico gatilho e
+# `workflow_dispatch` nao tem esse modo de falha: nao existe evento de push
+# que consiga inicia-lo.
+#
+# DECISAO INTENCIONAL, NAO OMISSAO: producao NAO tem deploy automatico.
+#   * hml roda sozinho a cada push em main (ci.yml, jobs deploy-hml e
+#     deploy-hml-aplicar) — errar em hml custa um redeploy.
+#   * prd exige alguem abrir a aba Actions, escolher este workflow, digitar a
+#     tag e digitar a palavra de confirmacao. Errar em prd custa marcacao de
+#     ponto de gente real, com consequencia trabalhista.
+# Mudar isso e decisao do dono do produto, e deve vir acompanhada de uma
+# revisao do runbook (docs/runbook-deploy-producao.md).
+#
+# Pre-requisitos na VPS antes do primeiro disparo (ver runbook, passos 1-7):
+#   * checkout de producao em /docker/ponto-prd com infra/.env.prod preenchido;
+#   * infra/deploy-prod.sh presente, dono root, modo 700;
+#   * sudoers scoped em /etc/sudoers.d/ghrunner-deploy-prod permitindo ao
+#     usuario `ghrunner` executar EXATAMENTE esse caminho, e nada mais;
+#   * environment `producao` criado no GitHub com required reviewers.
+# =============================================================================
+
+name: Deploy · producao
+
+# UNICO gatilho. Nao adicione `push:` aqui.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag imutavel a publicar/implantar (SHA curto do commit, ex.: a1b2c3d). NUNCA 'latest'."
+        required: true
+        type: string
+      confirmacao:
+        description: "Digite exatamente: implantar em producao"
+        required: true
+        type: string
+      pular_migration:
+        description: "Subir sem rodar alembic (so se a migration ja foi aplicada em janela separada)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # Sem cancel-in-progress: cancelar um deploy de producao no meio deixa o
+  # stack em estado indefinido. Deploys concorrentes enfileiram.
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # (a) Portao de sanidade — barato, roda antes de qualquer build.
+  # ---------------------------------------------------------------------------
+  guarda:
+    name: Producao · guarda
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confere a frase de confirmacao
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirmacao }}" != "implantar em producao" ]; then
+            echo "::error::Confirmacao incorreta. Digite exatamente: implantar em producao"
+            exit 1
+          fi
+          echo "Confirmacao aceita."
+
+      - name: Recusa TAG nao imutavel
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag }}'
+          if [ "$tag" = "latest" ] || [ "$tag" = "main" ]; then
+            echo "::error::TAG '$tag' nao e imutavel — o rollback deixaria de ser reproduzivel."
+            exit 1
+          fi
+          if ! printf '%s' "$tag" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$'; then
+            echo "::error::TAG '$tag' fora do formato aceito."
+            exit 1
+          fi
+          echo "TAG aceita: $tag"
+
+      - name: So a partir de main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::Deploy de producao so pode partir de main (recebido: ${{ github.ref }})."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # (b) Build e publicacao das imagens com a TAG imutavel pedida.
+  # Mesmo material do deploy-hml, mas a tag e o SHA — nunca `latest`.
+  # ---------------------------------------------------------------------------
+  deploy-prod:
+    name: Deploy · prd (imagens)
+    needs: [guarda]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        servico: [api, worker, web, device-gw, facial-svc]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e publica ${{ matrix.servico }}:${{ inputs.tag }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.servico }}/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/ponto-${{ matrix.servico }}:${{ inputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+
+  # ---------------------------------------------------------------------------
+  # (c) Aplicacao na VPS. Roda no MESMO runner self-hosted do deploy de hml
+  # (usuario `ghrunner`, sem root, label `ponto-vps`) — a VPS bloqueia SSH
+  # vindo dos runners hospedados do GitHub (achado de 2026-08-07, documentado
+  # em ci.yml). A diferenca para hml e o `environment: producao`, que segura
+  # este job na fila ate um reviewer aprovar na propria interface do GitHub.
+  # ---------------------------------------------------------------------------
+  deploy-prod-aplicar:
+    name: Deploy · prd (aplicar)
+    needs: [deploy-prod]
+    runs-on: [self-hosted, ponto-vps]
+    # Segundo portao humano, alem da frase de confirmacao. Configure required
+    # reviewers em Settings > Environments > producao. Se o environment nao
+    # existir, crie-o ANTES do primeiro disparo (ver runbook, passo 6).
+    environment: producao
+    steps:
+      - name: Roda infra/deploy-prod.sh localmente (ja estamos na VPS)
+        # O proprio script faz git fetch/reset --hard a partir de
+        # /docker/ponto-prd, valida o .env.prod, roda pull/up -d e alembic.
+        # `ghrunner` nao e root: executa via sudoers scoped exclusivamente a
+        # este caminho (/etc/sudoers.d/ghrunner-deploy-prod), nao sudo amplo.
+        env:
+          TAG: ${{ inputs.tag }}
+          CONFIRMAR_DEPLOY_PRODUCAO: "sim"
+          PULAR_MIGRATION: ${{ inputs.pular_migration && 'sim' || 'nao' }}
+        run: |
+          sudo -n \
+            TAG="$TAG" \
+            CONFIRMAR_DEPLOY_PRODUCAO="$CONFIRMAR_DEPLOY_PRODUCAO" \
+            PULAR_MIGRATION="$PULAR_MIGRATION" \
+            /docker/ponto-prd/infra/deploy-prod.sh
+
+      - name: Fumaca — /v1/admin/saude responde 200
+        # Chamada pela rede interna do Docker: nao depende de DNS publico nem
+        # de o certificado ja ter sido emitido.
+        run: |
+          set -euo pipefail
+          docker run --rm --network ponto-prd-interna curlimages/curl:latest \
+            --fail --silent --show-error --max-time 20 \
+            http://api:8000/v1/admin/saude > /dev/null
+          echo "Saude OK."

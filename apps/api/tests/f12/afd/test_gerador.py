@@ -31,6 +31,10 @@ async def _baixar_texto(conteudo_ref: str) -> str:
     return conteudo.decode("iso-8859-1")
 
 
+def _linhas_tipo7(texto: str) -> list[str]:
+    return [linha for linha in texto.split("\r\n") if linha and linha[9:10] == "7"]
+
+
 @pytest.mark.asyncio
 async def test_gera_um_afd_com_tipos_1_7_9_e_assinatura_nessa_ordem(
     sessao_f12: AsyncSession, contexto_f12: ContextoF12
@@ -103,6 +107,62 @@ async def test_ordenado_por_nsr_nao_por_data_hora(
     nsrs_no_arquivo = [int(linha[0:9]) for linha in linhas_tipo7]
     assert nsrs_no_arquivo == sorted(nsrs_no_arquivo)
     assert nsrs_no_arquivo == [m.nsr for m in marcacoes]
+
+
+@pytest.mark.asyncio
+async def test_marcacao_offline_de_outro_dia_nao_quebra_a_cadeia_do_afd(
+    sessao_f12: AsyncSession, contexto_f12: ContextoF12
+) -> None:
+    """Caminho REAL do resíduo do ADR-012 (o filtro de período de
+    `_consultar_marcacoes_do_periodo`, não uma lista montada à mão): uma
+    marcação coletada offline recebe NSR na GRAVAÇÃO (ADR-003 — NSR não é
+    cronológico) mas entra no AFD pela `datahora_marcacao`, que aqui cai
+    cinco dias fora da janela pedida. O AFD do dia contém NSR 1 e 3, pulando
+    o NSR 2 — e o campo nº 8 do NSR 3 tem de ser o MESMO que ele teria num
+    AFD que cobrisse os dois dias, senão a cadeia não é auditável."""
+    await gerar_marcacoes_reais(sessao_f12, contexto_f12, quantidade=1, inicio=_INICIO)
+    # NSR 2: coletada offline, com datahora_marcacao 5 dias depois (fora da
+    # janela do AFD pedido abaixo), gravada agora -- exatamente o cenario que
+    # torna o NSR nao cronologico.
+    await gerar_marcacoes_reais(
+        sessao_f12,
+        contexto_f12,
+        quantidade=1,
+        inicio=_INICIO + dt.timedelta(days=5),
+        coletada_offline=True,
+        canal="mobile",
+    )
+    await gerar_marcacoes_reais(
+        sessao_f12, contexto_f12, quantidade=1, inicio=_INICIO + dt.timedelta(hours=1)
+    )
+
+    apenas_o_dia = await gerar_afd_arquivo(
+        sessao_f12,
+        contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        inicio=_INICIO.date(),
+        fim=_INICIO.date(),
+        assinar=False,
+    )
+    linhas_do_dia = _linhas_tipo7(await _baixar_texto(apenas_o_dia[0].conteudo_ref))
+    assert [int(linha[0:9]) for linha in linhas_do_dia] == [1, 3]
+
+    periodo_inteiro = await gerar_afd_arquivo(
+        sessao_f12,
+        contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        inicio=_INICIO.date(),
+        fim=(_INICIO + dt.timedelta(days=5)).date(),
+        assinar=False,
+    )
+    linhas_inteiro = _linhas_tipo7(await _baixar_texto(periodo_inteiro[0].conteudo_ref))
+    assert [int(linha[0:9]) for linha in linhas_inteiro] == [1, 2, 3]
+
+    # O NSR 3 sai byte a byte identico nos dois arquivos -- inclusive o campo
+    # no 8 (hash), que e o ponto do resíduo do ADR-012.
+    por_nsr_inteiro = {int(linha[0:9]): linha for linha in linhas_inteiro}
+    for linha in linhas_do_dia:
+        assert linha == por_nsr_inteiro[int(linha[0:9])]
 
 
 @pytest.mark.asyncio

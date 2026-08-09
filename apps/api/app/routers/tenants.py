@@ -4,9 +4,17 @@ Tenants do SaaS e suas configuracoes.
 Todo dado de dominio pertence a um tenant e vive sob Row Level Security no banco: nenhuma operacao atravessa a fronteira, e tentativa de acesso cross-tenant e barrada e auditada.
 
 Regra de negocio implementada na F1/A2 (T2) -- ver
-`app.identidade.tenancy.servico`. `listarTenants` e `criarTenant` continuam
-`501`: sao necessariamente CROSS-tenant e a role de conexao da aplicacao
-(`ponto_app`) nao tem `BYPASSRLS` -- ver `docs/backlog.md` (item "F1 / A2").
+`app.identidade.tenancy.servico`.
+
+`listarTenants` e `criarTenant` (as duas operacoes CROSS-tenant do suporte da
+SEEG, `501` desde a F1) passaram a existir: elas -- e SOMENTE elas -- usam
+`SessaoDbSuporte` (`app/db/sessao_suporte.py`), uma sessao com a role
+`ponto_app_suporte` (LOGIN + `BYPASSRLS`, criada por
+`migrations/versions/0005_role_suporte_bypassrls.py`, com privilegio de tabela
+apenas em `tenants` e `auditoria`). O `SessaoDb` de todas as outras rotas
+continua na role `ponto_app_runtime`, sem `BYPASSRLS`: a fronteira de RLS do
+resto do sistema nao foi tocada. Regra de negocio e auditoria obrigatoria das
+duas em `app.identidade.tenancy.servico_suporte`.
 
 Autenticacao dupla (retrofit de 2026-08-08): o contrato ja declarava os tres
 esquemas alternativos por operacao (`bearerAuth`/`oauth2`/`apiKeyAuth`), mas
@@ -35,10 +43,11 @@ from app.comum.autenticacao_cliente import (
 )
 from app.comum.limitador_taxa import exigir_limite_taxa_sessao
 from app.core import contexto
-from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao, NaoImplementado
-from app.core.seguranca import Sujeito
+from app.core.erros import RESPOSTAS_PADRAO, ErroDeAplicacao
+from app.core.seguranca import Sujeito, exigir_permissao
 from app.db.sessao import SessaoDb
-from app.identidade.tenancy import servico
+from app.db.sessao_suporte import SessaoDbSuporte
+from app.identidade.tenancy import servico, servico_suporte
 from app.schemas import contrato
 
 roteador = APIRouter(tags=["tenants"])
@@ -46,17 +55,37 @@ roteador = APIRouter(tags=["tenants"])
 # Uma instancia por par (permissao, escopo) usado no arquivo -- nunca uma
 # chamada nova a `exigir_permissao_ou_escopo` dentro do handler (identidade
 # estavel do *callable* pro cache de dependencia do FastAPI).
-# Sem `_ACESSO_CRIAR` (`tenants.criar`/`tenants:escrever`): `criarTenant` --
-# como `listarTenants` -- nao tem, e nunca teve, dependencia de autenticacao
-# nenhuma (ver docstring dos dois handlers: sao `501` incondicionais ate uma
-# fase desenhar o acesso cross-tenant do suporte da SEEG). Retrofitar um
-# portao de auth num stub `501` so trocaria o `501` por `401` para quem chama
-# sem credencial -- regressao de comportamento, sem ganho.
 _ACESSO_LER = exigir_permissao_ou_escopo(permissao="tenants.ler", escopo="tenants:ler")
 _ACESSO_EDITAR = exigir_permissao_ou_escopo(permissao="tenants.editar", escopo="tenants:escrever")
 _ACESSO_CONFIGURAR = exigir_permissao_ou_escopo(
     permissao="tenants.configurar", escopo="tenants:escrever"
 )
+
+#: Portao das DUAS rotas cross-tenant (`listarTenants`/`criarTenant`).
+#:
+#: `exigir_permissao` PURO, nao `exigir_permissao_ou_escopo` -- decisao
+#: deliberada, contra o padrao das demais rotas deste arquivo:
+#:
+#: 1. O caminho de cliente de integracao (`exigir_escopo`) resolve o tenant a
+#:    partir do `X-Tenant` da requisicao e devolve um `ClienteAutenticado`
+#:    SEMPRE escopado a um unico tenant -- um cliente OAuth/API key e, por
+#:    construcao, uma credencial DE um tenant. Deixar essa porta aberta para
+#:    uma operacao cross-tenant seria dar a qualquer cliente de integracao de
+#:    qualquer cliente do SaaS um caminho para enxergar a base inteira.
+#: 2. Nao existe cliente de integracao de terceiro que precise disto: e
+#:    operacao interna da SEEG, feita por gente, com sessao humana.
+#: 3. O contrato declara `x-permissao: tenants.ler` (listar) e `tenants.criar`
+#:    (criar), mas as duas sao insuficientes como portao: `MATRIZ_PERFIS`
+#:    (`migrations/seed_dev.py`) da `"*": _TODAS_AS_ACOES` ao perfil
+#:    `admin_empresa`, entao o admin de QUALQUER tenant cliente ja possui as
+#:    duas. `tenants.suporte` (acao nova `suporte`, fora de `_TODAS_AS_ACOES`,
+#:    criada em `0005_role_suporte_bypassrls`) nao e concedida por nenhum
+#:    curinga existente: toda concessao dela e explicita.
+#:
+#: Quem chama sem sessao humana recebe `401 PONTO-AUTH-002`; com sessao mas
+#: sem a permissao, `403 PONTO-PERM-001`.
+PERMISSAO_SUPORTE = "tenants.suporte"
+_ACESSO_SUPORTE = exigir_permissao(PERMISSAO_SUPORTE)
 
 _SchemaT = TypeVar("_SchemaT", bound=BaseModel)
 
@@ -156,6 +185,12 @@ async def obter_tenant_atual(
     responses=RESPOSTAS_PADRAO,
 )
 async def listar_tenants(
+    # Ordem deliberada: `sujeito` ANTES de `sessao_suporte`. O FastAPI resolve
+    # as dependencias na ordem da assinatura, entao uma requisicao sem
+    # credencial (ou sem `tenants.suporte`) e recusada ANTES de qualquer
+    # conexao ser aberta com a credencial de bypass.
+    sujeito: Annotated[Sujeito, Depends(_ACESSO_SUPORTE)],
+    sessao_suporte: SessaoDbSuporte,
     x_tenant: Annotated[
         str | None,
         Header(
@@ -202,13 +237,32 @@ async def listar_tenants(
 ) -> contrato.ListaTenant:
     """Listar tenants.
 
-    Cross-tenant por natureza (lista TODOS os tenants do SaaS): a role
-    `ponto_app` usada por `app/db/sessao.py:obter_sessao` nao tem `BYPASSRLS`
-    (so `ponto_suporte` tem, e essa role nao esta ligada ao ciclo padrao de
-    requisicao). Continua `501` ate uma fase decidir o desenho do acesso do
-    suporte da SEEG -- ver `docs/backlog.md`, item "F1 / A2".
+    Cross-tenant por natureza (lista TODOS os tenants do SaaS). Duas coisas,
+    juntas, tornam isso possivel sem abrir mao do isolamento do resto do
+    sistema: o portao `tenants.suporte` (ver `_ACESSO_SUPORTE`) e a sessao
+    `SessaoDbSuporte`, unica do sistema com `BYPASSRLS` e com privilegio de
+    tabela so em `tenants`/`auditoria`. Toda chamada bem-sucedida grava a
+    linha de auditoria de acesso cross-tenant
+    (`servico_suporte.EVENTO_LISTAGEM`), dentro da mesma transacao.
+
+    `ordenar` continua sem efeito aqui: a paginacao por cursor compartilhada
+    (`app.identidade.rbac.paginacao`) ordena sempre por `(criado_em, id)`, e o
+    cursor codifica exatamente esse par -- aceitar outro criterio exigiria
+    mudar o helper para todos os `listar*` do sistema.
     """
-    raise NaoImplementado("listarTenants", fase="F1")
+    linhas, paginacao_bruta = await servico_suporte.listar_tenants(
+        sessao_suporte,
+        sujeito=sujeito,
+        cursor=cursor,
+        limite=limite,
+        status=status,
+        plano=plano,
+        busca=busca,
+    )
+    dados = [_para_schema(contrato.Tenant, linha) for linha in linhas]
+    return contrato.ListaTenant(
+        dados=dados, paginacao=contrato.Paginacao.model_validate(paginacao_bruta)
+    )
 
 
 @roteador.post(
@@ -220,6 +274,10 @@ async def listar_tenants(
     dependencies=[Depends(exigir_limite_taxa_sessao())],
 )
 async def criar_tenant(
+    # Mesma ordem deliberada de `listarTenants`: autoriza primeiro, so entao
+    # abre a sessao com a credencial de bypass.
+    sujeito: Annotated[Sujeito, Depends(_ACESSO_SUPORTE)],
+    sessao_suporte: SessaoDbSuporte,
     idempotency_key: Annotated[
         str,
         Header(
@@ -246,14 +304,20 @@ async def criar_tenant(
     """Criar tenant.
 
     A propria linha ainda nao existe quando a requisicao chega: nao ha
-    `app.tenant_id` para publicar antes do `INSERT` dentro do ciclo padrao de
-    `obter_sessao` (que exige tenant JA resolvido). `migrations/seed_dev.py`
-    resolve isso abrindo sua PROPRIA sessao administrativa fora do ciclo de
-    requisicao -- decisao de desenho fora do escopo de T2, registrada em
-    `docs/backlog.md` (item "F1 / A2") para quem desenhar o acesso do suporte
-    da SEEG.
+    `app.tenant_id` para publicar antes do `INSERT`, e o `WITH CHECK` de
+    `pol_isolamento_tenant` (que compara `id` com `app.tenant_id`) recusaria a
+    insercao numa sessao normal. Dai a `SessaoDbSuporte`, com `BYPASSRLS`,
+    atras do portao `tenants.suporte`.
+
+    Cria a LINHA do tenant. O provisionamento dos catalogos de fabrica
+    (perfis, tipos de tratamento/solicitacao/afastamento, relatorios) que a
+    descricao da operacao no contrato menciona continua com
+    `migrations/seed_dev.py` -- ver a docstring de
+    `servico_suporte.criar_tenant` para por que ele nao foi trazido para
+    dentro desta credencial.
     """
-    raise NaoImplementado("criarTenant", fase="F1")
+    linha = await servico_suporte.criar_tenant(sessao_suporte, sujeito=sujeito, dados=corpo)
+    return _para_schema(contrato.Tenant, linha)
 
 
 @roteador.get(

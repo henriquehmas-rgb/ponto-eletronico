@@ -1145,11 +1145,21 @@ jobs:
       # docker compose config resolve interpolacao; usamos o .env.example para
       # ter valores. Se uma variavel obrigatoria sumir do exemplo, isso quebra —
       # o que e desejado: o exemplo tem que continuar sendo suficiente.
-      - name: docker compose config (producao)
+      - name: docker compose config (homologacao)
         run: |
           docker compose \
             --env-file infra/.env.example \
             -f infra/docker-compose.yml \
+            config --quiet
+
+      # Producao tem compose e .env proprios desde 2026-08-08. O exemplo de prd
+      # precisa continuar sendo suficiente: se uma variavel obrigatoria sumir
+      # dele, este passo quebra — que e o comportamento desejado.
+      - name: docker compose config (producao)
+        run: |
+          docker compose -p ponto-prd \
+            --env-file infra/.env.prod.example \
+            -f infra/docker-compose.prod.yml \
             config --quiet
 
       - name: docker compose config (dev)
@@ -1219,8 +1229,15 @@ jobs:
   # segredo extra) e dispara o redeploy na VPS por uma chave SSH DEDICADA e
   # restrita (forced-command em authorized_keys, so executa infra/
   # deploy-hml.sh -- mesmo se vazar, o estrago maximo e "alguem forca um
-  # redeploy do hml", nunca acesso de shell). Alvo e SO hml (homologacao);
-  # producao (dominio/segredos reais) e decisao separada, ainda nao tomada.
+  # redeploy do hml", nunca acesso de shell). Alvo e SO hml (homologacao).
+  #
+  # PRODUCAO NAO ENTRA AQUI, DE PROPOSITO. O deploy de prd vive em
+  # .github/workflows/deploy-prod.yml, cujo unico gatilho e workflow_dispatch
+  # manual: nenhum push consegue inicia-lo. Qualquer job de producao adicionado
+  # a ESTE arquivo herdaria os gatilhos de push/pull_request acima e passaria a
+  # depender de um `if:` correto para nao disparar sozinho — exatamente o modo
+  # de falha que a separacao evita. Se um dia a decisao for automatizar prd,
+  # mude o workflow dedicado, nunca traga o job para ca.
   # ---------------------------------------------------------------------------
   deploy-hml:
     name: Deploy · hml

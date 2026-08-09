@@ -25,12 +25,35 @@
 # repositorio nunca tem dois pacotes `app` e o hot reload continua funcionando.
 #
 # ---------------------------------------------------------------------------
-# PESOS DO MODELO
+# PESOS DO MODELO — build-time vs runtime, e por que a escolha e esta
 # ---------------------------------------------------------------------------
-# Os arquivos `.onnx` NAO entram na imagem e NAO entram no git: sao grandes e
-# tem ciclo de vida proprio. Eles chegam pelo volume `facial-models`, montado em
-# `/models` (`FACIAL_MODEL_DIR`). Imagem sem pesos sobe, responde `/health` e
-# reprova em `/ready` — que e exatamente o comportamento desejado.
+# Os arquivos `.onnx` NAO entram na imagem e NAO entram no git: sao grandes
+# (`buffalo_l` = ~326 MB descompactado) e tem ciclo de vida proprio. Eles chegam
+# pelo volume `facial-models`, montado em `/models` (`FACIAL_MODEL_DIR`). Imagem
+# sem pesos sobe, responde `/health` e reprova em `/ready` — que e exatamente o
+# comportamento desejado.
+#
+# O InsightFace, por padrao, baixa `buffalo_l` do GitHub na PRIMEIRA execucao.
+# Aqui isso e desligado (`FACIAL_BAIXAR_MODELO` e falso por padrao, e a propria
+# `Configuracao` RECUSA liga-lo em hml/prd). As tres opcoes e o motivo da
+# escolha:
+#
+#   (a) baixar em runtime .... rejeitado. Faz uma marcacao de ponto depender de
+#       um repositorio de terceiro estar no ar, adiciona ~30 s ao primeiro
+#       request depois de cada restart, e aceita como valido o peso que aquele
+#       repositorio servir naquele dia — inclusive um substituido.
+#   (b) baixar no build ...... rejeitado como padrao. Coloca 326 MB em CADA
+#       camada/tag da imagem, faz o `docker build` do CI depender de rede
+#       externa, e amarra o ciclo de vida dos pesos ao das releases de codigo,
+#       que sao muito mais frequentes.
+#   (c) volume, populado por passo explicito de deploy .... ESCOLHIDO. Os pesos
+#       viram artefato versionado e verificavel por hash, a imagem continua
+#       enxuta, e trocar o motor (que e uma decisao rastreada por
+#       `FACIAL_MODEL_VERSAO`) deixa de exigir rebuild de imagem.
+#
+# Em `dev`/`ci` a conveniencia vale mais que a cerimonia: ligue
+# `FACIAL_BAIXAR_MODELO=1` e o InsightFace popula `/models` sozinho na primeira
+# captura. Ver o README do app para o passo de deploy.
 #
 # Alvos:
 #   dependencias  camada de dependencias de terceiro, cacheada por pyproject.toml
@@ -87,11 +110,20 @@ WORKDIR /app
 # -----------------------------------------------------------------------------
 FROM base AS dependencias
 
+# `insightface` publica sdist com extensao Cython: sem compilador o `pip install`
+# falha. O `build-essential` e removido no fim da MESMA camada — ele existe para
+# compilar e nao pode sobrar numa imagem que recebe imagem de rosto pela rede.
+# `libgomp1` fica: e o OpenMP que o ONNX Runtime usa para paralelizar em CPU.
 COPY apps/facial-svc/pyproject.toml apps/facial-svc/README.md ./
-RUN mkdir -p facial/rotas \
+RUN mkdir -p facial/motor facial/rotas \
     && : > facial/__init__.py \
+    && : > facial/motor/__init__.py \
     && : > facial/rotas/__init__.py \
-    && pip install --no-cache-dir .
+    && apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libgomp1 \
+    && pip install --no-cache-dir . \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
 # dev - alvo usado por docker-compose.dev.yml (codigo vem por bind mount)

@@ -12,11 +12,23 @@
 # sendo `uvicorn app.main:app`: o Dockerfile instala um alias na imagem.
 # Ver `facial/__init__.py`.
 #
-# NOTA SOBRE AS DEPENDENCIAS: `onnxruntime`, `insightface`, `numpy` e
-# `opencv` NAO estao declarados. Fase 0 nao carrega modelo nenhum, e
-# declarar biblioteca pesada antes de existir codigo que a use so faz a
-# imagem crescer e o build do CI demorar. Elas entram na F2, junto com
-# o codigo que as chama.
+# DEPENDENCIAS DO MOTOR (entraram junto com o codigo que as usa):
+#
+#   onnxruntime            runtime de inferencia, CPU. NAO usar
+#                          `onnxruntime-gpu`: a VPS nao tem GPU e o pacote
+#                          CUDA quebra a imagem por falta de libcudart.
+#   insightface            pacote `buffalo_l` (RetinaFace det_10g + ArcFace
+#                          w600k_r50, 512-d). Traz o pipeline de alinhamento,
+#                          que e a parte que ninguem deve reescrever a mao.
+#   opencv-python-headless decodificacao de imagem e as metricas de
+#                          qualidade/liveness. A variante `headless` e
+#                          obrigatoria: a normal puxa GTK/X11 para dentro de
+#                          uma imagem de servidor que nao tem tela.
+#   numpy                  vetor do embedding e a aritmetica de similaridade.
+#
+# `insightface` publica sdist com extensao Cython: o build precisa de
+# compilador. O Dockerfile resolve isso instalando as dependencias num
+# estagio com `build-essential` que nao chega a imagem final.
 ####################################################################
 
 [build-system]
@@ -42,6 +54,11 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9,<3.0",
     "pydantic-settings>=2.6",
+    # --- motor facial (ver o cabecalho) ---
+    "numpy>=1.26",
+    "onnxruntime>=1.19",
+    "opencv-python-headless>=4.10",
+    "insightface>=0.7.3",
 ]
 
 [project.optional-dependencies]
@@ -116,6 +133,14 @@ warn_unused_configs = true
 warn_unreachable = true
 show_error_codes = true
 pretty = true
+
+# `insightface` e `cv2` nao publicam stubs. Com `strict`, isso pararia a coleta.
+# O isolamento nao e so conveniencia: `facial/motor/arcface.py` e o UNICO lugar
+# que toca a API sem tipos, e ele converte tudo para `RostoDetectado` (dataclass
+# tipada) na saida — o resto do servico continua sob `strict` de verdade.
+[[tool.mypy.overrides]]
+module = ["insightface.*", "cv2.*"]
+ignore_missing_imports = true
 
 # ==================================================================
 # pytest

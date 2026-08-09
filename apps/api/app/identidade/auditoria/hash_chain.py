@@ -151,10 +151,92 @@ def calcular_hash(
     return hashlib.sha256(_US.join(campos).encode("utf-8")).hexdigest()
 
 
+class CacheCadeiaAuditoria:
+    """Memoiza `(sequencia, hash_registro)` da ultima linha da cadeia por
+    tenant DENTRO de uma unica transacao (ADR-010, rodada 2).
+
+    **Por que isto e correto, e nao um atalho que arrisca a cadeia.**
+    `_travar_e_ler_estado_cadeia` faz tres round-trips por chamada
+    (`pg_advisory_xact_lock` + `MAX(sequencia)` + `hash_registro` da ultima
+    linha) -- 3 das 14,36 consultas por apuracao medidas no recalculo em
+    lote, o maior bloco isolado que restou depois do `CacheResolucao`. Mas,
+    **depois da primeira chamada dentro de uma transacao**, esses tres
+    round-trips nao trazem informacao nova:
+
+    1. `pg_advisory_xact_lock` e escopado a TRANSACAO. Uma vez adquirido, ele
+       continua nosso ate o commit/rollback -- reexecutar o `SELECT` so paga
+       outra ida ao banco para receber um lock que ja temos.
+    2. Enquanto seguramos esse lock, **nenhuma outra transacao consegue
+       inserir** na cadeia deste tenant (e exatamente o invariante que o lock
+       existe para garantir). Logo o `MAX(sequencia)` do banco so pode ser a
+       ultima linha que NOS mesmos gravamos nesta transacao -- que ja
+       conhecemos, sem perguntar.
+    3. `hash_registro` dessa linha foi calculado por nos, em memoria, no
+       passo anterior.
+
+    O cache guarda exatamente esses dois valores e **so vale para a transacao
+    em que foi preenchido**: a identidade do `SessionTransaction` corrente e
+    gravada junto e conferida a cada uso. Commit, rollback, `begin_nested`
+    ou rollback de savepoint trocam esse objeto e invalidam o cache
+    automaticamente -- o caminho de fallback e a leitura normal do banco, ou
+    seja, o pior caso do cache e o comportamento de antes, nunca um hash
+    errado. Nunca deve ser guardado entre transacoes/requisicoes: e um objeto
+    de vida curta, criado e descartado por `recalcular_periodo`.
+    """
+
+    __slots__ = ("_estado", "_transacao")
+
+    def __init__(self) -> None:
+        self._estado: dict[UUID, tuple[int, str]] = {}
+        self._transacao: object | None = None
+
+    @staticmethod
+    def _transacao_corrente(sessao: AsyncSession) -> object | None:
+        # `sync_session.get_transaction()` devolve o proprio
+        # `SessionTransaction` (identidade estavel), ao contrario do
+        # invólucro async, que pode ser recriado a cada chamada.
+        try:
+            return sessao.sync_session.get_transaction()
+        except Exception:  # pragma: no cover - sessao sem transacao ativa
+            return None
+
+    def obter(self, sessao: AsyncSession, tenant_id: UUID) -> tuple[int, str] | None:
+        transacao = self._transacao_corrente(sessao)
+        if transacao is None or transacao is not self._transacao:
+            # Transacao trocou (commit/rollback/savepoint): o advisory lock
+            # anterior nao e' mais nosso e a sequencia memorizada pode nao
+            # existir mais. Zera e volta a ler do banco.
+            self._estado.clear()
+            self._transacao = transacao
+            return None
+        return self._estado.get(tenant_id)
+
+    def registrar(
+        self, sessao: AsyncSession, tenant_id: UUID, sequencia: int, hash_registro: str
+    ) -> None:
+        transacao = self._transacao_corrente(sessao)
+        if transacao is None:  # pragma: no cover - defensivo
+            return
+        if transacao is not self._transacao:
+            self._estado.clear()
+            self._transacao = transacao
+        self._estado[tenant_id] = (sequencia, hash_registro)
+
+
 async def _travar_e_ler_estado_cadeia(
-    sessao: AsyncSession, *, tenant_id: UUID
+    sessao: AsyncSession, *, tenant_id: UUID, cache: CacheCadeiaAuditoria | None = None
 ) -> tuple[int, str | None]:
-    """Adquire o advisory lock do tenant e devolve `(proxima_sequencia, ultimo_hash)`."""
+    """Adquire o advisory lock do tenant e devolve `(proxima_sequencia, ultimo_hash)`.
+
+    Com `cache` preenchido para este tenant NESTA transacao, devolve o estado
+    memorizado sem nenhuma ida ao banco -- ver `CacheCadeiaAuditoria` para o
+    argumento de corretude (o lock ja e nosso e ninguem mais pode ter escrito
+    na cadeia deste tenant enquanto o seguramos)."""
+    if cache is not None:
+        memorizado = cache.obter(sessao, tenant_id)
+        if memorizado is not None:
+            ultima_sequencia, ultimo_hash_memorizado = memorizado
+            return ultima_sequencia + 1, ultimo_hash_memorizado
     await sessao.execute(
         sa.text("SELECT pg_advisory_xact_lock(hashtextextended(:tenant, 0))"),
         {"tenant": str(tenant_id)},
@@ -202,6 +284,7 @@ async def gravar_auditoria(
     metadados: Any | None = None,
     resultado: str = "sucesso",
     mensagem: str | None = None,
+    cache_cadeia: CacheCadeiaAuditoria | None = None,
 ) -> Any:
     """Grava uma linha na trilha de auditoria, encadeada por hash.
 
@@ -209,6 +292,12 @@ async def gravar_auditoria(
     que ela documenta -- o advisory lock e escopado a transacao
     (`pg_advisory_xact_lock`), e a trilha so faz sentido atomica com o dado
     que descreve. Nao comita: quem chama decide quando.
+
+    `cache_cadeia` (ADR-010, rodada 2) e um parametro OPCIONAL somente-nomeado:
+    quem grava MUITAS linhas do mesmo tenant na mesma transacao (o recalculo
+    em lote) passa um `CacheCadeiaAuditoria` de vida curta e economiza tres
+    round-trips por linha. Ausente (default `None`), o caminho executado e
+    exatamente o de antes -- nenhum chamador existente precisa mudar.
     """
     ocorrido_em = _dt.datetime.now(_dt.UTC)
     # Normaliza ANTES de hashear e de gravar: mesma forma nos dois, e livre de
@@ -217,7 +306,9 @@ async def gravar_auditoria(
     valor_novo = _para_jsonb(valor_novo)
     diferenca = _para_jsonb(diferenca)
     metadados = _para_jsonb(metadados)
-    sequencia, hash_anterior = await _travar_e_ler_estado_cadeia(sessao, tenant_id=tenant_id)
+    sequencia, hash_anterior = await _travar_e_ler_estado_cadeia(
+        sessao, tenant_id=tenant_id, cache=cache_cadeia
+    )
     hash_registro = calcular_hash(
         hash_anterior=hash_anterior,
         tenant_id=tenant_id,
@@ -260,6 +351,11 @@ async def gravar_auditoria(
     )
     sessao.add(registro)
     await sessao.flush()
+    if cache_cadeia is not None:
+        # So DEPOIS do flush: se o INSERT falhar (violacao de unicidade da
+        # sequencia, por exemplo), o cache nao pode ficar apontando para uma
+        # linha que nao existe.
+        cache_cadeia.registrar(sessao, tenant_id, sequencia, hash_registro)
     return registro
 
 

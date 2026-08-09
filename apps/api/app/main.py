@@ -33,6 +33,7 @@ from app.core.middleware import (
     TenantMiddleware,
 )
 from app.db.sessao import encerrar_engine
+from app.db.sessao_suporte import encerrar_engine_suporte
 from app.identidade.tokens.middleware import AutenticacaoMiddleware
 from app.routers import registrar_routers
 
@@ -89,6 +90,10 @@ async def ciclo_de_vida(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await encerrar_engine()
+        # Pool proprio das duas rotas cross-tenant do suporte (BYPASSRLS):
+        # so existe se alguma delas foi chamada neste processo, e fechar sem
+        # engine criada e no-op.
+        await encerrar_engine_suporte()
         logger.info("api encerrada")
 
 

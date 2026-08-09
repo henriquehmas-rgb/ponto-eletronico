@@ -124,6 +124,12 @@ ADMINISTRAR = "administrar"
 CONFIGURAR = "configurar"
 REABRIR = "reabrir"
 LER_SENSIVEL = "ler_sensivel"
+# --- 0005_role_suporte_bypassrls: acao da UNICA permissao cross-tenant do
+# produto (`tenants.suporte`). Deliberadamente FORA de `_TODAS_AS_ACOES` (mais
+# abaixo): o curinga `"*"` de `admin_empresa`/`super_admin` NAO pode conceder
+# um bypass de isolamento multi-tenant por acidente. A concessao dela e
+# explicita, so para `super_admin`, em `semeia_perfis`.
+SUPORTE = "suporte"
 
 CRUD = (LER, CRIAR, EDITAR, EXCLUIR)
 
@@ -265,7 +271,28 @@ CATALOGO_PERMISSOES: tuple[tuple[str, str, tuple[str, ...], bool, str], ...] = (
     # provedores, RFC-018/ADR-013) nao tinha entrada no catalogo. `admin_empresa`
     # ja cobre por `"*": _TODAS_AS_ACOES` (nenhuma mudanca na matriz abaixo).
     ("identidade", "admin", (CONFIGURAR,), False, "Configuracao administrativa de SSO"),
+    # --- 0005_role_suporte_bypassrls: portao de `GET /v1/tenants` e
+    # `POST /v1/tenants`. A linha do catalogo tambem e inserida pela propria
+    # migration (bancos que nunca rodam este script, como o de teste da F1,
+    # precisam dela) -- aqui existe para o catalogo de desenvolvimento ficar
+    # completo e idempotente. Concedida SO ao `super_admin`, explicitamente
+    # (ver `_PERMISSOES_SO_SUPER_ADMIN` em `semeia_perfis`).
+    (
+        "tenancy",
+        "tenants",
+        (SUPORTE,),
+        True,
+        "Acesso CROSS-tenant do suporte da SEEG (bypass de RLS)",
+    ),
 )
+
+#: Permissoes que NUNCA sao concedidas pelo curinga `"*"` de `MATRIZ_PERFIS`,
+#: so pelos perfis listados aqui. Rede de seguranca: uma permissao que
+#: atravessa a fronteira entre tenants nao pode depender de alguem lembrar de
+#: manter `_TODAS_AS_ACOES` em dia.
+_PERMISSOES_SO_SUPER_ADMIN: dict[str, tuple[str, ...]] = {
+    "tenants.suporte": ("super_admin",),
+}
 
 
 # ===========================================================================
@@ -770,9 +797,18 @@ def semeia_perfis(
 
         regras = MATRIZ_PERFIS.get(codigo, {})
         for codigo_permissao, permissao in permissoes.items():
-            acoes_do_modulo = regras.get("*") or regras.get(modulo_por_codigo[codigo_permissao], ())
-            if permissao.acao not in acoes_do_modulo:
-                continue
+            perfis_permitidos = _PERMISSOES_SO_SUPER_ADMIN.get(codigo_permissao)
+            if perfis_permitidos is not None:
+                # Fora da matriz por acao/modulo: concessao nominal, nunca por
+                # curinga. Ver `_PERMISSOES_SO_SUPER_ADMIN`.
+                if codigo not in perfis_permitidos:
+                    continue
+            else:
+                acoes_do_modulo = regras.get("*") or regras.get(
+                    modulo_por_codigo[codigo_permissao], ()
+                )
+                if permissao.acao not in acoes_do_modulo:
+                    continue
             _, criou_vinculo = _obter_ou_criar(
                 sessao,
                 contrato.PerfilPermissao,

@@ -1,13 +1,14 @@
 """Regras de negocio de `obterTenantAtual`, `obterTenant`, `atualizarTenant`,
 `listarConfiguracoesTenant` e `definirConfiguracaoTenant` (T2).
 
-`listarTenants` e `criarTenant` continuam `501`: as duas sao necessariamente
+`listarTenants` e `criarTenant` NAO moram aqui: as duas sao necessariamente
 CROSS-tenant (listar todos os tenants do SaaS; criar um tenant cuja propria
-linha ainda nao existe) e a role de conexao da aplicacao (`ponto_app`) nao tem
-`BYPASSRLS` -- o acesso cross-tenant do suporte da SEEG e feito por
-`ponto_suporte`, role de banco diferente da usada por
-`app/db/sessao.py:obter_sessao`. Registrado em `docs/backlog.md` (item
-"F1 / A2"): decisao de desenho fora do escopo de T2 do PCF da F1.
+linha ainda nao existe) e por isso vivem em
+`app.identidade.tenancy.servico_suporte`, que recebe a sessao de bypass
+(`app/db/sessao_suporte.py`, role `ponto_app_suporte`) e grava auditoria de
+acesso cross-tenant. Toda funcao DESTE modulo recebe a sessao normal
+(`SessaoDb`, role `ponto_app_runtime`, sem `BYPASSRLS`) e depende da RLS para
+o isolamento -- nenhuma delas deve passar a aceitar a sessao de suporte.
 
 Cada funcao publica devolve o objeto ORM pronto para o `_para_schema` do
 router converter no schema pydantic do contrato -- mesmo padrao de

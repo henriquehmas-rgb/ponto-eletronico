@@ -195,3 +195,163 @@ mantendo o critério 4 como não atendido — não é uma correção completa ne
 finge ser. Direções (b) ficam registradas como candidatos para uma próxima
 rodada dedicada, não implementadas agora pelo mesmo motivo original (decisão
 de investimento de engenharia é do dono do produto).
+
+---
+
+## AtualizaÃ§Ã£o â€” 08/08/2026 (rodada 2): âˆ’33% de consultas, e a descoberta de por que paralelizar nÃ£o funciona
+
+**Metodologia idÃªntica Ã  da rodada 1**, para comparar maÃ§Ã£ com maÃ§Ã£: mesma
+VPS, mesmo Postgres de teste local (sem tÃºnel), mesmo volume (100 vÃ­nculos Ã—
+31 dias = 3.100 apuraÃ§Ãµes), mesmo contador de statements
+(`before_cursor_execute`/`after_cursor_execute`). A Ãºnica melhoria de
+instrumentaÃ§Ã£o: a atribuiÃ§Ã£o por bloco deixou de tentar caminhar a pilha do
+interpretador (sob o driver async o listener roda num greenlet cuja pilha nÃ£o
+alcanÃ§a os frames `async` do chamador â€” por isso a rodada 1 precisou estimar
+percentuais) e passou a embrulhar cada funÃ§Ã£o-alvo, o que dÃ¡ **contagem exata
+por bloco**, nÃ£o estimativa.
+
+### Ponto de partida medido (fim da rodada 1)
+
+**14,36 queries/apuraÃ§Ã£o**, ~40 ms/apuraÃ§Ã£o de parede, 48% do tempo dentro do
+driver. RepartiÃ§Ã£o exata â€” a primeira que este ADR tem:
+
+| bloco | queries/apuraÃ§Ã£o | % do tempo em SQL |
+|---|---|---|
+| `gravar_auditoria` (lock + `MAX` + hash + `INSERT`) | **4,00** | 22,0% |
+| `_upsert_apuracao_dia` (upsert + re-`SELECT` da linha) | 2,00 | 24,8% |
+| `_carregar_marcacoes_e_tratamentos` | 2,00 | 14,7% |
+| `_sincronizar_componentes` (`DELETE` + `INSERT`) | 1,74 | 11,0% |
+| `_sincronizar_ocorrencia` | 1,48 | 11,3% |
+| `verificar_periodo_aberto` | 1,00 | 5,1% |
+| `_estado_anterior` | 1,00 | 4,9% |
+| `_montar_schema_resposta` | 1,00 | 5,4% |
+| `resolver_jornada_do_dia` (jÃ¡ com `CacheResolucao`) | 0,13 | 0,7% |
+
+### O que foi implementado, e quanto cada coisa rendeu (medido isoladamente)
+
+**1. `CacheCadeiaAuditoria` â€” memoizaÃ§Ã£o da cadeia de auditoria: 14,36 â†’
+11,36 queries/apuraÃ§Ã£o (âˆ’20,9%).** `gravar_auditoria` fazia quatro
+round-trips por linha (`pg_advisory_xact_lock`, `MAX(sequencia)`,
+`hash_registro` da Ãºltima linha, `INSERT`). Os trÃªs primeiros nÃ£o trazem
+informaÃ§Ã£o nova depois da primeira chamada **dentro da mesma transaÃ§Ã£o**: o
+advisory lock Ã© escopado Ã  transaÃ§Ã£o (uma vez adquirido continua nosso atÃ© o
+commit) e, enquanto o seguramos, nenhuma outra transaÃ§Ã£o consegue escrever na
+cadeia daquele tenant â€” logo o `MAX(sequencia)` do banco sÃ³ pode ser a linha
+que nÃ³s mesmos acabamos de gravar, e o hash dela foi calculado por nÃ³s, em
+memÃ³ria. O cache guarda esses dois valores e **grava junto a identidade do
+`SessionTransaction` corrente**, conferida a cada uso: commit, rollback,
+`begin_nested` ou rollback de savepoint trocam esse objeto e invalidam o
+cache, caindo no caminho antigo. O pior caso do cache Ã© o comportamento de
+antes, nunca um hash errado. Entra como parÃ¢metro OPCIONAL somente-nomeado
+(`cache_cadeia`) â€” ausente, nada muda para os chamadores existentes.
+**Validado**: `verificar_cadeia` sobre um recÃ¡lculo inteiramente servido pelo
+cache devolve `integra=True`, 620 linhas, zero lacunas, zero divergÃªncia.
+
+**2. OcorrÃªncias num Ãºnico `INSERT`: 11,36 â†’ 10,62 (âˆ’6,5%).** Cada dia Ãºtil
+do dataset abre duas ocorrÃªncias de cÃ³digos distintos, e cada uma custava um
+`INSERT` prÃ³prio. **Primeira tentativa, que NÃƒO funcionou e vale registrar:**
+adiar o `flush` para o fim do laÃ§o, na expectativa de que o SQLAlchemy
+agrupasse os dois `INSERT` num `executemany` â€” nÃ£o agrupou (as duas linhas
+tÃªm conjuntos de parÃ¢metros diferentes, e o `RETURNING` exigido pela PK com
+`server_default` derruba o `insertmanyvalues`); mediÃ§Ã£o idÃªntica, 11,36.
+O que funcionou foi um `INSERT` Core explÃ­cito, multi-linha, com o `id`
+gerado na aplicaÃ§Ã£o (`uuid4`, mesma versÃ£o de UUID que `gen_random_uuid()`
+produziria) para dispensar o `RETURNING`. A deduplicaÃ§Ã£o por cÃ³digo, que
+antes acontecia via um `SELECT` que sempre encontrava a linha recÃ©m-gravada,
+passou a ser feita em memÃ³ria â€” mesmo estado final gravado, sem ida ao banco.
+
+**3. Cache de `verificar_periodo_aberto`: 10,62 â†’ 9,63 (âˆ’9,3%).** NÃ£o estava
+na lista de candidatos da rodada 1, apareceu na repartiÃ§Ã£o exata acima. Ã‰ uma
+LEITURA pura de `fechamentos` â€” funÃ§Ã£o de `(tenant, empresa, unidade,
+departamento, dia)` â€” que o laÃ§o nunca escreve, refeita 3.100 vezes para 31
+respostas distintas. Memoizada localmente dentro de `recalcular_periodo`
+(mesma vida curta do `CacheResolucao`, pelo mesmo motivo: entre uma chamada e
+outra um fechamento pode ter sido criado). Passou a 31 consultas.
+
+### 4. Paralelizar vÃ­nculos independentes: tentado, medido, **1,5Ã— MAIS LENTO**, revertido
+
+A rodada 1 registrou isto como "o caminho mais realista para chegar perto da
+meta". **EstÃ¡ errado, e agora hÃ¡ mediÃ§Ã£o em vez de expectativa.**
+
+Implementado como parÃ¢metros opt-in (`concorrencia` + `fabrica_sessoes`,
+porque uma `AsyncSession` nÃ£o suporta duas consultas em voo), distribuindo os
+vÃ­nculos em lotes via `asyncio.gather`, cada lote na sua prÃ³pria
+sessÃ£o/conexÃ£o. Resultado com 4 lotes, mesmo volume: **98s â†’ 150s de parede**
+(1,5Ã— mais lento), tempo dentro do driver estourando para 338s â€” mais que o
+dobro do tempo de parede, assinatura clÃ¡ssica de espera em lock.
+
+**A causa, medida com contagem por instruÃ§Ã£o SQL**: as **4** execuÃ§Ãµes de
+`SELECT pg_advisory_xact_lock(...)` somaram **166,62 segundos de espera** num
+recÃ¡lculo de 150s. `gravar_auditoria` trava a cadeia **por tenant**, com um
+lock **escopado Ã  transaÃ§Ã£o** â€” que, por definiÃ§Ã£o, nÃ£o pode ser liberado
+antes do commit. A primeira sessÃ£o que grava auditoria segura o lock do
+tenant atÃ© terminar todo o seu lote; as outras trÃªs ficam bloqueadas
+exatamente nesse ponto. O paralelismo nÃ£o Ã© degradado, Ã© **anulado**, e
+sobra sÃ³ o custo: caches de resoluÃ§Ã£o multiplicados por lote (10,67 contra
+9,63 queries/apuraÃ§Ã£o) e contenÃ§Ã£o.
+
+VÃ­nculos sÃ£o de fato independentes entre si â€” mas **a trilha de auditoria do
+tenant Ã© um recurso serializado por desenho**, e Ã© ela, nÃ£o o vÃ­nculo, que
+define o teto de concorrÃªncia. O cÃ³digo foi **revertido** (nenhum parÃ¢metro
+novo na assinatura pÃºblica): nÃ£o faz sentido entregar um botÃ£o opt-in que sÃ³
+piora, com semÃ¢ntica transacional diferente (cada lote commitando sozinho).
+
+**ConsequÃªncia nÃ£o Ã³bvia, para quem for planejar capacidade**: o fan-out que
+`enfileirar_recalculo` jÃ¡ faz hoje â€” **um job ARQ por vÃ­nculo** â€” cai
+exatamente no mesmo muro. Dois jobs do mesmo tenant que gravem auditoria nÃ£o
+rodam em paralelo de verdade, mesmo em processos/workers diferentes: o
+segundo espera o primeiro commitar. Escalar horizontalmente o worker **nÃ£o**
+acelera o recÃ¡lculo de um tenant enquanto a cadeia de auditoria for
+serializada assim.
+
+**PrÃ©-requisito para qualquer paralelismo futuro dar certo** (nÃ£o
+implementado, registrado como direÃ§Ã£o): tirar a gravaÃ§Ã£o da auditoria do
+caminho quente, acumulando as linhas em memÃ³ria e gravando-as num Ãºnico
+`INSERT` multi-linha no **fim** da transaÃ§Ã£o do lote â€” aÃ­ o lock Ã© tomado nos
+Ãºltimos milissegundos em vez do inÃ­cio, e os lotes sÃ³ se serializam nessa
+fase curta. Mexe em mÃ³dulo de F1 (cadeia de integridade) e tem custo de
+memÃ³ria proporcional ao lote (310.000 payloads no volume-alvo), entÃ£o Ã©
+decisÃ£o de investimento, nÃ£o ajuste.
+
+### Resultado consolidado desta rodada
+
+| mÃ©trica (100 Ã— 31 = 3.100 apuraÃ§Ãµes) | inÃ­cio da rodada 2 | fim da rodada 2 | ganho |
+|---|---|---|---|
+| **queries/apuraÃ§Ã£o** (determinÃ­stica) | 14,36 | **9,63** | **âˆ’33%** |
+| parede | ~124s (122,1 / 126,6) | ~97,7s (97,3 / 98,1) | **1,27Ã—** |
+| extrapolaÃ§Ã£o linear 10.000 Ã— 31 | ~207 min | **~163 min** | âˆ’21% |
+
+Acumulado desde o diagnÃ³stico original deste ADR: **25,45 â†’ 9,63
+queries/apuraÃ§Ã£o (âˆ’62%)**.
+
+**O critÃ©rio 4 do PCF da F4 continua NÃƒO ATENDIDO.** A meta Ã© < 5 min para
+10.000 Ã— 31; a projeÃ§Ã£o Ã© ~163 min â€” ainda **~33Ã— acima**. A reduÃ§Ã£o Ã© real e
+medida, mas Ã© reduÃ§Ã£o de dÃ©bito, nÃ£o quitaÃ§Ã£o. E, diferente da rodada 1, esta
+rodada fecha uma porta: o caminho que estava registrado como o mais promissor
+(paralelizar vÃ­nculos) estÃ¡ bloqueado por uma decisÃ£o de arquitetura da
+trilha de auditoria, nÃ£o por falta de afinaÃ§Ã£o.
+
+**Zero regressÃ£o funcional**, verificada por comparaÃ§Ã£o de lista de falhas
+antes/depois na mesma mÃ¡quina e mesmo banco: `tests/f1` + `tests/f4` +
+`tests/f10` produzem **exatamente o mesmo conjunto de 24 falhas/erros** com e
+sem as mudanÃ§as (todas de ambiente â€” MinIO sem credencial e o pacote `worker`
+nÃ£o instalado nesta venv â€”, nenhuma de apuraÃ§Ã£o). Nas suÃ­tes que tocam
+diretamente o caminho alterado (`f10/afastamentos_workflow`, `f4/tratamento`,
+`f4/dominio`, `f1/rbac`, incluindo o teste de concorrÃªncia da cadeia de
+hash): **210 passaram, 1 falhou** â€” o mesmo `ModuleNotFoundError: worker`
+prÃ©-existente. `ruff check` e `ruff format --check` limpos nos trÃªs arquivos
+tocados. `calcular_dia` nÃ£o foi tocada.
+
+### O que sobrou na mesa (ordem decrescente de peso medido, nÃ£o implementado)
+
+Com a repartiÃ§Ã£o exata acima, os alvos restantes ficam explÃ­citos:
+`_upsert_apuracao_dia` (2,00 q/apuraÃ§Ã£o, **25% do tempo em SQL** â€” o
+re-`SELECT` da linha depois do upsert pode sair com um `RETURNING` de todas
+as colunas); `_carregar_marcacoes_e_tratamentos` (2,00 â€” duas leituras por
+dia que poderiam ser uma leitura do intervalo inteiro por vÃ­nculo);
+`_montar_schema_resposta` (1,00 â€” relÃª os componentes que a prÃ³pria chamada
+acabou de escrever); `_estado_anterior` (1,00). Somados, ~6 das 9,63
+consultas restantes. Nenhum deles Ã© um cache de vida curta como os desta
+rodada: todos exigem mudar a FORMA de `apurar_dia` (ler por intervalo em vez
+de por dia), que Ã© a "mudanÃ§a estrutural maior" que a rodada 1 jÃ¡ havia
+apontado como fora de escopo de um parÃ¢metro opcional.

@@ -124,14 +124,23 @@ def test_stub_responde_501_com_codigo_do_catalogo(cliente: TestClient) -> None:
     """O formato do stub de andaime, onde quer que ele ainda exista.
 
     Nao fixa qual operacao e stub -- pergunta ao contrato, em tempo de
-    execucao, e usa a PRIMEIRA que encontrar. Continua encontrando alguma ate
-    a ultima fase implementar a ultima rota (F15); antes disso, falhar aqui
-    por "nenhum stub restante" e uma noticia boa, nao um defeito deste teste.
+    execucao, e usa a PRIMEIRA que encontrar.
+
+    Desde 2026-08-08 nao ha mais NENHUM caminho GET sem parametro respondendo
+    como stub: o ultimo era `GET /v1/tenants` (`listarTenants`), implementado
+    junto com `criarTenant` como o acesso cross-tenant do suporte da SEEG
+    (migration `0005_role_suporte_bypassrls`). A versao anterior deste teste
+    tratava esse dia como falha (`assert stubs`) -- mas a propria docstring ja
+    dizia que "falhar aqui por 'nenhum stub restante' e uma noticia boa, nao um
+    defeito deste teste". Agora ele PULA nesse caso e continua guardando o
+    formato do 501 enquanto sobrar algum stub (por exemplo se uma rota nova do
+    contrato nascer stub antes da fase que a implementa).
     """
     candidatos = _caminhos_get_sem_parametro()
     stubs = [(c, cliente.get(c)) for c in candidatos]
     stubs = [(c, r) for c, r in stubs if _e_stub(r)]
-    assert stubs, "nenhum caminho GET sem parametro ainda responde como stub de andaime"
+    if not stubs:
+        pytest.skip("nenhum caminho GET sem parametro ainda responde como stub de andaime")
 
     caminho, resposta = stubs[0]
     assert resposta.headers["content-type"].startswith(MEDIA_TYPE)

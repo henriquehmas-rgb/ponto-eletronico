@@ -5,6 +5,7 @@ NSR.
 from __future__ import annotations
 
 import datetime as dt
+from types import SimpleNamespace
 
 import pytest
 import sqlalchemy as sa
@@ -189,6 +190,144 @@ async def test_segunda_chamada_encadeia_a_partir_do_hash_real_anterior(
         hash_anterior=None,
     ).hash_registro
     assert registros_segundo_lote[0].hash_registro != hash_se_reiniciasse
+
+
+@pytest.mark.asyncio
+async def test_nsr_intercalado_fora_do_afd_continua_sendo_o_elo_da_cadeia(
+    sessao_f12: AsyncSession, contexto_f12: ContextoF12
+) -> None:
+    """Resíduo do ADR-012 fechado: a cadeia do campo nº 8 é a do REP-P, não
+    a do arquivo. Um AFD filtrado por DATA pode pular um NSR intercalado
+    (marcação offline cuja `datahora_marcacao` cai fora da janela pedida —
+    o NSR não é cronológico, ADR-003). O registro seguinte a esse buraco
+    tem de encadear a partir do NSR REALMENTE anterior no REP-P (o
+    intercalado), nunca a partir do anterior *do arquivo*.
+
+    Antes da correção, `montar_registros_tipo7` encadeava `marcacoes[i]` a
+    `marcacoes[i-1]` DA LISTA — o hash do NSR 3 dependia do período pedido,
+    e a cadeia deixava de ser reproduzível."""
+    marcacoes = await gerar_marcacoes_reais(sessao_f12, contexto_f12, quantidade=3)
+    assert [m.nsr for m in marcacoes] == [1, 2, 3]
+
+    # O AFD pedido contém NSR 1 e 3; o NSR 2 é o intercalado excluído pelo
+    # filtro de período.
+    registros = await montar_registros_tipo7(
+        sessao_f12,
+        tenant_id=contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        marcacoes=[marcacoes[0], marcacoes[2]],
+    )
+    assert [r.nsr for r in registros] == [1, 3]
+
+    # Cadeia esperada: 1 -> 2 -> 3, com o NSR 2 calculado mas nao impresso.
+    hash_1 = montar_registro_tipo7(
+        nsr=marcacoes[0].nsr,
+        cpf=marcacoes[0].cpf,
+        datahora_marcacao=marcacoes[0].datahora_marcacao,
+        datahora_gravacao=marcacoes[0].datahora_gravacao,
+        canal=marcacoes[0].canal,
+        coletada_offline=marcacoes[0].coletada_offline,
+        hash_anterior=None,
+    ).hash_registro
+    hash_2 = montar_registro_tipo7(
+        nsr=marcacoes[1].nsr,
+        cpf=marcacoes[1].cpf,
+        datahora_marcacao=marcacoes[1].datahora_marcacao,
+        datahora_gravacao=marcacoes[1].datahora_gravacao,
+        canal=marcacoes[1].canal,
+        coletada_offline=marcacoes[1].coletada_offline,
+        hash_anterior=hash_1,
+    ).hash_registro
+    hash_3_correto = montar_registro_tipo7(
+        nsr=marcacoes[2].nsr,
+        cpf=marcacoes[2].cpf,
+        datahora_marcacao=marcacoes[2].datahora_marcacao,
+        datahora_gravacao=marcacoes[2].datahora_gravacao,
+        canal=marcacoes[2].canal,
+        coletada_offline=marcacoes[2].coletada_offline,
+        hash_anterior=hash_2,
+    ).hash_registro
+
+    assert registros[0].hash_registro == hash_1
+    assert registros[1].hash_registro == hash_3_correto
+
+    # E o comportamento ANTIGO (encadear 3 direto no 1, pulando o elo real)
+    # produz um hash diferente -- e o teste falharia se a regressao voltasse.
+    hash_3_se_encadeasse_no_arquivo = montar_registro_tipo7(
+        nsr=marcacoes[2].nsr,
+        cpf=marcacoes[2].cpf,
+        datahora_marcacao=marcacoes[2].datahora_marcacao,
+        datahora_gravacao=marcacoes[2].datahora_gravacao,
+        canal=marcacoes[2].canal,
+        coletada_offline=marcacoes[2].coletada_offline,
+        hash_anterior=hash_1,
+    ).hash_registro
+    assert hash_3_correto != hash_3_se_encadeasse_no_arquivo
+    assert registros[1].hash_registro != hash_3_se_encadeasse_no_arquivo
+
+
+@pytest.mark.asyncio
+async def test_hash_do_mesmo_nsr_nao_depende_do_recorte_do_afd(
+    sessao_f12: AsyncSession, contexto_f12: ContextoF12
+) -> None:
+    """A propriedade que justifica a cadeia existir: o campo nº 8 de um NSR
+    é o MESMO em qualquer AFD que o contenha. Três recortes diferentes do
+    mesmo REP-P (tudo, só o intercalado de fora, e só o fim) têm de produzir
+    hashes idênticos para os NSRs em comum."""
+    marcacoes = await gerar_marcacoes_reais(sessao_f12, contexto_f12, quantidade=5)
+
+    completo = await montar_registros_tipo7(
+        sessao_f12,
+        tenant_id=contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        marcacoes=marcacoes,
+    )
+    sem_intercalados = await montar_registros_tipo7(
+        sessao_f12,
+        tenant_id=contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        marcacoes=[marcacoes[0], marcacoes[2], marcacoes[4]],
+    )
+    so_o_fim = await montar_registros_tipo7(
+        sessao_f12,
+        tenant_id=contexto_f12.tenant_id,
+        rep_p_id=contexto_f12.rep_p_id,
+        marcacoes=[marcacoes[4]],
+    )
+
+    por_nsr = {r.nsr: r.hash_registro for r in completo}
+    for registro in [*sem_intercalados, *so_o_fim]:
+        assert registro.hash_registro == por_nsr[registro.nsr]
+    # E a linha inteira (não só o hash) é idêntica entre os recortes.
+    linhas_completo = {r.nsr: r.linha for r in completo}
+    for registro in [*sem_intercalados, *so_o_fim]:
+        assert registro.linha == linhas_completo[registro.nsr]
+
+
+@pytest.mark.asyncio
+async def test_marcacao_fora_da_cadeia_do_rep_p_levanta_erro_explicito(
+    sessao_f12: AsyncSession, contexto_f12: ContextoF12
+) -> None:
+    """Se o chamador passar uma marcação que a cadeia tipo "7" do REP-P não
+    contém, a função recusa em vez de devolver menos linhas do que foi
+    pedido (o que geraria um AFD silenciosamente incompleto)."""
+    marcacoes = await gerar_marcacoes_reais(sessao_f12, contexto_f12, quantidade=2)
+    inexistente = SimpleNamespace(
+        nsr=999,
+        cpf=marcacoes[0].cpf,
+        datahora_marcacao=marcacoes[0].datahora_marcacao,
+        datahora_gravacao=marcacoes[0].datahora_gravacao,
+        canal=marcacoes[0].canal,
+        coletada_offline=False,
+    )
+
+    with pytest.raises(ValueError, match="999"):
+        await montar_registros_tipo7(
+            sessao_f12,
+            tenant_id=contexto_f12.tenant_id,
+            rep_p_id=contexto_f12.rep_p_id,
+            marcacoes=[marcacoes[0], inexistente],  # type: ignore[list-item]
+        )
 
 
 @pytest.mark.asyncio

@@ -8,8 +8,9 @@ servico ficar `healthy` (do que depende o `depends_on` da `api`):
 * `/health` responde 200 **sem** conferir os pesos do modelo — se conferisse,
   um volume vazio prenderia a stack inteira no `depends_on`;
 * `/ready` reprova com `PONTO-INT-003` quando nao ha peso `.onnx`;
-* as tres operacoes biometricas respondem 501 `PONTO-INT-005` em
-  `application/problem+json`;
+* as tres operacoes biometricas recusam corpo invalido em
+  `application/problem+json` (eram 501 `PONTO-INT-005` antes de o motor existir;
+  o pipeline de verdade e exercitado em `test_motor_facial.py`);
 * o recorte de `errors.yaml` copiado em `facial/erros.py` continua identico ao
   catalogo congelado;
 * **o limiar de similaridade nao vaza em nenhuma resposta** (ADR-006 e
@@ -76,15 +77,24 @@ def test_ready_reprova_quando_nao_ha_peso_onnx(cliente: TestClient) -> None:
 # Stubs biometricos
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("caminho", STUBS)
-def test_stub_responde_501_com_codigo_do_catalogo(cliente: TestClient, caminho: str) -> None:
-    """As tres operacoes existem, respondem 501 e usam problem+json."""
+def test_corpo_vazio_responde_400_com_codigo_do_catalogo(cliente: TestClient, caminho: str) -> None:
+    """As tres operacoes existem e recusam corpo vazio em problem+json.
+
+    Ate o motor existir, estas tres respondiam `501 PONTO-INT-005` a qualquer
+    corpo. Agora que ha contrato Pydantic de verdade (`facial/esquemas.py`), o
+    corpo vazio nao chega ao motor: vira `400 PONTO-VAL-001` com `errosCampo`,
+    pelo tratador de `RequestValidationError` de `facial/erros.py`. O que o teste
+    guarda continua sendo o mesmo: **nenhum caminho de falha devolve
+    `application/json` cru nem stack trace** num servico que recebe rosto.
+    """
     resposta = cliente.post(caminho, json={})
-    assert resposta.status_code == 501, caminho
+    assert resposta.status_code == 400, caminho
     assert resposta.headers["content-type"].startswith(MEDIA_TYPE_PROBLEMA), caminho
     corpo = resposta.json()
-    assert corpo["codigo"] == "PONTO-INT-005"
-    assert corpo["status"] == 501
+    assert corpo["codigo"] == "PONTO-VAL-001"
+    assert corpo["status"] == 400
     assert corpo["instance"] == caminho
+    assert corpo["errosCampo"], "o problema deve apontar quais campos faltaram"
 
 
 def test_inventario_de_operacoes_esta_completo() -> None:

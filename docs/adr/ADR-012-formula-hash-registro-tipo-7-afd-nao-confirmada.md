@@ -129,3 +129,69 @@ publicado/auditado. (c) Buscar ativamente uma referência (AFD de outro sistema
 homologado, ou abertura de chamado formal com a SIT/MTE) deveria ser tratado
 como prioridade de negócio, não só técnica — o dono do produto decide o canal e
 o prazo dessa busca, fora do escopo desta sessão de desenvolvimento.
+
+---
+
+## Adendo — 08/08/2026: resíduo de implementação fechado (a lacuna normativa, não)
+
+Ao revisar a implementação de `app/fiscal/afd/tipo7.py` contra a decisão 1
+acima, apareceu um **resíduo de implementação** — distinto da lacuna
+normativa que originou este ADR, e corrigido agora:
+
+**O que estava errado.** A decisão 1 fixa que a cadeia do campo nº 8 é a
+cadeia da **sequência do REP-P** (por isso só o NSR 1 omite o 8º insumo).
+`montar_registros_tipo7` aplicava essa semântica apenas ao **primeiro**
+registro de cada geração (via a antiga `_hash_anterior_semente`, que
+recompunha o elo anterior real) e, do segundo em diante, encadeava ao
+registro anterior **da lista impressa naquele arquivo**. Duas semânticas
+dentro do mesmo AFD.
+
+**Por que isso não fechava.** O NSR não é cronológico (ADR-003): uma marcação
+coletada *offline* recebe NSR na gravação, mas entra no AFD pela
+`datahora_marcacao`, que pode cair fora do período pedido. Um AFD filtrado
+por data pode, portanto, pular NSRs intercalados legitimamente — situação que
+a própria docstring de `montar_registros_tipo7` já reconhecia ao escopar a
+verificação de lacuna ao REP-P inteiro. Quando isso acontecia, o registro
+seguinte ao NSR pulado era encadeado ao elo errado, e **o mesmo NSR recebia
+hashes diferentes conforme o recorte de período escolhido na geração** — a
+cadeia deixava de ser reproduzível e auditável, que é a única propriedade que
+ela existe para oferecer.
+
+**Correção.** `montar_registros_tipo7` passou a percorrer a cadeia inteira do
+REP-P (NSR 1 até o maior NSR pedido, via `_marcacoes_da_cadeia_ate`),
+calculando todos os elos e imprimindo apenas os registros pedidos. De quebra,
+sumiu o *fallback* silencioso `CODIGO_COLETOR_POR_CANAL.get(canal, "05")` que
+a antiga semente usava (e que produziria um elo diferente do que o mesmo
+registro produziria quando impresso); todos os elos agora passam pela mesma
+`montar_registro_tipo7`, estrita. Marcação pedida que não pertença à cadeia
+tipo "7" do REP-P levanta erro explícito em vez de sumir do arquivo.
+
+**Cobertura de teste** (`tests/f12/afd/`): `test_tipo7.py::
+test_nsr_intercalado_fora_do_afd_continua_sendo_o_elo_da_cadeia`,
+`::test_hash_do_mesmo_nsr_nao_depende_do_recorte_do_afd`,
+`::test_marcacao_fora_da_cadeia_do_rep_p_levanta_erro_explicito` e
+`test_gerador.py::test_marcacao_offline_de_outro_dia_nao_quebra_a_cadeia_do_afd`
+(este último pelo caminho real do filtro de período, comparando byte a byte
+as linhas tipo "7" comuns a dois recortes). Os quatro falham na
+implementação anterior e passam na corrigida.
+
+**O que este adendo NÃO fecha.** A lacuna que dá nome a este ADR — o formato
+exato de concatenação (padding, separador, codificação) e o valor do 8º
+insumo ausente — **continua NÃO CONFIRMADA** e continua dependendo de uma
+referência externa (AFD de fabricante homologado ou resposta formal da
+SIT/MTE). O critério de aceite "comparação byte a byte contra AFD de sistema
+já aceito" segue **não verificável para o registro tipo "7"**, e a
+consequência (a) acima (não usar este AFD para homologação/fiscalização real)
+segue valendo. **Este ADR permanece aberto.** O que mudou é que a cadeia
+agora é internamente consistente e reproduzível: quando a fórmula for
+confirmada, muda-se `app/fiscal/afd/hash_tipo7.py` e a cadeia inteira é
+recalculada de forma determinística.
+
+**Achado de desempenho registrado, não resolvido aqui.** Como o hash do
+ADR-012 nunca é persistido, cada geração recalcula a cadeia desde o NSR 1 —
+O(histórico do REP-P) por AFD. É SHA-256 puro, aceitável numa tarefa de
+fila, mas cresce com a vida do REP-P. Persistir esse hash numa coluna própria
+resolveria, e exigiria migration de schema — **não feita**: seria trocar um
+custo de CPU aceitável por um dado persistido calculado com uma fórmula que
+este mesmo ADR declara não confirmada (e que, quando corrigida, invalidaria a
+coluna inteira). Reavaliar só depois que a fórmula estiver confirmada.

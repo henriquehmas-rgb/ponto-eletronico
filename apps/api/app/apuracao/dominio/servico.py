@@ -64,7 +64,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
@@ -653,7 +653,8 @@ async def _sincronizar_ocorrencia(
     descricao: str,
     detalhes: dict[str, Any] | None = None,
     apuracao_recem_criada: bool = False,
-) -> None:
+    adiar_flush: bool = False,
+) -> Ocorrencia | None:
     """Abre uma ocorrencia nova se nao houver uma ja ABERTA/EM_TRATAMENTO
     igual (mesmo `apuracao_dia_id` + `codigo`) -- ocorrencia nunca e
     corrigida sozinha (nem por este modulo), so o humano resolve; por isso
@@ -662,7 +663,15 @@ async def _sincronizar_ocorrencia(
     `apuracao_recem_criada=True` (ADR-010) pula a consulta de existencia: a
     linha de `apuracoes_dia` acabou de ser INSERIDA com um `id` novo, entao
     nenhuma ocorrencia pode referencia-la ainda. E' um atalho de execucao,
-    nao uma regra diferente -- o resultado gravado e identico."""
+    nao uma regra diferente -- o resultado gravado e identico.
+
+    `adiar_flush=True` (ADR-010, rodada 2) devolve a linha adicionada a
+    sessao SEM `flush` e SEM publicar o evento: quem chama junta as
+    ocorrencias do mesmo dia, faz UM unico `flush` (o SQLAlchemy emite um
+    `executemany` em vez de um `INSERT` por ocorrencia) e so entao publica os
+    eventos, preservando a ordem "gravou, depois anunciou". Devolve `None`
+    quando nao havia nada a inserir (ja existia uma ocorrencia aberta igual).
+    """
     if not apuracao_recem_criada:
         existente = (
             await sessao.execute(
@@ -675,7 +684,7 @@ async def _sincronizar_ocorrencia(
             )
         ).scalar_one_or_none()
         if existente is not None:
-            return
+            return None
 
     nova = Ocorrencia(
         tenant_id=tenant_id,
@@ -690,19 +699,111 @@ async def _sincronizar_ocorrencia(
         status="aberta",
     )
     sessao.add(nova)
+    if adiar_flush:
+        return nova
     await sessao.flush()
+    _publicar_ocorrencia(nova, tenant_id=tenant_id, vinculo=vinculo)
+    return nova
 
+
+def _publicar_ocorrencia(ocorrencia: Ocorrencia, *, tenant_id: UUID, vinculo: Vinculo) -> None:
+    """Publica `ocorrencia.aberta` a partir da linha ja gravada -- mesmo
+    payload de antes, extraido para poder ser chamado depois de um `flush`
+    unico de varias ocorrencias (ver `adiar_flush`)."""
     eventos.publicar_ocorrencia_aberta(
         tenant_id=tenant_id,
-        ocorrencia_id=nova.id,
+        ocorrencia_id=ocorrencia.id,
         colaborador_id=vinculo.colaborador_id,
-        data=data,
-        codigo=codigo,
-        severidade=severidade,
+        data=ocorrencia.data,
+        codigo=ocorrencia.codigo,
+        severidade=ocorrencia.severidade,
         vinculo_id=vinculo.id,
-        apuracao_dia_id=apuracao_dia_id,
-        descricao=descricao,
+        apuracao_dia_id=ocorrencia.apuracao_dia_id,
+        descricao=ocorrencia.descricao,
     )
+
+
+async def _abrir_ocorrencias_do_dia(
+    sessao: AsyncSession,
+    *,
+    tenant_id: UUID,
+    vinculo: Vinculo,
+    apuracao_dia_id: UUID,
+    data: dt.date,
+    ocorrencias: Sequence[Any],
+    apuracao_recem_criada: bool,
+) -> None:
+    """Abre, em UM unico `INSERT`, todas as ocorrencias novas de um dia
+    (ADR-010, rodada 2).
+
+    Mesma regra de antes, mesmo resultado gravado -- muda so o numero de
+    round-trips. Tres pontos que valem registro:
+
+    * **Deduplicacao por codigo em memoria.** Se `calcular_dia` devolver duas
+      ocorrencias com o MESMO codigo no mesmo dia, a segunda sempre foi um
+      no-op (o `SELECT` de existencia encontrava a que a iteracao anterior
+      acabara de gravar). Deduplicar em Python chega ao mesmo estado final
+      sem depender da ordem de `flush`.
+    * **`id` gerado na aplicacao.** `ocorrencias.id` tem `server_default`
+      (`gen_random_uuid()`), mas um `INSERT` multi-linha com `RETURNING` e'
+      justamente o caso em que o SQLAlchemy volta a emitir uma instrucao por
+      linha -- o que anularia o ganho. Gerar o `uuid4` aqui e' equivalente
+      (mesma versao de UUID, mesma unicidade) e mantem UMA instrucao.
+    * **ORM Core, nao `sessao.add`.** As linhas nao entram na identity map;
+      ninguem neste modulo le a ocorrencia depois de grava-la (so publica o
+      evento, com os dados que ja tem em maos).
+    """
+    novas: list[dict[str, Any]] = []
+    codigos_vistos: set[str] = set()
+    for detectada in ocorrencias:
+        if detectada.codigo in codigos_vistos:
+            continue
+        codigos_vistos.add(detectada.codigo)
+        if not apuracao_recem_criada:
+            existente = (
+                await sessao.execute(
+                    sa.select(Ocorrencia.id).where(
+                        Ocorrencia.tenant_id == tenant_id,
+                        Ocorrencia.apuracao_dia_id == apuracao_dia_id,
+                        Ocorrencia.codigo == detectada.codigo,
+                        Ocorrencia.status.in_(("aberta", "em_tratamento")),
+                    )
+                )
+            ).scalar_one_or_none()
+            if existente is not None:
+                continue
+        novas.append(
+            {
+                "id": uuid4(),
+                "tenant_id": tenant_id,
+                "colaborador_id": vinculo.colaborador_id,
+                "vinculo_id": vinculo.id,
+                "apuracao_dia_id": apuracao_dia_id,
+                "data": data,
+                "codigo": detectada.codigo,
+                "severidade": detectada.severidade,
+                "descricao": detectada.descricao,
+                "detalhes": detectada.detalhes,
+                "status": "aberta",
+            }
+        )
+
+    if not novas:
+        return
+
+    await sessao.execute(sa.insert(Ocorrencia), novas)
+    for linha in novas:
+        eventos.publicar_ocorrencia_aberta(
+            tenant_id=tenant_id,
+            ocorrencia_id=linha["id"],
+            colaborador_id=vinculo.colaborador_id,
+            data=data,
+            codigo=linha["codigo"],
+            severidade=linha["severidade"],
+            vinculo_id=vinculo.id,
+            apuracao_dia_id=apuracao_dia_id,
+            descricao=linha["descricao"],
+        )
 
 
 async def _promover_tratamentos_aplicados(
@@ -840,27 +941,15 @@ async def apurar_dia(
 
     if mudou:
         await _sincronizar_componentes(sessao, linha.id, tenant_id, resultado)
-        codigos_ja_abertos: set[str] = set()
-        for ocorrencia_detectada in resultado.ocorrencias:
-            await _sincronizar_ocorrencia(
-                sessao,
-                tenant_id=tenant_id,
-                vinculo=vinculo,
-                apuracao_dia_id=linha.id,
-                data=data,
-                codigo=ocorrencia_detectada.codigo,
-                severidade=ocorrencia_detectada.severidade,
-                descricao=ocorrencia_detectada.descricao,
-                detalhes=ocorrencia_detectada.detalhes,
-                # So pula a consulta de existencia para o PRIMEIRO codigo de
-                # cada tipo: se `calcular_dia` devolver duas ocorrencias com
-                # o MESMO codigo, a segunda tem de enxergar a que esta funcao
-                # acabou de abrir nesta mesma transacao.
-                apuracao_recem_criada=(
-                    linha_nova and ocorrencia_detectada.codigo not in codigos_ja_abertos
-                ),
-            )
-            codigos_ja_abertos.add(ocorrencia_detectada.codigo)
+        await _abrir_ocorrencias_do_dia(
+            sessao,
+            tenant_id=tenant_id,
+            vinculo=vinculo,
+            apuracao_dia_id=linha.id,
+            data=data,
+            ocorrencias=resultado.ocorrencias,
+            apuracao_recem_criada=linha_nova,
+        )
         await _promover_tratamentos_aplicados(sessao, insumos.tratamentos_consumidos)
 
     return await _montar_schema_resposta(sessao, linha)

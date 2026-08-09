@@ -58,6 +58,19 @@ class Configuracao(BaseSettings):
     database_echo: bool = False
     database_timeout_saude_s: float = 3.0
 
+    # --- Banco -- sessao de SUPORTE da SEEG (bypass de RLS) ------------------
+    #: Credencial da role `ponto_app_suporte` (LOGIN + BYPASSRLS, criada por
+    #: `migrations/versions/0005_role_suporte_bypassrls.py`). Usada SOMENTE por
+    #: `app/db/sessao_suporte.py`, que serve exclusivamente `listarTenants` e
+    #: `criarTenant` -- nunca pelo `SessaoDb` do resto do sistema.
+    #:
+    #: `database_url_suporte` vazia (o normal) faz a URL ser derivada de
+    #: `database_url` trocando so usuario e senha: em producao basta definir
+    #: `POSTGRES_SUPORTE_PASSWORD`, a mesma variavel que a migration le para
+    #: criar a role.
+    database_url_suporte: str = ""
+    postgres_suporte_password: SecretStr = SecretStr("")
+
     # --- Fila e cache ---------------------------------------------------------
     redis_url: str = "redis://localhost:6379/0"
     redis_timeout_saude_s: float = 3.0

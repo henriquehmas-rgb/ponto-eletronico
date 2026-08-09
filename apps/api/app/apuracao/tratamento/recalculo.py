@@ -64,7 +64,7 @@ from app.apuracao.tratamento import eventos
 from app.apuracao.tratamento.fechamento import verificar_periodo_aberto
 from app.core.erros import ErroDeAplicacao
 from app.core.filas import FILA_PADRAO
-from app.identidade.auditoria.hash_chain import gravar_auditoria
+from app.identidade.auditoria.hash_chain import CacheCadeiaAuditoria, gravar_auditoria
 
 if TYPE_CHECKING:
     from app.schemas import contrato as esquemas
@@ -203,6 +203,19 @@ async def recalcular_periodo(
     para cada vínculo do escopo resolvido, pulando dias em período fechado
     (contados, nunca abortam o restante) e publicando `apuracao.recalculada`
     uma vez por vínculo quando ao menos um dia mudou de fato.
+
+    **Por que continua estritamente sequencial** (ADR-010, rodada 2 -- foi
+    tentado, medido e revertido, não esquecido): distribuir os vínculos em
+    sessões paralelas com `asyncio.gather` deixou o recálculo **1,5× MAIS
+    LENTO** (98s → 150s para 100 vínculos × 31 dias). A causa não é
+    afinável: `gravar_auditoria` toma um `pg_advisory_xact_lock` **por
+    tenant**, escopado à transação -- ou seja, impossível de liberar antes do
+    commit. A primeira sessão que grava auditoria segura o lock do tenant até
+    terminar tudo; as outras ficam bloqueadas exatamente nesse ponto. Medido:
+    4 execuções de `pg_advisory_xact_lock` somaram **166,6s de espera** num
+    recálculo de 150s de parede. Vínculos são independentes entre si, mas a
+    trilha de auditoria do tenant é um recurso serializado por desenho -- e é
+    ela, não o vínculo, que define o teto de concorrência.
     """
     if fim < inicio:
         raise ErroDeAplicacao(
@@ -229,15 +242,148 @@ async def recalcular_periodo(
     from app.apuracao.dominio.servico import apurar_dia
     from app.jornada.resolvedor.servico import CacheResolucao
 
-    # ADR-010: cache de vida curta das leituras que NAO mudam de um dia para
-    # o seguinte do mesmo vinculo (escala/jornada vigente, `jornada_dias`,
-    # horario, fuso da unidade, afastamentos do colaborador, conjunto de
-    # feriados da unidade). Criado UMA vez por chamada e descartado com ela
-    # -- nunca guardado entre chamadas/transacoes, porque nao enxerga escrita
-    # concorrente. Entidades compartilhadas (jornada, horario, feriados)
-    # tambem sao reaproveitadas ENTRE vinculos do mesmo escopo, por isso o
-    # cache e' desta funcao e nao do laco interno de dias.
-    cache_resolucao = CacheResolucao()
+    dias = [inicio + dt.timedelta(days=n) for n in range((fim - inicio).days + 1)]
+
+    async def processar_lote(
+        sessao_lote: AsyncSession, lote: Sequence[Vinculo], resultado: ResultadoRecalculo
+    ) -> None:
+        """O laço `vínculo × dia` propriamente dito. Função aninhada só para
+        dar aos três caches abaixo um escopo explícito: cada um guarda linhas
+        ORM ligadas a UMA sessão e a UMA transação, e nenhum deles pode
+        sobreviver à chamada de `recalcular_periodo` que os criou."""
+        # ADR-010: cache de vida curta das leituras que NAO mudam de um dia para
+        # o seguinte do mesmo vinculo (escala/jornada vigente, `jornada_dias`,
+        # horario, fuso da unidade, afastamentos do colaborador, conjunto de
+        # feriados da unidade). Criado UMA vez por chamada e descartado com ela
+        # -- nunca guardado entre chamadas/transacoes, porque nao enxerga escrita
+        # concorrente. Entidades compartilhadas (jornada, horario, feriados)
+        # tambem sao reaproveitadas ENTRE vinculos do mesmo escopo, por isso o
+        # cache e' desta funcao e nao do laco interno de dias.
+        cache_resolucao = CacheResolucao()
+
+        # ADR-010 (rodada 2): memoiza `(sequencia, hash)` da ultima linha da
+        # trilha de auditoria deste tenant DENTRO desta transacao. Enquanto o
+        # `pg_advisory_xact_lock` desta transacao esta em pe -- e ele fica em pe
+        # da primeira gravacao ate o commit -- ninguem mais pode escrever na
+        # cadeia deste tenant, entao reler `MAX(sequencia)`/hash a cada dia
+        # alterado so paga round-trip para receber de volta o que acabamos de
+        # escrever. Ver `CacheCadeiaAuditoria` para o argumento completo.
+        cache_auditoria = CacheCadeiaAuditoria()
+
+        # ADR-010 (rodada 2): `verificar_periodo_aberto` e' funcao pura de
+        # `(tenant, empresa, unidade, departamento, dia)` -- e' uma LEITURA de
+        # `fechamentos`, que este laco nunca escreve. Com 100 vinculos da mesma
+        # unidade x 31 dias, a consulta era refeita 3.100 vezes para 31 respostas
+        # distintas. O cache e' local a esta chamada (nunca sobrevive a ela), pela
+        # mesma razao do `CacheResolucao`: entre uma chamada e outra um fechamento
+        # pode ter sido criado, e a resposta tem de voltar a ser lida do banco.
+        cache_periodo: dict[tuple[UUID | None, UUID | None, UUID | None, dt.date], bool] = {}
+
+        async def periodo_aberto(vinc: Vinculo, dia: dt.date) -> bool:
+            chave = (vinc.empresa_id, vinc.unidade_id, vinc.departamento_id, dia)
+            memorizado = cache_periodo.get(chave)
+            if memorizado is not None:
+                return memorizado
+            try:
+                await verificar_periodo_aberto(
+                    sessao_lote,
+                    tenant_id,
+                    empresa_id=vinc.empresa_id,
+                    data=dia,
+                    unidade_id=vinc.unidade_id,
+                    departamento_id=vinc.departamento_id,
+                )
+            except ErroDeAplicacao as exc:
+                if exc.codigo != CODIGO_PERIODO_FECHADO:
+                    raise
+                cache_periodo[chave] = False
+                return False
+            cache_periodo[chave] = True
+            return True
+
+        # `_resolver_vinculos` ja aplicou `excluido_em IS NULL`, o mesmo filtro de
+        # `app.jornada.modelagem.vinculo_jornadas.obter_vinculo` -- semear o cache
+        # com estas linhas evita reler `vinculos` uma vez por vinculo la dentro.
+        for vinc in lote:
+            cache_resolucao.vinculos[vinc.id] = vinc
+
+        for vinc in lote:
+            resultado.vinculos_processados += 1
+            dias_alterados_vinculo = 0
+            saldo_antes_total = 0
+            saldo_depois_total = 0
+
+            for dia in dias:
+                if not await periodo_aberto(vinc, dia):
+                    resultado.dias_ignorados_fechados += 1
+                    resultado.dias_ignorados_detalhe.append(
+                        DetalheDiaIgnorado(vinculo_id=vinc.id, data=dia)
+                    )
+                    continue
+
+                (
+                    _antes_linha,
+                    hash_antes,
+                    versao_antes,
+                    saldo_antes,
+                    componentes_antes,
+                ) = await _estado_anterior(sessao_lote, tenant_id, vinc.id, dia)
+
+                apuracao = await apurar_dia(
+                    sessao_lote, tenant_id, vinc.id, dia, cache_resolucao=cache_resolucao
+                )
+                await sessao_lote.flush()
+
+                resultado.dias_processados += 1
+                saldo_antes_total += saldo_antes
+                saldo_depois_total += apuracao.saldo_minutos or 0
+
+                mudou = apuracao.hash_entrada != hash_antes
+                if not mudou:
+                    continue
+
+                dias_alterados_vinculo += 1
+                resultado.dias_alterados += 1
+                componentes_depois = [
+                    _serializar_componente(c) for c in (apuracao.componentes or [])
+                ]
+                await gravar_auditoria(
+                    sessao_lote,
+                    tenant_id=tenant_id,
+                    evento="apuracao.recalculada",
+                    entidade="apuracoes_dia",
+                    acao="recalcular",
+                    entidade_id=apuracao.id,
+                    valor_anterior=(
+                        {
+                            "versao": versao_antes,
+                            "hashEntrada": hash_antes,
+                            "componentes": componentes_antes,
+                        }
+                        if _antes_linha is not None
+                        else None
+                    ),
+                    valor_novo={
+                        "versao": apuracao.versao,
+                        "hashEntrada": apuracao.hash_entrada,
+                        "componentes": componentes_depois,
+                    },
+                    metadados={"motivo": motivo, "forcar": forcar, "data": dia.isoformat()},
+                    cache_cadeia=cache_auditoria,
+                )
+
+            if dias_alterados_vinculo > 0:
+                eventos.publicar_apuracao_recalculada(
+                    tenant_id=tenant_id,
+                    vinculo_id=vinc.id,
+                    colaborador_id=vinc.colaborador_id,
+                    data_inicio=inicio,
+                    data_fim=fim,
+                    dias_alterados=dias_alterados_vinculo,
+                    motivo=motivo,
+                    saldo_anterior_minutos=saldo_antes_total,
+                    saldo_novo_minutos=saldo_depois_total,
+                )
 
     vinculos = await _resolver_vinculos(
         sessao,
@@ -248,102 +394,8 @@ async def recalcular_periodo(
         departamento_id=departamento_id,
         colaborador_ids=colaborador_ids,
     )
-
     resultado = ResultadoRecalculo()
-    dias = [inicio + dt.timedelta(days=n) for n in range((fim - inicio).days + 1)]
-
-    # `_resolver_vinculos` ja aplicou `excluido_em IS NULL`, o mesmo filtro de
-    # `app.jornada.modelagem.vinculo_jornadas.obter_vinculo` -- semear o cache
-    # com estas linhas evita reler `vinculos` uma vez por vinculo la dentro.
-    for vinc in vinculos:
-        cache_resolucao.vinculos[vinc.id] = vinc
-
-    for vinc in vinculos:
-        resultado.vinculos_processados += 1
-        dias_alterados_vinculo = 0
-        saldo_antes_total = 0
-        saldo_depois_total = 0
-
-        for dia in dias:
-            try:
-                await verificar_periodo_aberto(
-                    sessao,
-                    tenant_id,
-                    empresa_id=vinc.empresa_id,
-                    data=dia,
-                    unidade_id=vinc.unidade_id,
-                    departamento_id=vinc.departamento_id,
-                )
-            except ErroDeAplicacao as exc:
-                if exc.codigo != CODIGO_PERIODO_FECHADO:
-                    raise
-                resultado.dias_ignorados_fechados += 1
-                resultado.dias_ignorados_detalhe.append(
-                    DetalheDiaIgnorado(vinculo_id=vinc.id, data=dia)
-                )
-                continue
-
-            (
-                _antes_linha,
-                hash_antes,
-                versao_antes,
-                saldo_antes,
-                componentes_antes,
-            ) = await _estado_anterior(sessao, tenant_id, vinc.id, dia)
-
-            apuracao = await apurar_dia(
-                sessao, tenant_id, vinc.id, dia, cache_resolucao=cache_resolucao
-            )
-            await sessao.flush()
-
-            resultado.dias_processados += 1
-            saldo_antes_total += saldo_antes
-            saldo_depois_total += apuracao.saldo_minutos or 0
-
-            mudou = apuracao.hash_entrada != hash_antes
-            if not mudou:
-                continue
-
-            dias_alterados_vinculo += 1
-            resultado.dias_alterados += 1
-            componentes_depois = [_serializar_componente(c) for c in (apuracao.componentes or [])]
-            await gravar_auditoria(
-                sessao,
-                tenant_id=tenant_id,
-                evento="apuracao.recalculada",
-                entidade="apuracoes_dia",
-                acao="recalcular",
-                entidade_id=apuracao.id,
-                valor_anterior=(
-                    {
-                        "versao": versao_antes,
-                        "hashEntrada": hash_antes,
-                        "componentes": componentes_antes,
-                    }
-                    if _antes_linha is not None
-                    else None
-                ),
-                valor_novo={
-                    "versao": apuracao.versao,
-                    "hashEntrada": apuracao.hash_entrada,
-                    "componentes": componentes_depois,
-                },
-                metadados={"motivo": motivo, "forcar": forcar, "data": dia.isoformat()},
-            )
-
-        if dias_alterados_vinculo > 0:
-            eventos.publicar_apuracao_recalculada(
-                tenant_id=tenant_id,
-                vinculo_id=vinc.id,
-                colaborador_id=vinc.colaborador_id,
-                data_inicio=inicio,
-                data_fim=fim,
-                dias_alterados=dias_alterados_vinculo,
-                motivo=motivo,
-                saldo_anterior_minutos=saldo_antes_total,
-                saldo_novo_minutos=saldo_depois_total,
-            )
-
+    await processar_lote(sessao, vinculos, resultado)
     return resultado
 
 
