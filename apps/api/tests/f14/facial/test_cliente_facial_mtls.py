@@ -11,8 +11,11 @@ Nao toca banco nem rede: so `Configuracao`.
 from __future__ import annotations
 
 import datetime as dt
+import ssl
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -93,6 +96,58 @@ def test_tres_caminhos_preenchidos_montam_cliente_mtls(tmp_path: Path) -> None:
         timeout_s=7.5,
     )
     assert cliente.timeout.connect == 7.5
+
+
+def test_certificado_de_cliente_e_realmente_carregado_no_contexto(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regressao do bug encontrado em `docker compose` na VPS (09/08).
+
+    A forma anterior (`cert=(cert, chave)` + `verify=<caminho da CA>`) parecia
+    correta e era aceita pelo httpx sem erro nenhum -- mas no httpx 0.28
+    `create_ssl_context` faz `return` antecipado quando `verify` e uma string, e
+    o `load_cert_chain` do `cert=` NUNCA roda. O cliente conectava sem apresentar
+    certificado, e o `facial-svc` (com `CERT_REQUIRED`) derrubava o handshake:
+    `ConnectError` vazio, indistinguivel de "motor fora do ar".
+
+    Duas asserções, porque uma so nao fecha o buraco:
+      1. o par cert/chave e mesmo entregue ao `SSLContext`;
+      2. o que chega no `httpx.AsyncClient` e um `SSLContext`, nunca uma string
+         (a forma que o proprio httpx marca como deprecated e que reintroduziria
+         o bug em silencio).
+    """
+    cert, chave = _par_autoassinado(tmp_path)
+    carregados: list[tuple[str, str]] = []
+    original = ssl.SSLContext.load_cert_chain
+
+    def _espiao(self: ssl.SSLContext, certfile: Any, keyfile: Any = None, **kw: Any) -> None:
+        carregados.append((str(certfile), str(keyfile)))
+        original(self, certfile, keyfile, **kw)
+
+    monkeypatch.setattr(ssl.SSLContext, "load_cert_chain", _espiao)
+
+    capturado: dict[str, Any] = {}
+    construtor = httpx.AsyncClient.__init__
+
+    def _captura(self: httpx.AsyncClient, *args: Any, **kwargs: Any) -> None:
+        capturado.update(kwargs)
+        construtor(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", _captura)
+
+    montar_cliente_facial_svc(
+        _config(
+            facial_mtls_cert_path=str(cert),
+            facial_mtls_key_path=str(chave),
+            facial_mtls_ca_path=str(cert),
+        ),
+        timeout_s=3.0,
+    )
+
+    assert carregados == [(str(cert), str(chave))]
+    assert isinstance(capturado.get("verify"), ssl.SSLContext)
+    # `cert=` nao pode voltar: e justamente o argumento que era ignorado.
+    assert "cert" not in capturado
 
 
 def _par_autoassinado(destino: Path) -> tuple[Path, Path]:

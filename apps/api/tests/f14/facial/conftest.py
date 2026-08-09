@@ -227,8 +227,22 @@ class Fotos:
     pessoa_b: str
 
 
+@dataclass(frozen=True, slots=True)
+class Cena:
+    """A foto de grupo `t1` com os seis rostos ja localizados, mais os dois
+    utilitarios que recortam e codificam. Compartilhada por `fotos` (captura
+    unica, para `/enroll` e `/verificar`) e por `quadros` (sequencias, para
+    `/liveness`) -- carregar o motor ONNX duas vezes so para preparar fixture
+    custa segundos por suite sem provar nada."""
+
+    imagem: Any
+    caixas: list[Any]
+    jpeg: Any
+    recorte: Any
+
+
 @pytest.fixture(scope="session")
-def fotos() -> Fotos:
+def cena() -> Cena:
     cv2 = pytest.importorskip("cv2", reason="opencv-python-headless nao instalado")
     pytest.importorskip("onnxruntime", reason="onnxruntime nao instalado")
     dados = pytest.importorskip("insightface.data", reason="insightface nao instalado")
@@ -248,26 +262,103 @@ def fotos() -> Fotos:
     # muda com o recorte) -- o mesmo criterio de `test_motor_facial.py`.
     caixas = sorted((r.bbox for r in rostos), key=lambda b: float(b[0]))
 
-    def _jpeg(matriz: Any, qualidade: int) -> str:
+    def _jpeg(matriz: Any, qualidade: int = 90) -> str:
         ok, buffer = cv2.imencode(".jpg", matriz, [cv2.IMWRITE_JPEG_QUALITY, qualidade])
         assert ok, "falha ao codificar JPEG na fixture"
         return base64.b64encode(buffer.tobytes()).decode("ascii")
 
-    def _recorte(caixa: Any, *, margem: float, escala: float) -> Any:
+    def _recorte(
+        caixa: Any,
+        *,
+        margem: float,
+        escala: float,
+        deslocamento: tuple[int, int] = (0, 0),
+    ) -> Any:
+        """`deslocamento` move a janela alguns pixels -- e o que produz
+        MOVIMENTO entre quadros sem inventar pixel nenhum: a mesma cena,
+        enquadrada um pouco diferente, que e o que uma mao segurando um celular
+        faz. Mesma tecnica de `apps/facial-svc/tests/test_motor_facial.py`."""
         altura, largura = imagem.shape[:2]
         x1, y1, x2, y2 = (float(v) for v in caixa[:4])
         mx, my = (x2 - x1) * margem, (y2 - y1) * margem
-        a, b = max(0, int(x1 - mx)), max(0, int(y1 - my))
-        c, d = min(largura, int(x2 + mx)), min(altura, int(y2 + my))
+        dx, dy = deslocamento
+        a, b = max(0, int(x1 - mx) + dx), max(0, int(y1 - my) + dy)
+        c, d = min(largura, int(x2 + mx) + dx), min(altura, int(y2 + my) + dy)
         return cv2.resize(
             imagem[b:d, a:c], None, fx=escala, fy=escala, interpolation=cv2.INTER_CUBIC
         )
 
+    return Cena(imagem=imagem, caixas=caixas, jpeg=_jpeg, recorte=_recorte)
+
+
+@pytest.fixture(scope="session")
+def fotos(cena: Cena) -> Fotos:
     return Fotos(
-        pessoa_a_cadastro=_jpeg(_recorte(caixas[0], margem=0.35, escala=2.0), 92),
-        pessoa_a_marcacao=_jpeg(_recorte(caixas[0], margem=0.55, escala=1.5), 74),
-        pessoa_b=_jpeg(_recorte(caixas[1], margem=0.35, escala=2.0), 92),
+        pessoa_a_cadastro=cena.jpeg(cena.recorte(cena.caixas[0], margem=0.35, escala=2.0), 92),
+        pessoa_a_marcacao=cena.jpeg(cena.recorte(cena.caixas[0], margem=0.55, escala=1.5), 74),
+        pessoa_b=cena.jpeg(cena.recorte(cena.caixas[1], margem=0.35, escala=2.0), 92),
     )
+
+
+# ---------------------------------------------------------------------------
+# Quadros: as sequencias de prova de vida
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class Quadros:
+    """Quatro sequencias da MESMA pessoa (a cadastrada como `pessoa_a`).
+
+    `vivos` e a unica que deve aprovar. As tres negativas reproduzem os ataques
+    que a heuristica de `facial/motor/liveness.py` se propoe a pegar -- e sao
+    **simulacoes declaradas**, nao ataques reais: a grade senoidal imita o
+    batimento de uma tela fotografada, o desfoque com contraste achatado imita
+    papel fosco, e o quadro repetido e literalmente uma foto parada diante da
+    camera. Testar com um celular apontado para um monitor de verdade exige
+    hardware na mao (F8), e a limitacao esta declarada no proprio motor.
+    """
+
+    vivos: list[str]
+    tela: list[str]
+    papel: list[str]
+    congelado: list[str]
+
+
+#: Deslocamentos aplicados entre quadros consecutivos. Poucos pixels: o
+#: suficiente para passar de `MOVIMENTO_MINIMO` (1% da distancia interocular) e
+#: longe de `MOVIMENTO_MAXIMO`, que caracterizaria troca de cena.
+_PASSOS = ((0, 0), (4, -3), (-3, 4))
+
+
+@pytest.fixture(scope="session")
+def quadros(cena: Cena) -> Quadros:
+    cv2 = pytest.importorskip("cv2", reason="opencv-python-headless nao instalado")
+    np = pytest.importorskip("numpy", reason="numpy nao instalado")
+    caixa = cena.caixas[0]
+
+    def _bases() -> list[Any]:
+        return [
+            cena.recorte(caixa, margem=0.4, escala=2.0, deslocamento=passo) for passo in _PASSOS
+        ]
+
+    vivos = [cena.jpeg(base, 92) for base in _bases()]
+
+    tela = []
+    for base in _bases():
+        altura, largura = base.shape[:2]
+        ys, xs = np.mgrid[0:altura, 0:largura]
+        # Batimento de periodo 3 px: a assinatura que a grade de subpixels de um
+        # monitor produz quando fotografada por outra camera.
+        grade = 12 * np.sin(2 * np.pi * xs / 3.0) + 12 * np.sin(2 * np.pi * ys / 3.0)
+        borrada = cv2.GaussianBlur(base.astype(np.float32), (3, 3), 0.8)
+        tela.append(cena.jpeg(np.clip(borrada + grade[..., None], 0, 255).astype(np.uint8), 88))
+
+    # Papel fosco: some a microtextura da pele (desfoque), o contraste achata e o
+    # JPEG agressivo termina o servico.
+    papel = [
+        cena.jpeg(cv2.convertScaleAbs(cv2.GaussianBlur(base, (5, 5), 1.6), alpha=0.85, beta=18), 60)
+        for base in _bases()
+    ]
+
+    return Quadros(vivos=vivos, tela=tela, papel=papel, congelado=[vivos[0]] * 3)
 
 
 # ---------------------------------------------------------------------------

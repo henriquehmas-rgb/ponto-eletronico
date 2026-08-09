@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ssl
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -133,9 +134,41 @@ def montar_cliente_facial_svc(config: Configuracao, *, timeout_s: float) -> http
     return httpx.AsyncClient(
         base_url=config.facial_svc_url,
         timeout=timeout_s,
-        cert=(config.facial_mtls_cert_path, config.facial_mtls_key_path),
-        verify=config.facial_mtls_ca_path,
+        verify=_contexto_ssl_mtls(config),
     )
+
+
+def _contexto_ssl_mtls(config: Configuracao) -> ssl.SSLContext:
+    """`SSLContext` com a CA de verificacao E o certificado de cliente.
+
+    **Por que um contexto explicito, e nao `cert=(...)` + `verify=<caminho>`.**
+    Achado real, reproduzido em `docker compose` na VPS (09/08) e nao em teste:
+    no httpx 0.28, `create_ssl_context` (`httpx/_config.py`) trata
+    `verify=<str>` com um `return` ANTECIPADO --
+
+        elif isinstance(verify, str):
+            ...
+            return ssl.create_default_context(cafile=verify)
+
+        if cert:   # <- nunca alcancado quando `verify` e uma string
+            ctx.load_cert_chain(*cert)
+
+    -- ou seja, o certificado de CLIENTE era descartado em silencio e o cliente
+    conectava sem apresentar nada. Contra o `facial-svc` real (que roda com
+    `ssl_cert_reqs=CERT_REQUIRED`) isso da `SSLEOFError` -> `ConnectError`, um
+    erro que parece "motor fora do ar" e nao "meu certificado nao foi enviado".
+    As duas formas sao, alias, marcadas como DEPRECATED nesse mesmo arquivo do
+    httpx, com esta mesma recomendacao.
+
+    O teste de montagem antigo nao pegava: ele so conferia `timeout`. O teste de
+    handshake (`tests/f14/hardening/test_mtls_facial_svc.py`) tambem nao, porque
+    ja construia um `SSLContext` a mao -- provava o MECANISMO, nunca esta funcao.
+    """
+    contexto = ssl.create_default_context(cafile=config.facial_mtls_ca_path)
+    contexto.load_cert_chain(
+        certfile=config.facial_mtls_cert_path, keyfile=config.facial_mtls_key_path
+    )
+    return contexto
 
 
 class FacialSvcIndisponivel(Exception):
@@ -297,3 +330,69 @@ async def verificar(
         operacao="verificar",
     )
     return bool(dados.get("aprovado"))
+
+
+@dataclass(frozen=True, slots=True)
+class ResultadoLiveness:
+    """Laudo de `/liveness`. `sinais` e booleano de ponta a ponta, sem numero.
+
+    Ele NAO vai para a resposta HTTP da marcacao: entra na explicabilidade do
+    score (`marcacoes_meta.flags_integridade`), onde a auditoria consegue ver
+    *qual* heuristica caiu sem que o cliente da API receba essa informacao --
+    `PONTO-SCORE-002` e `expoe_regra: false` justamente porque dizer qual sinal
+    reprovou ensina o fraudador a corrigir aquele.
+    """
+
+    aprovado: bool
+    sinais: dict[str, bool]
+    quadros_analisados: int
+
+
+async def liveness(
+    *,
+    quadros_base64: list[str],
+    mime_type: str = "image/jpeg",
+    referencia: str | None = None,
+) -> ResultadoLiveness:
+    """`POST /liveness` com `exigirAprovacao: false` -- e essa a diferenca.
+
+    `/verificar` e chamado com `exigirAprovacao: true` porque rosto que nao bate
+    e evidencia de que a pessoa errada esta marcando: ali reprovacao E portao.
+    Aqui nao: a prova de vida deste sistema e **heuristica declarada**, nao um
+    classificador treinado (`facial/motor/liveness.py` abre o modulo dizendo
+    isso, e a decisao esta registrada em `docs/backlog.md` 08/08). Pedir 403 ao
+    motor transformaria um sinal reconhecidamente falivel em bloqueio duro da
+    jornada do trabalhador, exatamente o que ADR-008 recusa.
+
+    Entao a reprovacao volta como `aprovado=False` -- um VALOR, que o antifraude
+    pondera junto com os outros sinais --, e nao como excecao.
+    """
+    config = obter_configuracao()
+    dados = await _chamar(
+        caminho="/liveness",
+        corpo={
+            "quadrosBase64": quadros_base64,
+            "mimeType": mime_type,
+            "exigirAprovacao": False,
+            **({"referencia": referencia} if referencia else {}),
+        },
+        timeout_s=config.facial_timeout_liveness_s,
+        operacao="liveness",
+    )
+    aprovado = dados.get("aprovado")
+    if not isinstance(aprovado, bool):
+        # Sem veredito legivel nao ha sinal: melhor "indisponivel" do que um
+        # `bool(None)` que viraria uma reprovacao inventada (ADR-014).
+        raise FacialSvcIndisponivel("liveness: resposta sem 'aprovado' booleano")
+    brutos = dados.get("sinais")
+    sinais = (
+        {chave: valor for chave, valor in brutos.items() if isinstance(valor, bool)}
+        if isinstance(brutos, dict)
+        else {}
+    )
+    analisados = dados.get("quadrosAnalisados")
+    return ResultadoLiveness(
+        aprovado=aprovado,
+        sinais=sinais,
+        quadros_analisados=int(analisados) if isinstance(analisados, int) else len(quadros_base64),
+    )

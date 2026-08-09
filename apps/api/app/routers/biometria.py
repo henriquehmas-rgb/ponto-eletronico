@@ -9,13 +9,23 @@ orquestram HTTP <-> `app.biometria.servico` (ciclo de vida da credencial) e
 nem decifragem acontece aqui -- e nenhuma rota devolve o vetor decifrado
 (ADR-006 regra 5, `PONTO-LGPD-002`).
 
-`criarBiometria` recebe `vetor` (base64), `versaoModelo`, `provedor` e
-`dimensao` fora do schema tipado `BiometriaCriar` -- o proprio
-`ExemploBiometriaCriar` do `openapi.yaml` usa `versaoModelo`, que tampouco
-esta no schema (nenhum `additionalProperties: false` os proibe; ver
-`docs/backlog.md` e a docstring de `app.biometria.servico.DadosBiometriaCriar`).
-Por isso esta rota le o corpo bruto via `Request.json()` para completar os
-campos que o Pydantic gerado nao tipa.
+`criarBiometria` recebe `vetor` (base64), `versaoModelo`, `provedor`,
+`dimensao`, `fotoBase64` e `mimeType`. Ate 09/08/2026 NENHUM desses seis
+estava declarado em `BiometriaCriar` (o proprio `ExemploBiometriaCriar` do
+`openapi.yaml` ja usava `versaoModelo`, que tampouco estava no schema; nenhum
+`additionalProperties: false` os proibia). **RFC-021 declarou os seis no
+contrato** -- `packages/contracts/openapi.yaml`, `components.schemas.
+BiometriaCriar` -- e formalizou a exclusividade mutua entre `fotoBase64` e
+`vetor`.
+
+Esta rota continua lendo o corpo bruto via `Request.json()`, de proposito:
+`app/schemas/contrato.py` e GERADO por `tools/gerar_do_contrato.py` e ainda
+nao foi regerado (a regeneracao exige o extra `codegen` na versao fixada --
+regerar com outra versao renomeia classes de enum nao relacionadas e quebra
+importacoes de outros modulos). No dia em que o arquivo for regerado,
+`corpo.foto_base64`/`corpo.vetor`/... passam a existir e a leitura pode ser
+simplificada; ate la, o comportamento observavel e exatamente o mesmo, porque
+Pydantic v2 sem `extra` declarado IGNORA chave desconhecida, nao a rejeita.
 
 Autenticacao dupla (retrofit de 2026-08-08, decisao do dono do produto
 apesar de F14/A2 ter deixado como "sem valor de produto validado ainda",
@@ -124,17 +134,16 @@ async def _extrair_template(
 ) -> cliente_facial.ResultadoEnroll | None:
     """`fotoBase64` no corpo -> chama `facial-svc:/enroll` e devolve o template.
 
-    **Por que `fotoBase64` e lido do corpo bruto** (mesma tecnica ja usada por
-    `vetor`/`versaoModelo`/`dimensao`/`provedor`, ver docstring do modulo):
-    `BiometriaCriar` do contrato nao declara nenhum campo de imagem, e nenhum
-    `additionalProperties: false` o proibe. Acrescentar uma propriedade nova ao
-    contrato publico e decisao do dono do produto, nao deste modulo -- a lacuna
-    esta registrada no relatorio desta sessao. O nome `fotoBase64` nao e
-    inventado: e exatamente o campo que `MarcacaoCriar` ja usa para a mesma
-    coisa ("Captura ao vivo em base64... NUNCA aceita upload de arquivo
-    previamente salvo").
+    **`fotoBase64` esta declarado no contrato desde a RFC-021** (09/08/2026),
+    em `components.schemas.BiometriaCriar`, com o mesmo nome e o mesmo
+    significado que `MarcacaoCriar.fotoBase64` ja usava ("Captura ao vivo em
+    base64... NUNCA aceita upload de arquivo previamente salvo"). Continua
+    sendo lido do corpo bruto pelo motivo explicado na docstring do modulo
+    (`app/schemas/contrato.py` ainda nao regerado) -- e leitura, nao contorno
+    de contrato.
 
-    **`fotoBase64` e `vetor` sao mutuamente exclusivos.** Aceitar os dois
+    **`fotoBase64` e `vetor` sao mutuamente exclusivos** (regra agora escrita
+    na descricao do schema, verificada aqui). Aceitar os dois
     obrigaria a escolher em silencio entre um template extraido aqui e um
     template que o cliente afirma ter -- e a escolha errada grava biometria da
     pessoa errada. Erro explicito e a unica resposta honesta.

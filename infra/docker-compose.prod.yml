@@ -74,7 +74,11 @@ x-python-env: &python-env
   MINIO_SECURE: ${MINIO_SECURE:-false}
   JWT_PRIVATE_KEY_PATH: ${JWT_PRIVATE_KEY_PATH:-/run/secrets/jwt/private.pem}
   JWT_PUBLIC_KEY_PATH: ${JWT_PUBLIC_KEY_PATH:-/run/secrets/jwt/public.pem}
-  FACIAL_SVC_URL: ${FACIAL_SVC_URL:-http://facial-svc:8000}
+  # https, nao http: em prd o mTLS do facial-svc e obrigatorio (ver o servico
+  # `facial-svc` abaixo), e um servidor que exige certificado de cliente nao
+  # responde em texto claro. Default errado aqui seria uma falha de conexao a
+  # cada marcacao com facial, no deploy, e nao no `config`.
+  FACIAL_SVC_URL: ${FACIAL_SVC_URL:-https://facial-svc:8000}
   # Obrigatorio em prd: sem Sentry, incidente de producao vira "o cliente
   # avisou". Se voce decidir conscientemente nao usar Sentry, troque por
   # ${SENTRY_DSN:-} e assuma a decisao por escrito no runbook.
@@ -90,6 +94,30 @@ x-healthcheck-http-py: &healthcheck-http-py
     - >-
       python -c "import sys,urllib.request;
       sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 40s
+
+# Healthcheck do facial-svc: separado do bloco acima porque em prd este servico
+# NUNCA fala HTTP puro (mTLS obrigatorio) — um GET em `http://127.0.0.1:8000`
+# jamais completaria, o container nunca ficaria `healthy` e a `api`, que declara
+# `depends_on: service_healthy` sobre ele, nunca subiria. O comando apresenta o
+# proprio certificado do servidor como cliente; por isso
+# `infra/gerar-certificados-mtls-facial.sh` emite o certificado de servidor com
+# `extendedKeyUsage=serverAuth,clientAuth` e SAN `localhost`/`127.0.0.1`.
+# A forma condicional (identica a de hml) e deliberada: um unico comando
+# correto nos dois arquivos e mais facil de manter que dois comandos parecidos.
+x-healthcheck-facial: &healthcheck-facial
+  test:
+    - CMD-SHELL
+    - >-
+      python -c "import os,ssl,sys,urllib.request as u;
+      p=[os.environ.get(v) or '' for v in ('FACIAL_TLS_CERT_PATH','FACIAL_TLS_KEY_PATH','FACIAL_MTLS_CA_PATH')];
+      m=all(p);
+      x=ssl.create_default_context(cafile=p[2]) if m else None;
+      x and x.load_cert_chain(p[0], p[1]);
+      sys.exit(0 if u.urlopen(('https://localhost:8000/health' if m else 'http://127.0.0.1:8000/health'), timeout=5, context=x).status == 200 else 1)"
   interval: 30s
   timeout: 10s
   retries: 5
@@ -285,7 +313,7 @@ services:
       - ponto-interna
     expose:
       - "8000"
-    healthcheck: *healthcheck-http-py
+    healthcheck: *healthcheck-facial
     labels:
       traefik.enable: "false"
 
@@ -312,11 +340,28 @@ services:
       CERT_ICP_PATH: ${CERT_ICP_PATH:?defina CERT_ICP_PATH}
       CERT_ICP_SENHA: ${CERT_ICP_SENHA:?defina CERT_ICP_SENHA}
       UVICORN_WORKERS: ${API_WORKERS:-4}
+      # --- mTLS api -> facial-svc: lado CLIENTE do par (F14/A2) ---
+      # Obrigatorio em prd pelo mesmo motivo que o lado servidor: sem isto,
+      # `app/biometria/cliente_facial.py` recusa montar o cliente em producao
+      # (`MtlsNaoConfigurado` -> `PONTO-INT-001`) e TODA operacao facial falha.
+      # Ficam aqui e nao em `x-python-env`: a `api` e o unico caller do motor.
+      # Emita o par com `infra/gerar-certificados-mtls-facial.sh`.
+      FACIAL_MTLS_CERT_PATH: ${FACIAL_MTLS_CERT_PATH:?defina FACIAL_MTLS_CERT_PATH (mTLS obrigatorio em prd)}
+      FACIAL_MTLS_KEY_PATH: ${FACIAL_MTLS_KEY_PATH:?defina FACIAL_MTLS_KEY_PATH (mTLS obrigatorio em prd)}
+      # Mesma variavel (e mesmo valor) que o facial-svc le: os dois diretorios
+      # de certificado sao montados no MESMO caminho de container, cada um com
+      # a sua copia de ca.pem.
+      FACIAL_MTLS_CA_PATH: ${FACIAL_MTLS_CA_PATH:?defina FACIAL_MTLS_CA_PATH (mTLS obrigatorio em prd)}
     volumes:
       # Chaves JWT geradas fora do git (make keys). Somente leitura.
       # Em prd nao ha default `./keys`: o caminho tem que ser declarado.
       - ${JWT_KEYS_DIR:?defina JWT_KEYS_DIR}:/run/secrets/jwt:ro
       - ${CERT_ICP_DIR:?defina CERT_ICP_DIR}:/run/secrets/icp:ro
+      # Certificado de CLIENTE do mTLS (ca.pem + cliente.pem + cliente.key).
+      # Diretorio de host DIFERENTE do FACIAL_CERTS_DIR do facial-svc de
+      # proposito: a chave privada do servidor nunca fica visivel dentro da
+      # api, e a do cliente nunca dentro do facial-svc.
+      - ${FACIAL_CERTS_CLIENTE_DIR:?defina FACIAL_CERTS_CLIENTE_DIR}:/run/secrets/facial-tls:ro
     networks:
       - ponto-interna
       - traefik

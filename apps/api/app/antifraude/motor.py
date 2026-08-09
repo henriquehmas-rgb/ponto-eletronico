@@ -327,9 +327,9 @@ def _sinais_categoria_biometria(
             )
         )
     else:
-        # Reservado: `facial-svc` (`/verificar`) ainda e stub 501 desde a
-        # Fase 0 -- ver achado em docs/backlog.md. nao_aplicavel, nunca
-        # inventado (ADR-014), e a politica do tenant nao exige o sinal.
+        # Nenhuma captura veio no corpo (canal sem camera, ou colaborador sem
+        # credencial biometrica ativa) e a politica do tenant nao exige o sinal:
+        # nao_aplicavel, nunca inventado (ADR-014).
         resultado.append(_sinal("similaridade_facial", "biometria", NAO_APLICAVEL, None))
 
     if sinais.liveness_aprovado is not None:

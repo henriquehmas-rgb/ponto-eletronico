@@ -429,22 +429,25 @@ def _sinais_do_corpo(
     distancia_geocerca_metros: float | None,
     velocidade_desde_ultima_kmh: float | None,
     facial_verificado: bool | None = None,
+    liveness_aprovado: bool | None = None,
 ) -> SinaisRegistro:
     """Monta `SinaisRegistro` a partir dos campos do corpo, tal como
     informados pelo cliente (nenhum e verificado criptograficamente nesta
     fase -- ver docstring de `app.marcacao.confianca.motor`), mais os sinais
     que o PROPRIO `registrar_marcacao` ja calculou nesta chamada (geocerca) ou
     que `app.antifraude.geografia` calculou por consulta ao banco
-    (velocidade), mais `facial_verificado`, que veio do `facial-svc` de verdade
-    (`app.marcacao.pipeline.facial`).
+    (velocidade), mais `facial_verificado` e `liveness_aprovado`, que vieram do
+    `facial-svc` de verdade (`app.marcacao.pipeline.facial`).
 
     `score_facial` continua `None` **mesmo quando houve verificacao facial**, e
     isso e deliberado: `/verificar` nao devolve a similaridade nem o limiar
     (`PONTO-SCORE-003` tem `expoe_regra: false`), entao nao existe numero real
     para gravar -- o veredito vai em `facial_verificado`. `liveness_aprovado`
-    (`/liveness`) e `attestation_veredito` seguem sem fonte: o primeiro nao tem
-    caller ainda, o segundo nao tem verificacao no servidor sem F7 (ADR-014).
-    `nao_aplicavel`/`None`, nunca um valor inventado.
+    aceita `False`: prova de vida reprovada e sinal negativo REAL que o motor de
+    score pondera, e nao motivo de recusa (a justificativa esta em
+    `app.marcacao.pipeline.facial`). `attestation_veredito` e o unico que segue
+    sem fonte -- nao ha verificacao no servidor sem F7 (ADR-014): `nao_aplicavel`,
+    nunca um valor inventado.
     """
     flags = corpo.flags_integridade or {}
     return SinaisRegistro(
@@ -453,7 +456,7 @@ def _sinais_do_corpo(
         precisao_insuficiente=False,
         score_facial=None,
         facial_verificado=facial_verificado,
-        liveness_aprovado=None,
+        liveness_aprovado=liveness_aprovado,
         attestation_veredito="nao_aplicavel",
         root_detectado=flags.get("rootDetectado"),
         emulador_detectado=flags.get("emuladorDetectado"),
@@ -766,12 +769,26 @@ async def registrar_marcacao(
     if resultado_facial.aviso is not None:
         avisos.append(resultado_facial.aviso)
 
+    # Prova de vida REAL contra o `facial-svc` quando `livenessEvidencia` traz a
+    # sequencia de quadros. Ao contrario da verificacao acima, esta chamada NUNCA
+    # aborta a marcacao: reprovacao volta como sinal negativo (`aprovado=False`)
+    # e o antifraude pondera -- a heuristica de liveness e declaradamente
+    # falivel, e ADR-008 nao admite portao unico sobre sinal assim. Justificativa
+    # completa em `app.marcacao.pipeline.facial`.
+    resultado_liveness = await facial.julgar_prova_de_vida(
+        colaborador_id=colaborador.id,
+        liveness_evidencia=corpo.liveness_evidencia,
+    )
+    if resultado_liveness.aviso is not None:
+        avisos.append(resultado_liveness.aviso)
+
     sinais = _sinais_do_corpo(
         corpo,
         dentro_geocerca=dentro_geocerca,
         distancia_geocerca_metros=distancia_geocerca_metros,
         velocidade_desde_ultima_kmh=deslocamento.velocidade_kmh,
         facial_verificado=resultado_facial.aprovado,
+        liveness_aprovado=resultado_liveness.aprovado,
     )
     politica_antifraude = PoliticaAntifraude(
         pesos=politica.pesos,
@@ -860,6 +877,12 @@ async def registrar_marcacao(
             distancia_geocerca_metros=distancia_geocerca_metros,
             score_facial=None,
             liveness_metodo=str(corpo.liveness_metodo) if corpo.liveness_metodo else None,
+            # Veredito REAL do `facial-svc:/liveness` desde 09/08 (era `NULL`
+            # fixo antes, porque a operacao nao tinha chamador). Continua `NULL`
+            # quando nao houve sequencia de quadros para julgar -- e a coluna
+            # que `consultarMarcacao` expoe como `livenessAprovado`, e ali `NULL`
+            # precisa seguir significando "nao houve", nunca "reprovou".
+            liveness_aprovado=sinais.liveness_aprovado,
             score_confianca=resultado_confianca.score,
             classificacao_confianca=resultado_confianca.classificacao,
             flags_integridade=flags_integridade_gravadas,

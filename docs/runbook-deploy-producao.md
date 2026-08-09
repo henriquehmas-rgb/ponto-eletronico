@@ -125,8 +125,8 @@ aqui**: emitir certificado é responsabilidade dele, não deste stack.
 
 > Não confundir com os outros dois certificados do projeto, que **não** são
 > Let's Encrypt e não são emitidos automaticamente:
-> - **mTLS do motor facial** (`FACIAL_TLS_*` / `FACIAL_MTLS_CA_PATH`) — CA
->   interna, passo 4.
+> - **mTLS do motor facial** (`FACIAL_TLS_*` / `FACIAL_MTLS_*`) — CA interna
+>   própria, emitida por `infra/gerar-certificados-mtls-facial.sh`, passo 4b.
 > - **ICP-Brasil A1** (`CERT_ICP_*`) — comprado de uma AC credenciada, assina
 >   AFD/AEJ e espelhos `.p7s`, passo 4.
 
@@ -160,34 +160,69 @@ sudo chmod 700 /docker/ponto-prd/keys
 sudo chmod 600 /docker/ponto-prd/keys/private.pem
 ```
 
-**4b. mTLS do `facial-svc` (F14/A2) — obrigatório em produção.**
-Em dev/hml, deixar `FACIAL_TLS_CERT_PATH`, `FACIAL_TLS_KEY_PATH` e
-`FACIAL_MTLS_CA_PATH` vazios faz `facial/servidor.py` subir em **HTTP puro**.
-Em produção isso significa biometria trafegando em claro entre containers, então
-`docker-compose.prod.yml` exige as três (`:?`) e o `up` falha se faltar alguma.
+**4b. mTLS `api` ↔ `facial-svc` (F14/A2) — obrigatório em produção.**
+São **dois** certificados de uma CA interna própria, não um: o `facial-svc` é o
+servidor (apresenta `servidor.pem`) e a `api` é o cliente (apresenta
+`cliente.pem`). Sem o certificado de cliente, `app/biometria/cliente_facial.py`
+se recusa a montar o cliente em produção (`MtlsNaoConfigurado` →
+`PONTO-INT-001`) e **toda** operação facial falha — enroll e verificação.
 
-Gere com a sua PKI, ou uma CA interna dedicada:
+Em dev/hml, deixar os caminhos vazios faz `facial/servidor.py` subir em **HTTP
+puro**. Em produção isso significaria biometria trafegando em claro entre
+containers, então `docker-compose.prod.yml` exige todas (`:?`) e o `up` falha se
+faltar alguma.
+
+Não confundir com o ICP-Brasil do passo 4c: são materiais completamente
+diferentes, e esta CA aqui é interna, autoassinada e só precisa ser conhecida
+por estes dois containers.
+
+Emita com o script versionado — ele já gera a CA, as duas folhas com as
+extensões certas (SAN `facial-svc`/`localhost`/`127.0.0.1` e
+`extendedKeyUsage=serverAuth,clientAuth` no servidor, exigidos pelo healthcheck
+do próprio container, que passa a falar HTTPS quando o mTLS liga), verifica a
+cadeia e imprime as datas de expiração:
 
 ```bash
-sudo mkdir -p /docker/ponto-prd/certs-facial
-cd /docker/ponto-prd/certs-facial
+cd /docker/ponto-prd
+sudo ./infra/gerar-certificados-mtls-facial.sh
+# saída: infra/keys/mtls-facial/{ca,servidor,cliente}/
 
-# CA interna
-sudo openssl req -x509 -newkey rsa:4096 -days 3650 -nodes \
-  -keyout ca.key -out ca.pem -subj "/CN=ponto-prd-facial-ca"
-
-# Certificado de servidor do facial-svc (CN precisa bater com o nome de rede)
-sudo openssl req -newkey rsa:4096 -nodes \
-  -keyout servidor.key -out servidor.csr -subj "/CN=facial-svc"
-sudo openssl x509 -req -in servidor.csr -CA ca.pem -CAkey ca.key \
-  -CAcreateserial -days 825 -out servidor.pem
-
-sudo chmod 700 /docker/ponto-prd/certs-facial
-sudo chmod 600 /docker/ponto-prd/certs-facial/*.key
+# instale FORA do checkout do git, em dois diretórios separados.
+# Dono 1001:1001 é OBRIGATÓRIO: é o usuário sem privilégio (`ponto`) que roda
+# dentro dos containers. Arquivo root:root modo 600 num bind mount NÃO é
+# legível por ele, e o sintoma seria "Permission denied" na primeira chamada
+# real — nada que mencione TLS.
+sudo install -d -m 700 -o 1001 -g 1001 \
+  /docker/ponto-prd/certs-facial /docker/ponto-prd/certs-facial-api
+sudo install -m 644 -o 1001 -g 1001 \
+  infra/keys/mtls-facial/servidor/{ca.pem,servidor.pem} /docker/ponto-prd/certs-facial/
+sudo install -m 600 -o 1001 -g 1001 \
+  infra/keys/mtls-facial/servidor/servidor.key /docker/ponto-prd/certs-facial/
+sudo install -m 644 -o 1001 -g 1001 \
+  infra/keys/mtls-facial/cliente/{ca.pem,cliente.pem} /docker/ponto-prd/certs-facial-api/
+sudo install -m 600 -o 1001 -g 1001 \
+  infra/keys/mtls-facial/cliente/cliente.key /docker/ponto-prd/certs-facial-api/
 ```
 
-Anote a data de expiração (`-days 825`) — renovação é manual e o serviço para
-de responder quando vence.
+Dois diretórios de propósito: a chave privada do servidor nunca fica visível
+dentro do container da `api`, nem a do cliente dentro do `facial-svc`. Os dois
+são montados no **mesmo** ponto (`/run/secrets/facial-tls`, só leitura), cada um
+com sua cópia de `ca.pem` — é isso que permite `FACIAL_MTLS_CA_PATH` ser um
+valor só, válido dos dois lados.
+
+**A chave da CA (`infra/keys/mtls-facial/ca/ca.key`) não vai para nenhum
+container.** Quem a tiver pode emitir um certificado de cliente novo e falar com
+o motor facial. Guarde-a onde você guarda segredo — e é ela que você vai
+precisar para renovar as folhas sem reconfigurar os dois lados.
+
+Renovação: **manual**, sem automação nenhuma. Anote as datas que o script
+imprime (folhas: 825 dias). Quando vencerem, o handshake é recusado e o
+reconhecimento facial para de responder. Para renovar, rode o script de novo com
+`--forcar` na mesma pasta (a CA existente é reaproveitada, só as folhas trocam),
+recopie os arquivos e reinicie `api` e `facial-svc`.
+
+Com mTLS ligado, `FACIAL_SVC_URL` precisa ser `https://facial-svc:8000` — já é o
+default do compose de produção.
 
 **4c. Certificado ICP-Brasil A1 (`.pfx`/`.p12`).**
 Comprado pelo dono do produto junto a uma AC credenciada. Não é gerável.
@@ -526,7 +561,8 @@ docker run --rm -it --network ponto-prd-interna --entrypoint sh minio/mc
 
 | Item | Prazo típico | Sintoma se vencer |
 | --- | --- | --- |
-| Certificado mTLS do `facial-svc` | 825 dias | reconhecimento facial para de responder |
+| Certificado mTLS de servidor do `facial-svc` | 825 dias | reconhecimento facial para de responder |
+| Certificado mTLS de cliente da `api` | 825 dias | idem (enroll falha 503, marcação segue sem o sinal facial) |
 | CA interna do mTLS | 3650 dias | idem |
 | Certificado ICP-Brasil A1 | 1 ano | AFD/AEJ e espelhos deixam de ser assinados |
 | TLS público (Let's Encrypt) | 90 dias | **automático** pelo Traefik — só monitorar |

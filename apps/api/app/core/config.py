@@ -114,6 +114,21 @@ class Configuracao(BaseSettings):
     #: `app.marcacao.pipeline.facial`.
     facial_timeout_verificar_s: float = 3.0
 
+    #: Teto de espera do `/liveness`. Muito maior que o do `/verificar`, e o
+    #: numero e MEDIDO, nao estimado: a operacao e multi-quadro (a deteccao roda
+    #: uma vez por quadro, `facial/motor/liveness.py`), e sequencias de tres
+    #: quadros contra o motor real na VPS de 8 vCPU sem GPU levaram de 3,9s a
+    #: 10,6s (`docs/backlog.md`, 09/08 -- a variacao e a maquina compartilhada).
+    #: O primeiro palpite, 6s, derrubava o sinal em metade das chamadas.
+    #:
+    #: 12s e teto de espera, nao latencia esperada, e estourar aqui NAO recusa a
+    #: marcacao -- prova de vida heuristica e sinal de confianca, nunca portao
+    #: (ADR-008; ver `app.marcacao.pipeline.facial`). Ainda assim, quem captura
+    #: (F7/F8) e que decide o custo real: mandar tres quadros de rosto recortado
+    #: em resolucao de camera, e nao a foto inteira ampliada, e o que mantem a
+    #: chamada perto do piso da faixa.
+    facial_timeout_liveness_s: float = 12.0
+
     # --- URLs publicas ----------------------------------------------------------
     api_base_url: str = "http://localhost:8000"
     web_base_url: str = "http://localhost:3000"

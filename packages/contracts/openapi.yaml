@@ -30305,7 +30305,15 @@ components:
           description: Usuario responsavel pela ultima atualizacao.
     BiometriaCriar:
       type: object
-      description: Dados aceitos na criacao de Biometria.
+      description: 'Dados aceitos na criacao de Biometria. O template biometrico entra por UM dos dois
+        caminhos, nunca os dois na mesma requisicao: `fotoBase64` (captura ao vivo, o servidor extrai
+        o template no motor facial e carimba `versaoModelo`/`dimensao` com o que o motor devolveu) OU
+        `vetor` (template ja extraido fora da API, acompanhado de `versaoModelo`, `dimensao` e `provedor`).
+        Enviar os dois e recusado com `PONTO-VAL-001` -- escolher em silencio entre um template extraido
+        e um template que o cliente afirma ter grava biometria da pessoa errada. Mesma convencao de
+        alternativas mutuamente exclusivas ja usada por `MarcacaoCriar` (`colaboradorId` x `cpf` x
+        `matricula`): propriedades opcionais independentes, exclusividade descrita aqui e verificada
+        pelo servidor.'
       properties:
         colaboradorId:
           type: string
@@ -30352,6 +30360,37 @@ components:
         identificadorCartao:
           type: string
           description: Identificador do cartao de proximidade, quando a modalidade e cartao.
+        fotoBase64:
+          type: string
+          description: Captura ao vivo em base64 para o servidor extrair o template no motor facial.
+            NUNCA aceita upload de arquivo previamente salvo -- mesmo significado e mesmo nome que
+            `MarcacaoCriar.fotoBase64`. Mutuamente exclusivo com `vetor`. Quando presente, `versaoModelo`,
+            `dimensao` e `provedor` do corpo sao IGNORADOS -- o carimbo gravado e o do motor que gerou
+            o vetor, nunca o que o cliente afirma.
+        mimeType:
+          type: string
+          description: Tipo MIME de `fotoBase64`. Ausente equivale a `image/jpeg`. So faz sentido junto
+            de `fotoBase64`.
+          default: image/jpeg
+        vetor:
+          type: string
+          description: Template biometrico ja extraido fora da API, em base64. Mutuamente exclusivo com
+            `fotoBase64`. Dado pessoal sensivel - entra cifrado e NUNCA e devolvido por nenhuma rota, nem
+            para o super administrador (ADR-006).
+        versaoModelo:
+          type: string
+          description: Carimbo do modelo que gerou `vetor`. Obrigatorio na pratica quando `vetor` e
+            enviado; ignorado quando o servidor extrai o template a partir de `fotoBase64`.
+        dimensao:
+          type: integer
+          format: int32
+          description: Numero de componentes de `vetor`. Ignorado quando o servidor extrai o template a
+            partir de `fotoBase64`.
+          minimum: 1
+        provedor:
+          type: string
+          description: Motor que produziu o template. Ausente equivale a `facial-svc`.
+          default: facial-svc
       required:
       - colaboradorId
       - modalidade

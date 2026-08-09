@@ -83,6 +83,31 @@ x-healthcheck-http-py: &healthcheck-http-py
   retries: 5
   start_period: 40s
 
+# Healthcheck do facial-svc: PRECISA ser separado do bloco acima porque este
+# servico troca de protocolo conforme a configuracao. Com os tres caminhos de
+# TLS preenchidos, `facial/servidor.py` sobe em HTTPS exigindo certificado de
+# cliente (`ssl_cert_reqs=CERT_REQUIRED`) -- um GET em `http://127.0.0.1:8000`
+# nunca mais completa, o container jamais fica `healthy` e a `api`, que declara
+# `depends_on: service_healthy` sobre ele, nunca sobe. Este comando decide o
+# esquema pelas MESMAS variaveis que o servidor le, e apresenta o proprio
+# certificado do servidor como cliente (por isso `gerar-certificados-mtls-
+# facial.sh` da a ele `extendedKeyUsage=serverAuth,clientAuth` e SAN
+# `localhost`/`127.0.0.1`).
+x-healthcheck-facial: &healthcheck-facial
+  test:
+    - CMD-SHELL
+    - >-
+      python -c "import os,ssl,sys,urllib.request as u;
+      p=[os.environ.get(v) or '' for v in ('FACIAL_TLS_CERT_PATH','FACIAL_TLS_KEY_PATH','FACIAL_MTLS_CA_PATH')];
+      m=all(p);
+      x=ssl.create_default_context(cafile=p[2]) if m else None;
+      x and x.load_cert_chain(p[0], p[1]);
+      sys.exit(0 if u.urlopen(('https://localhost:8000/health' if m else 'http://127.0.0.1:8000/health'), timeout=5, context=x).status == 200 else 1)"
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 40s
+
 # -----------------------------------------------------------------------------
 # Redes
 # -----------------------------------------------------------------------------
@@ -287,7 +312,7 @@ services:
       - ponto-interna
     expose:
       - "8000"
-    healthcheck: *healthcheck-http-py
+    healthcheck: *healthcheck-facial
     labels:
       traefik.enable: "false"
 
@@ -323,9 +348,30 @@ services:
       # (`app/db/sessao_suporte.py`), atras da permissao `tenants.suporte`.
       POSTGRES_SUPORTE_PASSWORD: ${POSTGRES_SUPORTE_PASSWORD:?defina POSTGRES_SUPORTE_PASSWORD}
       DATABASE_URL_SUPORTE: ${DATABASE_URL_SUPORTE:-}
+      # --- mTLS api -> facial-svc: lado CLIENTE do par (F14/A2) ---
+      # Fica AQUI e nao em `x-python-env`: `app/biometria/cliente_facial.py` e o
+      # unico caller do motor facial (a imagem crua so entra em `apps/api`);
+      # worker, scheduler e device-gw nunca abrem esse socket.
+      # Regra de `montar_cliente_facial_svc`: os TRES preenchidos -> mTLS real;
+      # os tres vazios -> HTTP puro, aceito so fora de producao; preenchimento
+      # PARCIAL -> `MtlsNaoConfigurado` (metade de um mTLS nao e meio seguro).
+      # Emita o par com `infra/gerar-certificados-mtls-facial.sh`.
+      # Com mTLS ligado, FACIAL_SVC_URL tem que ser `https://facial-svc:8000`.
+      FACIAL_MTLS_CERT_PATH: ${FACIAL_MTLS_CERT_PATH:-}
+      FACIAL_MTLS_KEY_PATH: ${FACIAL_MTLS_KEY_PATH:-}
+      # Mesma variavel (e mesmo valor) que o facial-svc le: os dois diretorios
+      # de certificado sao montados no MESMO caminho de container, cada um com
+      # a sua copia de ca.pem.
+      FACIAL_MTLS_CA_PATH: ${FACIAL_MTLS_CA_PATH:-}
     volumes:
       # Chaves JWT geradas fora do git (make keys). Somente leitura.
       - ${JWT_KEYS_DIR:-./keys}:/run/secrets/jwt:ro
+      # Certificado de CLIENTE do mTLS (ca.pem + cliente.pem + cliente.key),
+      # gerado por `infra/gerar-certificados-mtls-facial.sh`. Diretorio de host
+      # DIFERENTE do FACIAL_CERTS_DIR do facial-svc de proposito: a chave
+      # privada do servidor nunca fica visivel dentro da api, e vice-versa.
+      # Vazio (padrao) monta um diretorio inofensivo, igual ao do facial-svc.
+      - ${FACIAL_CERTS_CLIENTE_DIR:-./certs-facial-vazio}:/run/secrets/facial-tls:ro
     networks:
       - ponto-interna
       - traefik
