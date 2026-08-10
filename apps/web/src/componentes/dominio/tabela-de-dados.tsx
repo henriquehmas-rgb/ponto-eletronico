@@ -277,7 +277,11 @@ export function TabelaDeDados<T>({
         aria-rowcount={linhasOrdenadas.length}
         aria-colcount={totalColunasFocaveis}
         className="overflow-auto rounded-medio border border-borda-sutil"
-        style={{ height: alturaContainerPx }}
+        // `maxHeight`, nao `height` fixo: poucas linhas encolhem o cartao para o
+        // conteudo real (evitava uma area vazia enorme abaixo de 1-2 linhas);
+        // muitas linhas continuam limitadas a `alturaContainerPx` com scroll,
+        // preservando a virtualizacao.
+        style={{ maxHeight: alturaContainerPx }}
       >
         <div role="rowgroup">
           <div
