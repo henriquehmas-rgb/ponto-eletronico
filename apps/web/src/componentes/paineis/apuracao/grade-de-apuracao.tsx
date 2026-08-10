@@ -6,6 +6,7 @@ import { type ColunaDeTabela, TabelaDeDados } from "@/componentes/dominio/tabela
 import { SeletorDePeriodo, type AtalhoDePeriodo } from "@/componentes/dominio/seletor-de-periodo";
 import { Alerta, AlertaDescricao } from "@/componentes/ui/alert";
 import { Botao } from "@/componentes/ui/button";
+import { Cartao } from "@/componentes/ui/card";
 import { useApuracoes } from "@/ganchos/use-apuracoes";
 import { useOcorrencias } from "@/ganchos/use-ocorrencias";
 import { useDepartamentos } from "@/ganchos/use-departamentos";
@@ -13,7 +14,9 @@ import { useEmpresas } from "@/ganchos/use-empresas";
 import { useEquipes } from "@/ganchos/use-equipes";
 import { useUnidades } from "@/ganchos/use-unidades";
 import { useColaboradores } from "@/ganchos/use-colaboradores";
+import { formatarData } from "@/lib/formatacao/data";
 import { PortaoDePermissao } from "@/lib/permissoes";
+import { cn } from "@/lib/utils";
 
 import { CampoCheckboxSimples, SeletorSimples } from "./campos";
 import { CelulaDeApuracao } from "./celula-de-apuracao";
@@ -22,11 +25,13 @@ import { DialogoDeTratamento } from "./dialogo-de-tratamento";
 import { useMapaDeNomesDeColaboradores } from "./use-nomes-de-colaboradores";
 import {
   agruparApuracoesPorVinculo,
+  COR_PONTO_STATUS_APURACAO,
   MARCADOR_TIPO_DIA,
   mensagemDeErroApi,
   mesAnteriorComoPeriodo,
   mesAtualComoPeriodo,
   obterDiasDoIntervalo,
+  ROTULO_STATUS_APURACAO,
   ROTULO_TIPO_DIA,
   type LinhaDeApuracaoGrade,
 } from "./utilitarios";
@@ -231,8 +236,9 @@ export function GradeDeApuracao() {
         <div>
           <h1 className="estilo-titulo-pagina text-texto-primario">Apuração</h1>
           <p className="estilo-corpo text-texto-secundario">
-            Uma linha por vínculo, uma coluna por dia. Clique numa célula para ver o detalhe do dia
-            e registrar um tratamento — esta tela nunca edita marcação.
+            Período {formatarData(`${periodo.inicio}T12:00:00`)}–{formatarData(`${periodo.fim}T12:00:00`)}{" "}
+            · uma linha por vínculo, uma coluna por dia. Clique numa célula para ver o detalhe do dia e
+            registrar um tratamento — esta tela nunca edita marcação.
           </p>
         </div>
         <PortaoDePermissao permissao="apuracoes.executar">
@@ -348,18 +354,20 @@ export function GradeDeApuracao() {
 
       <Legenda />
 
-      <TabelaDeDados
-        linhas={linhas}
-        colunas={colunas}
-        obterId={(linha) => linha.vinculoId}
-        alturaContainerPx={ALTURA_CONTAINER_GRADE_PX}
-        alturaLinhaPx={ALTURA_LINHA_GRADE_PX}
-        carregando={apuracoes.isPending}
-        mensagemVazia="Nenhuma apuração encontrada para o período e filtros selecionados."
-        selecionaveis
-        selecionadosIds={selecionadosIds}
-        aoMudarSelecionadosIds={definirSelecionadosIds}
-      />
+      <Cartao className="rounded-suave p-[var(--espacamento-3)] shadow-flutuante-cartao">
+        <TabelaDeDados
+          linhas={linhas}
+          colunas={colunas}
+          obterId={(linha) => linha.vinculoId}
+          alturaContainerPx={ALTURA_CONTAINER_GRADE_PX}
+          alturaLinhaPx={ALTURA_LINHA_GRADE_PX}
+          carregando={apuracoes.isPending}
+          mensagemVazia="Nenhuma apuração encontrada para o período e filtros selecionados."
+          selecionaveis
+          selecionadosIds={selecionadosIds}
+          aoMudarSelecionadosIds={definirSelecionadosIds}
+        />
+      </Cartao>
 
       <DialogoDeTratamento
         celula={celulaSelecionada}
@@ -380,28 +388,45 @@ export function GradeDeApuracao() {
 }
 
 /**
- * Legenda dos marcadores de tipo de dia — reforça que a cor NUNCA é o único
- * canal (WCAG 1.4.1): cada marcador tem forma distinta e rótulo textual.
+ * Legenda acima da grade: bolinha de cor + nome para cada status de apuração
+ * (canal auxiliar) e, num acordeão à parte, os marcadores de forma de cada
+ * tipo de dia. Cor nunca é o único canal (WCAG 1.4.1) — todo marcador,
+ * bolinha ou forma, vem sempre acompanhado do rótulo textual.
  */
 function Legenda() {
+  const statusList = Object.keys(ROTULO_STATUS_APURACAO) as (keyof typeof ROTULO_STATUS_APURACAO)[];
   const tipos = Object.keys(MARCADOR_TIPO_DIA) as (keyof typeof MARCADOR_TIPO_DIA)[];
   return (
-    <details className="rounded-suave bg-fundo-superficie p-3 shadow-flutuante-chip">
-      <summary className="estilo-rotulo cursor-pointer text-texto-secundario">
-        Legenda dos marcadores
-      </summary>
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {tipos.map((tipo) => (
-          <li key={tipo} className="estilo-legenda flex items-center gap-1 text-texto-secundario">
-            <span aria-hidden="true">{MARCADOR_TIPO_DIA[tipo]}</span>
-            {ROTULO_TIPO_DIA[tipo]}
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Legenda de status da apuração">
+        {statusList.map((status) => (
+          <li key={status} className="estilo-legenda flex items-center gap-1.5 text-texto-secundario">
+            <span
+              aria-hidden="true"
+              className={cn("size-[9px] shrink-0 rounded-pleno", COR_PONTO_STATUS_APURACAO[status])}
+            />
+            {ROTULO_STATUS_APURACAO[status]}
           </li>
         ))}
-        <li className="estilo-legenda flex items-center gap-1 text-texto-secundario">
-          <span aria-hidden="true">⚠</span>
-          Ocorrência aberta
-        </li>
       </ul>
-    </details>
+
+      <details className="rounded-suave bg-fundo-superficie p-3 shadow-flutuante-chip">
+        <summary className="estilo-rotulo cursor-pointer text-texto-secundario">
+          Legenda dos marcadores de tipo de dia
+        </summary>
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {tipos.map((tipo) => (
+            <li key={tipo} className="estilo-legenda flex items-center gap-1 text-texto-secundario">
+              <span aria-hidden="true">{MARCADOR_TIPO_DIA[tipo]}</span>
+              {ROTULO_TIPO_DIA[tipo]}
+            </li>
+          ))}
+          <li className="estilo-legenda flex items-center gap-1 text-texto-secundario">
+            <span aria-hidden="true">⚠</span>
+            Ocorrência aberta
+          </li>
+        </ul>
+      </details>
+    </div>
   );
 }

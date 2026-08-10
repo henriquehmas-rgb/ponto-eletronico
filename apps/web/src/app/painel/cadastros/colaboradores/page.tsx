@@ -27,6 +27,7 @@ import {
 import { useEmpresas } from "@/ganchos/use-empresas";
 import { mascararCpf } from "@/lib/formatacao";
 import { PortaoDePermissao } from "@/lib/permissoes";
+import { cn } from "@/lib/utils";
 import type { Esquema } from "@/lib/api";
 
 type Colaborador = Esquema<"Colaborador">;
@@ -40,18 +41,37 @@ const SELO_POR_STATUS: Record<string, "sucesso" | "atencao" | "erro" | "neutro" 
   desligado: "neutro",
 };
 
+type FiltroDeStatus = "todos" | "ativo" | "afastado";
+
+const STATUS_POR_FILTRO: Record<FiltroDeStatus, Esquema<"Colaborador">["status"] | undefined> = {
+  todos: undefined,
+  ativo: "ativo",
+  afastado: "afastado",
+};
+
+const CHIPS_DE_FILTRO: { id: FiltroDeStatus; rotulo: string }[] = [
+  { id: "todos", rotulo: "Todos" },
+  { id: "ativo", rotulo: "Ativos" },
+  { id: "afastado", rotulo: "Afastados" },
+];
+
 export default function PaginaDeColaboradores() {
   const [busca, setBusca] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState<FiltroDeStatus>("todos");
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [itens, setItens] = useState<Colaborador[]>([]);
-  const consulta = useColaboradores({ busca: busca || undefined, cursor });
+  const consulta = useColaboradores({
+    busca: busca || undefined,
+    status: STATUS_POR_FILTRO[filtroStatus],
+    cursor,
+  });
   const empresas = useEmpresas({ ativo: true });
 
   useEffect(() => {
     setCursor(undefined);
     setItens([]);
-    // Reinicia a paginação acumulada sempre que o filtro de busca muda.
-  }, [busca]);
+    // Reinicia a paginação acumulada sempre que o filtro de busca ou de status muda.
+  }, [busca, filtroStatus]);
 
   useEffect(() => {
     if (!consulta.data) return;
@@ -102,7 +122,7 @@ export default function PaginaDeColaboradores() {
           >
             <span
               aria-hidden="true"
-              className="flex size-7 shrink-0 items-center justify-center rounded-pleno bg-acao-sutil-fundo text-[11px] font-semibold text-acao-sutil-texto"
+              className="flex size-7 shrink-0 items-center justify-center rounded-pleno bg-gradient-to-br from-acao-primaria-fundo to-acao-primaria-fundo-ativo text-[11px] font-semibold text-texto-inverso"
             >
               {iniciais}
             </span>
@@ -117,7 +137,7 @@ export default function PaginaDeColaboradores() {
     {
       id: "matricula",
       cabecalho: "Matrícula",
-      renderizarCelula: (c) => c.matricula ?? "—",
+      renderizarCelula: (c) => <span className="estilo-tabular">{c.matricula ?? "—"}</span>,
       larguraPx: 120,
     },
     {
@@ -168,47 +188,76 @@ export default function PaginaDeColaboradores() {
     },
   ];
 
+  const totalCadastrado = consulta.data?.paginacao.total;
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="estilo-titulo-pagina text-texto-primario">Colaboradores</h1>
-        <div className="flex gap-2">
-          <PortaoDePermissao permissao="colaboradores.criar">
-            <Botao
-              variant="secundaria"
-              onClick={() => {
-                setImportarAberto(true);
-              }}
-            >
-              Importar em lote
-            </Botao>
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="colaboradores.criar">
-            <Botao
-              className="rounded-pleno"
-              onClick={() => {
-                setEditando(null);
-                setDialogoAberto(true);
-              }}
-            >
-              Novo colaborador
-            </Botao>
-          </PortaoDePermissao>
+        <div>
+          <h1 className="estilo-titulo-pagina text-texto-primario">Colaboradores</h1>
+          {totalCadastrado !== undefined ? (
+            <p className="estilo-corpo text-texto-terciario">
+              {totalCadastrado} colaborador(es) cadastrado(s)
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-3.5 size-[13px] -translate-y-1/2 text-texto-terciario"
+            />
+            <Entrada
+              placeholder="Buscar por nome, matrícula ou CPF…"
+              value={busca}
+              onChange={(evento) => setBusca(evento.target.value)}
+              className="w-64 rounded-pleno border-transparent bg-fundo-superficie pl-9 shadow-flutuante-chip"
+              aria-label="Buscar colaboradores"
+            />
+          </div>
+          <div className="flex gap-2">
+            <PortaoDePermissao permissao="colaboradores.criar">
+              <Botao
+                variant="secundaria"
+                onClick={() => {
+                  setImportarAberto(true);
+                }}
+              >
+                Importar em lote
+              </Botao>
+            </PortaoDePermissao>
+            <PortaoDePermissao permissao="colaboradores.criar">
+              <Botao
+                className="rounded-pleno"
+                onClick={() => {
+                  setEditando(null);
+                  setDialogoAberto(true);
+                }}
+              >
+                Novo colaborador
+              </Botao>
+            </PortaoDePermissao>
+          </div>
         </div>
       </header>
 
-      <div className="relative max-w-sm">
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-3.5 size-[13px] -translate-y-1/2 text-texto-terciario"
-        />
-        <Entrada
-          placeholder="Buscar por nome, matrícula ou CPF…"
-          value={busca}
-          onChange={(evento) => setBusca(evento.target.value)}
-          className="rounded-pleno border-transparent bg-fundo-superficie pl-9 shadow-flutuante-chip"
-          aria-label="Buscar colaboradores"
-        />
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por situação">
+        {CHIPS_DE_FILTRO.map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            aria-pressed={filtroStatus === chip.id}
+            onClick={() => setFiltroStatus(chip.id)}
+            className={cn(
+              "estilo-legenda rounded-pleno px-3 py-1.5 font-semibold shadow-flutuante-chip transition-colors",
+              filtroStatus === chip.id
+                ? "bg-fundo-inverso text-texto-inverso"
+                : "bg-fundo-superficie text-texto-secundario",
+            )}
+          >
+            {chip.rotulo}
+          </button>
+        ))}
       </div>
 
       {consulta.isError ? (
@@ -217,14 +266,16 @@ export default function PaginaDeColaboradores() {
         </Alerta>
       ) : null}
 
-      <TabelaDeDados
-        linhas={itens}
-        colunas={colunas}
-        obterId={(c) => c.id ?? ""}
-        carregando={consulta.isPending && itens.length === 0}
-        mensagemVazia="Nenhum colaborador cadastrado."
-        alturaContainerPx={480}
-      />
+      <div className="rounded-suave bg-fundo-superficie p-[var(--espacamento-3)] shadow-flutuante-cartao">
+        <TabelaDeDados
+          linhas={itens}
+          colunas={colunas}
+          obterId={(c) => c.id ?? ""}
+          carregando={consulta.isPending && itens.length === 0}
+          mensagemVazia="Nenhum colaborador cadastrado."
+          alturaContainerPx={480}
+        />
+      </div>
 
       {consulta.data?.paginacao.temMais ? (
         <div className="flex justify-center">

@@ -205,6 +205,26 @@ export function GradeVisualDeEscala() {
         </div>
       ) : (
         <>
+          {turnos.data?.dados && turnos.data.dados.length > 0 ? (
+            <div
+              aria-label="Turnos ativos"
+              className="flex flex-wrap items-center gap-2"
+            >
+              {turnos.data.dados.map((turno) => (
+                <span
+                  key={turno.id}
+                  className="inline-flex items-center gap-2 rounded-pleno bg-fundo-superficie px-3 py-1.5 shadow-flutuante-chip text-[13px] font-semibold text-texto-secundario"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-pleno border border-borda-sutil"
+                    style={{ backgroundColor: turno.cor }}
+                  />
+                  {turno.nome}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <GradeDeEscala datas={datas} linhas={linhas} />
           <CoberturaPorTurno datas={datas} linhas={linhas} />
         </>

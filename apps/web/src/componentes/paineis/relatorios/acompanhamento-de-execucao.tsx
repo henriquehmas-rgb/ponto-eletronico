@@ -1,13 +1,42 @@
 "use client";
 
+import type { VariantProps } from "class-variance-authority";
+import { Ban, CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
+
+import { Selo, type badgeVariants } from "@/componentes/ui/badge";
 import { Botao } from "@/componentes/ui/button";
 import { useExecucaoDeRelatorio } from "@/ganchos/use-relatorios";
+import { formatarDataHora } from "@/lib/formatacao/data";
 
 import { ROTULO_STATUS_EXECUCAO } from "./tipos";
 
 interface AcompanhamentoDeExecucaoProps {
   execucaoId: string;
+  /** Nome do relatório (`RelatorioDefinicao.nome`), para a linha da lista de
+   * execuções recentes — o componente só recebe o `execucaoId`, então quem
+   * já carregou a definição (tela de execução) repassa o nome. */
+  nome?: string | undefined;
 }
+
+type VarianteDoSelo = VariantProps<typeof badgeVariants>["variant"];
+
+const VARIANTE_POR_STATUS: Record<string, VarianteDoSelo> = {
+  enfileirado: "neutro",
+  processando: "atencao",
+  concluido: "sucesso",
+  falhou: "erro",
+  cancelado: "neutro",
+  expirado: "neutro",
+};
+
+const ICONE_POR_STATUS: Record<string, typeof Clock> = {
+  enfileirado: Clock,
+  processando: Loader2,
+  concluido: CheckCircle2,
+  falhou: XCircle,
+  cancelado: Ban,
+  expirado: Clock,
+};
 
 /**
  * Acompanha uma execução até concluir (poll de `GET /v1/relatorios/
@@ -15,8 +44,11 @@ interface AcompanhamentoDeExecucaoProps {
  * sozinho quando o status deixa de ser `enfileirado`/`processando`). Serve
  * tanto o caminho síncrono (já chega `concluido`, sem nenhum poll extra:
  * a primeira leitura já para) quanto o assíncrono.
+ *
+ * Visualmente é uma linha de "execuções recentes" (ícone + nome + quando +
+ * selo de status), reaproveitada como item único logo após executar.
  */
-export function AcompanhamentoDeExecucao({ execucaoId }: AcompanhamentoDeExecucaoProps) {
+export function AcompanhamentoDeExecucao({ execucaoId, nome }: AcompanhamentoDeExecucaoProps) {
   const consulta = useExecucaoDeRelatorio(execucaoId);
   const execucao = consulta.data;
 
@@ -25,16 +57,27 @@ export function AcompanhamentoDeExecucao({ execucaoId }: AcompanhamentoDeExecuca
   }
 
   const emAndamento = execucao.status === "enfileirado" || execucao.status === "processando";
+  const Icone = ICONE_POR_STATUS[execucao.status ?? ""] ?? Clock;
+  const quando = execucao.criadoEm ? formatarDataHora(execucao.criadoEm) : null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-suave bg-fundo-superficie p-4 shadow-flutuante-cartao">
-      <div className="flex items-center justify-between">
-        <p className="estilo-corpo font-medium text-texto-primario">
+    <div className="flex flex-col gap-3 rounded-suave bg-fundo-superficie p-4 shadow-flutuante-cartao">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-pleno bg-acao-sutil-fundo text-acao-sutil-texto">
+          <Icone className={emAndamento ? "size-5 animate-spin" : "size-5"} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate estilo-corpo font-medium text-texto-primario">
+            {nome ?? execucao.relatorioCodigo}
+          </p>
+          <p className="estilo-legenda text-texto-terciario">
+            {quando ?? "agora"}
+            {typeof execucao.totalLinhas === "number" ? ` · ${execucao.totalLinhas} linha(s)` : ""}
+          </p>
+        </div>
+        <Selo variant={VARIANTE_POR_STATUS[execucao.status ?? ""] ?? "neutro"}>
           {ROTULO_STATUS_EXECUCAO[execucao.status ?? ""] ?? execucao.status}
-        </p>
-        {typeof execucao.totalLinhas === "number" ? (
-          <p className="estilo-legenda text-texto-terciario">{execucao.totalLinhas} linha(s)</p>
-        ) : null}
+        </Selo>
       </div>
 
       {emAndamento ? (

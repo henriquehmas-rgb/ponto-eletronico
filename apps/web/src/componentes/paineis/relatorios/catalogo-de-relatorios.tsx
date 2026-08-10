@@ -9,6 +9,7 @@ import {
   CartaoCabecalho,
   CartaoConteudo,
   CartaoDescricao,
+  CartaoRodape,
   CartaoTitulo,
 } from "@/componentes/ui/card";
 import { Esqueleto } from "@/componentes/ui/skeleton";
@@ -88,6 +89,11 @@ export function CatalogoDeRelatorios() {
                 <CartaoConteudo>
                   <p className="estilo-legenda text-texto-terciario">{relatorio.descricao}</p>
                 </CartaoConteudo>
+                <CartaoRodape className="justify-end">
+                  <span className="rounded-pleno bg-fundo-inverso px-3 py-1.5 text-[13px] font-semibold text-texto-inverso">
+                    Gerar
+                  </span>
+                </CartaoRodape>
               </Cartao>
             </Link>
           ))}

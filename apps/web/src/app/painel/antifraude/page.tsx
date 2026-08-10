@@ -106,7 +106,7 @@ export default function PaginaDeAntifraude() {
         {consulta.isPending ? (
           <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, indice) => (
-              <Esqueleto key={indice} className="h-[94px] w-full rounded-suave" />
+              <Esqueleto key={indice} className="w-full rounded-suave" style={{ height: 94 }} />
             ))}
           </div>
         ) : itens.length === 0 ? (
@@ -130,25 +130,26 @@ export default function PaginaDeAntifraude() {
                 >
                   <div
                     className={
-                      "flex size-[58px] shrink-0 flex-col items-center justify-center rounded-pleno " +
+                      "flex shrink-0 flex-col items-center justify-center rounded-pleno " +
                       (CIRCULO_POR_CLASSIFICACAO[classificacao] ?? "bg-fundo-sutil text-texto-secundario")
                     }
+                    style={{ width: 58, height: 58 }}
                   >
-                    <span className="font-mono text-[18px] font-semibold leading-none tabular-nums">
+                    <span className="font-mono text-lg font-semibold leading-none tabular-nums">
                       {item.item.scoreConfianca ?? "—"}
                     </span>
-                    <span className="text-[8.5px] font-semibold uppercase opacity-80">Score</span>
+                    <span className="text-3xs font-semibold uppercase opacity-80">Score</span>
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <button
                       type="button"
-                      className="text-left text-[14px] font-medium text-texto-primario hover:underline"
+                      className="text-left text-sm font-medium text-texto-primario hover:underline"
                       onClick={() => setDetalhe(item)}
                     >
                       {item.nomeColaborador ?? item.item.colaboradorId ?? "—"}
                     </button>
-                    <p className="mt-0.5 text-[12px] text-texto-terciario">
+                    <p className="mt-0.5 text-xs text-texto-terciario">
                       {item.item.canal ?? "—"} ·{" "}
                       {item.item.datahoraMarcacao ? formatarDataHora(item.item.datahoraMarcacao) : "—"}
                     </p>

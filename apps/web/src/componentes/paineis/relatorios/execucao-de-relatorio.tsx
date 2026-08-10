@@ -248,7 +248,12 @@ export function ExecucaoDeRelatorio({ codigo }: ExecucaoDeRelatorioProps) {
         </p>
       ) : null}
 
-      {execucaoId ? <AcompanhamentoDeExecucao execucaoId={execucaoId} /> : null}
+      {execucaoId ? (
+        <div className="flex flex-col gap-2">
+          <h2 className="estilo-titulo-secao text-texto-primario">Execuções recentes</h2>
+          <AcompanhamentoDeExecucao execucaoId={execucaoId} nome={definicao.nome} />
+        </div>
+      ) : null}
     </div>
   );
 }

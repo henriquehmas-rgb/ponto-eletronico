@@ -79,6 +79,10 @@ export default function PaginaDeDispositivos() {
 
   const dispositivos = consulta.data?.dados ?? [];
 
+  const nomeDaUnidadePorId = new Map(
+    (unidades.data?.dados ?? []).map((u) => [u.id, u.nome] as const),
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -141,7 +145,10 @@ export default function PaginaDeDispositivos() {
                     {d.nome ?? d.identificador ?? d.id}
                   </button>
                   <p className="truncate text-[12px] text-texto-terciario">
-                    {d.tipo ?? "—"} · {d.plataforma ?? "—"}
+                    {d.tipo ?? "—"} ·{" "}
+                    {(d.unidadeId ? nomeDaUnidadePorId.get(d.unidadeId) : undefined) ??
+                      d.plataforma ??
+                      "—"}
                   </p>
                 </div>
                 {d.identificador ? (

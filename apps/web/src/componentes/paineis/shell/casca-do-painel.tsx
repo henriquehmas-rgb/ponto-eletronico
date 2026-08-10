@@ -92,6 +92,14 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
               icone={IconeCadastros}
             />
           </PortaoDePermissao>
+          <PortaoDePermissao permissao="aprovacoes.ler">
+            <ItemDeNavegacao
+              href="/painel/aprovacoes"
+              rotulo="Aprovações"
+              caminhoAtual={caminhoAtual}
+              icone={IconeAprovacoes}
+            />
+          </PortaoDePermissao>
           <PortaoDePermissao permissao="apuracoes.ler">
             <ItemDeNavegacao
               href="/painel/apuracao"
@@ -124,6 +132,15 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
               caminhoAtual={caminhoAtual}
               prefixoAtivo="/painel/antifraude"
               icone={IconeAntifraude}
+            />
+          </PortaoDePermissao>
+          <PortaoDePermissao permissao="relatorios.ler">
+            <ItemDeNavegacao
+              href="/painel/relatorios"
+              rotulo="Relatórios"
+              caminhoAtual={caminhoAtual}
+              prefixoAtivo="/painel/relatorios"
+              icone={IconeRelatorios}
             />
           </PortaoDePermissao>
         </nav>
@@ -279,6 +296,26 @@ function IconeAntifraude(props: SVGProps<SVGSVGElement>) {
     <svg {...propsIcone(props)}>
       <path d="M12 3.5 19.5 6.5V11.5C19.5 16 16.5 19.5 12 20.5C7.5 19.5 4.5 16 4.5 11.5V6.5Z" />
       <path d="M9 12l2 2 4-4.5" />
+    </svg>
+  );
+}
+
+function IconeAprovacoes(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M8.3 12.3l2.5 2.5 5-5.4" />
+    </svg>
+  );
+}
+
+function IconeRelatorios(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...propsIcone(props)}>
+      <path d="M4.5 20.5h15" />
+      <rect x="6" y="13" width="3.4" height="7.5" rx="0.8" />
+      <rect x="10.3" y="8.5" width="3.4" height="12" rx="0.8" />
+      <rect x="14.6" y="4.5" width="3.4" height="16" rx="0.8" />
     </svg>
   );
 }

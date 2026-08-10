@@ -83,6 +83,21 @@ export const CLASSE_STATUS_APURACAO: Record<StatusApuracao, string> = {
   reaberto: "border-estado-atencao-borda bg-estado-atencao-fundo text-estado-atencao-texto",
 };
 
+/**
+ * Cor sólida do marcador de legenda (bolinha) por status — usada só na
+ * legenda acima da grade, nunca na célula em si (que usa o par
+ * fundo+borda+texto de `CLASSE_STATUS_APURACAO`, mais suave). É um canal
+ * AUXILIAR: o rótulo textual ao lado da bolinha continua sendo o canal
+ * primário (WCAG 1.4.1) — não há legenda só de cor.
+ */
+export const COR_PONTO_STATUS_APURACAO: Record<StatusApuracao, string> = {
+  pendente: "bg-texto-terciario",
+  apurado: "bg-estado-sucesso-solido-fundo",
+  com_ocorrencia: "bg-estado-atencao-solido-fundo",
+  fechado: "bg-estado-info-solido-fundo",
+  reaberto: "bg-estado-atencao-solido-fundo",
+};
+
 export const ROTULO_SEVERIDADE_OCORRENCIA: Record<SeveridadeOcorrencia, string> = {
   info: "Informativa",
   atencao: "Atenção",
