@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode, type SVGProps } from "react";
+import { useEffect, useState, type ReactNode, type SVGProps } from "react";
+import { MenuIcon } from "lucide-react";
 
 import { Botao } from "@/componentes/ui/button";
 import { Esqueleto } from "@/componentes/ui/skeleton";
+import { Folha, FolhaConteudo, FolhaTitulo } from "@/componentes/ui/sheet";
 import { PortaoDePermissao } from "@/lib/permissoes";
 import { useSessao } from "@/lib/sessao";
 import { cn } from "@/lib/utils";
@@ -36,12 +38,19 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
   const sessao = useSessao();
   const router = useRouter();
   const caminhoAtual = usePathname();
+  const [menuMobileAberto, definirMenuMobileAberto] = useState(false);
 
   useEffect(() => {
     if (!sessao.carregando && !sessao.autenticado) {
       router.replace(`/?returnTo=${encodeURIComponent(caminhoAtual)}`);
     }
   }, [sessao.carregando, sessao.autenticado, caminhoAtual, router]);
+
+  // Fecha o menu ao trocar de rota — o `<Folha>` não desmonta sozinho quando
+  // um `<Link>` de dentro dele navega (é um portal fora da árvore do menu).
+  useEffect(() => {
+    definirMenuMobileAberto(false);
+  }, [caminhoAtual]);
 
   if (sessao.carregando) {
     return (
@@ -65,115 +74,170 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
       .map((parte) => parte.charAt(0).toUpperCase())
       .join("") || "?";
 
+  function aoSair() {
+    void sessao.sair().then(() => router.replace("/"));
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-8 sm:flex-row sm:items-start">
-      <aside className="flex shrink-0 flex-col gap-6 sm:sticky sm:top-8 sm:w-60">
-        <div className="flex items-center gap-2 px-3">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-4 sm:flex-row sm:items-start sm:px-6 sm:py-8">
+      <header className="flex items-center justify-between sm:hidden">
+        <div className="flex items-center gap-2 px-1">
           <IconeLogo className="h-[21px] w-[21px] text-acao-primaria-fundo" />
           <span className="font-display text-[14px] font-bold tracking-[-0.01em] text-texto-primario">
             SEEG PONTO
           </span>
         </div>
+        <Botao
+          type="button"
+          variant="sutil"
+          tamanho="icone-toque"
+          className="rounded-pleno"
+          aria-label="Abrir menu de navegação"
+          onClick={() => definirMenuMobileAberto(true)}
+        >
+          <MenuIcon aria-hidden="true" className="size-4" />
+        </Botao>
+      </header>
 
-        <nav aria-label="Navegação do painel" className="flex flex-col gap-1">
-          <ItemDeNavegacao
-            href="/painel"
-            rotulo="Painel"
+      <Folha open={menuMobileAberto} onOpenChange={definirMenuMobileAberto}>
+        <FolhaConteudo lado="left" className="w-4/5 gap-6 p-4">
+          <FolhaTitulo className="sr-only">Navegação do painel</FolhaTitulo>
+          <ConteudoDaBarraLateral
             caminhoAtual={caminhoAtual}
-            icone={IconeVisaoGeral}
+            nome={nome}
+            iniciais={iniciais}
+            email={sessao.usuario?.email}
+            aoSair={aoSair}
           />
+        </FolhaConteudo>
+      </Folha>
 
-          <PortaoDePermissao permissao="empresas.ler">
-            <ItemDeNavegacao
-              href="/painel/cadastros/empresas"
-              rotulo="Cadastros"
-              caminhoAtual={caminhoAtual}
-              prefixoAtivo="/painel/cadastros"
-              icone={IconeCadastros}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="aprovacoes.ler">
-            <ItemDeNavegacao
-              href="/painel/aprovacoes"
-              rotulo="Aprovações"
-              caminhoAtual={caminhoAtual}
-              icone={IconeAprovacoes}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="apuracoes.ler">
-            <ItemDeNavegacao
-              href="/painel/apuracao"
-              rotulo="Apuração"
-              caminhoAtual={caminhoAtual}
-              icone={IconeApuracao}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="escalas.ler">
-            <ItemDeNavegacao
-              href="/painel/escalas"
-              rotulo="Escalas"
-              caminhoAtual={caminhoAtual}
-              icone={IconeEscalas}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="webhooks.ler">
-            <ItemDeNavegacao
-              href="/painel/integracoes"
-              rotulo="Integrações"
-              caminhoAtual={caminhoAtual}
-              prefixoAtivo="/painel/integracoes"
-              icone={IconeIntegracoes}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="marcacoes.ler_sensivel">
-            <ItemDeNavegacao
-              href="/painel/antifraude"
-              rotulo="Antifraude"
-              caminhoAtual={caminhoAtual}
-              prefixoAtivo="/painel/antifraude"
-              icone={IconeAntifraude}
-            />
-          </PortaoDePermissao>
-          <PortaoDePermissao permissao="relatorios.ler">
-            <ItemDeNavegacao
-              href="/painel/relatorios"
-              rotulo="Relatórios"
-              caminhoAtual={caminhoAtual}
-              prefixoAtivo="/painel/relatorios"
-              icone={IconeRelatorios}
-            />
-          </PortaoDePermissao>
-        </nav>
-
-        <div className="mt-auto flex flex-col gap-2">
-          <div className="flex items-center gap-[var(--espacamento-3)] rounded-suave bg-fundo-sutil p-3 shadow-flutuante-cartao">
-            <span
-              aria-hidden="true"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pleno bg-gradient-to-br from-marca-300 to-marca-600 text-[12px] font-semibold text-texto-inverso"
-            >
-              {iniciais}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[12.5px] font-semibold text-texto-primario">{nome}</p>
-              <p className="truncate text-[11px] text-texto-terciario">{sessao.usuario?.email}</p>
-            </div>
-          </div>
-          <Botao
-            type="button"
-            variant="sutil"
-            className="justify-start rounded-pleno"
-            onClick={() => {
-              void sessao.sair().then(() => router.replace("/"));
-            }}
-          >
-            Sair
-          </Botao>
-        </div>
+      <aside className="hidden shrink-0 flex-col gap-6 sm:sticky sm:top-8 sm:flex sm:w-60">
+        <ConteudoDaBarraLateral
+          caminhoAtual={caminhoAtual}
+          nome={nome}
+          iniciais={iniciais}
+          email={sessao.usuario?.email}
+          aoSair={aoSair}
+        />
       </aside>
       <main id="conteudo-do-painel" className="min-w-0 flex-1">
         {children}
       </main>
     </div>
+  );
+}
+
+function ConteudoDaBarraLateral({
+  caminhoAtual,
+  nome,
+  iniciais,
+  email,
+  aoSair,
+}: {
+  caminhoAtual: string;
+  nome: string;
+  iniciais: string;
+  email: string | undefined;
+  aoSair: () => void;
+}) {
+  return (
+    <>
+      <div className="hidden items-center gap-2 px-3 sm:flex">
+        <IconeLogo className="h-[21px] w-[21px] text-acao-primaria-fundo" />
+        <span className="font-display text-[14px] font-bold tracking-[-0.01em] text-texto-primario">
+          SEEG PONTO
+        </span>
+      </div>
+
+      <nav aria-label="Navegação do painel" className="flex flex-col gap-1">
+        <ItemDeNavegacao
+          href="/painel"
+          rotulo="Painel"
+          caminhoAtual={caminhoAtual}
+          icone={IconeVisaoGeral}
+        />
+
+        <PortaoDePermissao permissao="empresas.ler">
+          <ItemDeNavegacao
+            href="/painel/cadastros/empresas"
+            rotulo="Cadastros"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/cadastros"
+            icone={IconeCadastros}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="aprovacoes.ler">
+          <ItemDeNavegacao
+            href="/painel/aprovacoes"
+            rotulo="Aprovações"
+            caminhoAtual={caminhoAtual}
+            icone={IconeAprovacoes}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="apuracoes.ler">
+          <ItemDeNavegacao
+            href="/painel/apuracao"
+            rotulo="Apuração"
+            caminhoAtual={caminhoAtual}
+            icone={IconeApuracao}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="escalas.ler">
+          <ItemDeNavegacao
+            href="/painel/escalas"
+            rotulo="Escalas"
+            caminhoAtual={caminhoAtual}
+            icone={IconeEscalas}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="webhooks.ler">
+          <ItemDeNavegacao
+            href="/painel/integracoes"
+            rotulo="Integrações"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/integracoes"
+            icone={IconeIntegracoes}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="marcacoes.ler_sensivel">
+          <ItemDeNavegacao
+            href="/painel/antifraude"
+            rotulo="Antifraude"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/antifraude"
+            icone={IconeAntifraude}
+          />
+        </PortaoDePermissao>
+        <PortaoDePermissao permissao="relatorios.ler">
+          <ItemDeNavegacao
+            href="/painel/relatorios"
+            rotulo="Relatórios"
+            caminhoAtual={caminhoAtual}
+            prefixoAtivo="/painel/relatorios"
+            icone={IconeRelatorios}
+          />
+        </PortaoDePermissao>
+      </nav>
+
+      <div className="mt-auto flex flex-col gap-2">
+        <div className="flex items-center gap-[var(--espacamento-3)] rounded-suave bg-fundo-sutil p-3 shadow-flutuante-cartao">
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-pleno bg-gradient-to-br from-marca-300 to-marca-600 text-[12px] font-semibold text-texto-inverso"
+          >
+            {iniciais}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12.5px] font-semibold text-texto-primario">{nome}</p>
+            <p className="truncate text-[11px] text-texto-terciario">{email}</p>
+          </div>
+        </div>
+        <Botao type="button" variant="sutil" className="justify-start rounded-pleno" onClick={aoSair}>
+          Sair
+        </Botao>
+      </div>
+    </>
   );
 }
 

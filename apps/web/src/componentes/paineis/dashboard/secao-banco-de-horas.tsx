@@ -39,6 +39,12 @@ export function SecaoBancoDeHoras() {
   if (saldo.isPending) return <Esqueleto className="h-40 w-full" />;
 
   if (saldo.isError) {
+    // 404 = colaborador sem conta de banco de horas (ex.: perfil administrativo
+    // sem jornada de compensação vinculada) — estado normal, mesmo tratamento
+    // de "seção não se aplica" já usado acima para `!sessao?.colaboradorId`,
+    // não um erro de servidor. Achado real em ponto-hml, 09/08/2026 (mesma
+    // causa raiz já corrigida em `/eu`, `app/eu/page.tsx`).
+    if (ehErroDaApi(saldo.error) && saldo.error.status === 404) return null;
     return (
       <Cartao>
         <CartaoConteudo>
