@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Schibsted_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 
-import { CabecalhoDoAndaime } from "@/componentes/andaime/cabecalho-do-andaime";
 import { ProvedorDeConsultas } from "@/componentes/provedor-de-consultas";
 import { SCRIPT_ANTI_FLASH } from "@/componentes/tema/preferencia-de-tema";
 import { ProvedorDeTema } from "@/componentes/tema/provedor-de-tema";
@@ -84,7 +83,6 @@ export default function LayoutRaiz({ children }: { children: ReactNode }) {
             >
               Pular para o conteudo
             </a>
-            <CabecalhoDoAndaime />
             <main id="conteudo">{children}</main>
           </ProvedorDeConsultas>
         </ProvedorDeTema>

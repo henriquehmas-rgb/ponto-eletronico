@@ -13,6 +13,7 @@ import { Entrada } from "@/componentes/ui/input";
 import { Rotulo } from "@/componentes/ui/label";
 import { MensagemDeErro } from "@/componentes/ui/mensagem-de-erro";
 import { Esqueleto } from "@/componentes/ui/skeleton";
+import { AlternadorDeTema } from "@/componentes/tema/alternador-de-tema";
 import { api, ehErroDaApi } from "@/lib/api";
 import { ProvedorDeSessao, useSessao, validarRetornoSeguro } from "@/lib/sessao";
 
@@ -181,6 +182,9 @@ function ConteudoDeLogin() {
 
   return (
     <section className="mx-auto flex w-full max-w-sm flex-col gap-6 px-6 py-16">
+      <div className="flex justify-end">
+        <AlternadorDeTema />
+      </div>
       <div className="flex flex-col gap-4">
         <div
           aria-hidden="true"

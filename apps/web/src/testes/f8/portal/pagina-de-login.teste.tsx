@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PaginaDeLogin } from "@/componentes/sessao/pagina-de-login";
+import { ProvedorDeTema } from "@/componentes/tema/provedor-de-tema";
 import type * as ModuloDaApi from "@/lib/api";
 
 const substituirRota = vi.fn();
@@ -42,9 +43,11 @@ const USUARIO = { id: "u1", nome: "Maria", email: "maria@exemplo.com" };
 function renderizar() {
   const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={cliente}>
-      <PaginaDeLogin />
-    </QueryClientProvider>,
+    <ProvedorDeTema>
+      <QueryClientProvider client={cliente}>
+        <PaginaDeLogin />
+      </QueryClientProvider>
+    </ProvedorDeTema>,
   );
 }
 

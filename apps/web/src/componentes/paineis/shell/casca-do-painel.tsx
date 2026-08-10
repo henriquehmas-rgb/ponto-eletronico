@@ -8,6 +8,7 @@ import { MenuIcon } from "lucide-react";
 import { Botao } from "@/componentes/ui/button";
 import { Esqueleto } from "@/componentes/ui/skeleton";
 import { Folha, FolhaConteudo, FolhaTitulo } from "@/componentes/ui/sheet";
+import { AlternadorDeTema } from "@/componentes/tema/alternador-de-tema";
 import { PortaoDePermissao } from "@/lib/permissoes";
 import { useSessao } from "@/lib/sessao";
 import { cn } from "@/lib/utils";
@@ -87,16 +88,19 @@ export function CascaDoPainel({ children }: { children: ReactNode }) {
             SEEG PONTO
           </span>
         </div>
-        <Botao
-          type="button"
-          variant="sutil"
-          tamanho="icone-toque"
-          className="rounded-pleno"
-          aria-label="Abrir menu de navegação"
-          onClick={() => definirMenuMobileAberto(true)}
-        >
-          <MenuIcon aria-hidden="true" className="size-4" />
-        </Botao>
+        <div className="flex items-center gap-2">
+          <AlternadorDeTema />
+          <Botao
+            type="button"
+            variant="sutil"
+            tamanho="icone-toque"
+            className="rounded-pleno"
+            aria-label="Abrir menu de navegação"
+            onClick={() => definirMenuMobileAberto(true)}
+          >
+            <MenuIcon aria-hidden="true" className="size-4" />
+          </Botao>
+        </div>
       </header>
 
       <Folha open={menuMobileAberto} onOpenChange={definirMenuMobileAberto}>
@@ -143,11 +147,14 @@ function ConteudoDaBarraLateral({
 }) {
   return (
     <>
-      <div className="hidden items-center gap-2 px-3 sm:flex">
-        <IconeLogo className="h-[21px] w-[21px] text-acao-primaria-fundo" />
-        <span className="font-display text-[14px] font-bold tracking-[-0.01em] text-texto-primario">
-          SEEG PONTO
-        </span>
+      <div className="hidden flex-col gap-4 px-3 sm:flex">
+        <div className="flex items-center gap-2">
+          <IconeLogo className="h-[21px] w-[21px] text-acao-primaria-fundo" />
+          <span className="font-display text-[14px] font-bold tracking-[-0.01em] text-texto-primario">
+            SEEG PONTO
+          </span>
+        </div>
+        <AlternadorDeTema />
       </div>
 
       <nav aria-label="Navegação do painel" className="flex flex-col gap-1">
