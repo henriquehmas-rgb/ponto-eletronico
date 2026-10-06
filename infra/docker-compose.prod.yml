@@ -419,6 +419,9 @@ services:
   worker:
     image: ${REGISTRY:?defina REGISTRY}/ponto-worker:${TAG:?defina TAG (SHA curto, nunca latest)}
     <<: *restart
+    # PID 1 reapa os processos do healthcheck (docker exec). Sem isto, cada `arq --check`
+    # que estoura o timeout fica como zumbi no container (2.300 acumulados em 5 semanas).
+    init: true
     logging: *logging
     command: ["arq", "${ARQ_WORKER_SETTINGS:-worker.main.WorkerSettings}"]
     environment:
@@ -446,10 +449,13 @@ services:
     # `arq --check` retorna 0 quando a chave de saude no Redis esta fresca.
     healthcheck:
       test: ["CMD-SHELL", "arq --check $${ARQ_WORKER_SETTINGS}"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 45s
+      # `arq --check` importa a aplicacao inteira. Com a CPU da VPS limitada (06/10/2026) levou
+      # 20-25 s e estourava o timeout de 10 s: o Docker matava o check no meio (348 falhas seguidas,
+      # container `unhealthy` sem estar doente) e, sem `init`, cada processo morto virava zumbi.
+      interval: 120s
+      timeout: 60s
+      retries: 3
+      start_period: 90s
     labels:
       traefik.enable: "false"
 
@@ -460,6 +466,9 @@ services:
   scheduler:
     image: ${REGISTRY:?defina REGISTRY}/ponto-worker:${TAG:?defina TAG (SHA curto, nunca latest)}
     <<: *restart
+    # PID 1 reapa os processos do healthcheck (docker exec). Sem isto, cada `arq --check`
+    # que estoura o timeout fica como zumbi no container (2.300 acumulados em 5 semanas).
+    init: true
     logging: *logging
     command: ["arq", "${ARQ_SCHEDULER_SETTINGS:-worker.scheduler.SchedulerSettings}"]
     environment:
@@ -480,10 +489,13 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "arq --check $${ARQ_WORKER_SETTINGS}"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 45s
+      # `arq --check` importa a aplicacao inteira. Com a CPU da VPS limitada (06/10/2026) levou
+      # 20-25 s e estourava o timeout de 10 s: o Docker matava o check no meio (348 falhas seguidas,
+      # container `unhealthy` sem estar doente) e, sem `init`, cada processo morto virava zumbi.
+      interval: 120s
+      timeout: 60s
+      retries: 3
+      start_period: 90s
     labels:
       traefik.enable: "false"
 
